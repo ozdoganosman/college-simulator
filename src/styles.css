@@ -1,0 +1,171 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #222;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #eee;
+}
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  cursor: crosshair;
+}
+
+.hidden { display: none !important; }
+
+/* ---- üst bar ---- */
+#hud-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  background: rgba(18, 20, 26, 0.92);
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  font-size: 14px;
+  z-index: 10;
+  user-select: none;
+}
+#hud-top .stat { white-space: nowrap; }
+#hud-top .para { color: #7ee08a; font-weight: 700; }
+#hud-top .tarih { margin-left: auto; color: #bbc4d4; }
+.hiz-grup { display: flex; gap: 4px; }
+.hiz {
+  background: #2c3140; color: #dde3f0; border: 1px solid #454c60;
+  border-radius: 4px; padding: 3px 8px; cursor: pointer; font-size: 12px;
+}
+.hiz.active { background: #4a7bd4; border-color: #6b95e8; }
+
+/* ---- alt araç çubuğu ---- */
+#hud-toolbar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 48px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 0 10px;
+  background: rgba(18, 20, 26, 0.94);
+  border-top: 1px solid rgba(255,255,255,0.12);
+  z-index: 10;
+  user-select: none;
+  overflow-x: auto;
+}
+.tb-btn {
+  background: #2c3140; color: #e8ecf5; border: 1px solid #454c60;
+  border-radius: 6px; padding: 7px 12px; cursor: pointer; font-size: 13px;
+  white-space: nowrap;
+}
+.tb-btn:hover { background: #3a4156; }
+.tb-btn.active { background: #4a7bd4; border-color: #6b95e8; }
+
+/* ---- alt seçenek çubuğu ---- */
+#hud-subbar {
+  position: absolute;
+  bottom: 48px; left: 0; right: 0;
+  min-height: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(24, 27, 35, 0.9);
+  z-index: 9;
+  user-select: none;
+}
+#hud-subbar:empty { display: none; }
+.sub-btn {
+  background: #262b38; color: #dde3f0; border: 1px solid #3d4356;
+  border-radius: 5px; padding: 5px 9px; cursor: pointer; font-size: 12px;
+  display: inline-flex; gap: 6px; align-items: center;
+}
+.sub-btn:hover { background: #333a4c; }
+.sub-btn.active { background: #4a7bd4; border-color: #6b95e8; }
+.sub-btn .fiyat { color: #9fe8a8; font-size: 11px; }
+.oda-bilgi { font-size: 13px; padding: 4px 6px; }
+.oda-bilgi .ok { color: #7ee08a; }
+.oda-bilgi .hata { color: #f4a09c; }
+
+/* ---- bildirimler ---- */
+#hud-notifications {
+  position: absolute;
+  right: 10px;
+  top: 52px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 8;
+  pointer-events: none;
+}
+.notice {
+  background: rgba(20, 23, 30, 0.88);
+  border-left: 3px solid #6b7280;
+  border-radius: 4px;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: #d7dce8;
+}
+.notice.iyi { border-left-color: #46b45e; }
+.notice.kotu { border-left-color: #d9534f; }
+.notice.odul { border-left-color: #e8b931; }
+
+/* ---- paneller ---- */
+#panel-root { z-index: 20; position: relative; }
+.panel {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(860px, 94vw);
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+  background: #1a1e28;
+  border: 1px solid #3d4356;
+  border-radius: 10px;
+  padding: 16px;
+  z-index: 20;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+.panel h2 { font-size: 17px; margin-bottom: 10px; display: flex; justify-content: space-between; }
+.panel h3 { font-size: 14px; margin: 12px 0 6px; color: #a9b4c8; }
+.panel .kapat {
+  background: none; border: none; color: #98a1b3; font-size: 18px; cursor: pointer;
+}
+.panel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.panel th, .panel td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2b3040; }
+.panel th { color: #8f9ab0; font-weight: 600; }
+.panel button.eylem {
+  background: #35538f; color: #e8ecf5; border: 1px solid #4a6cb3;
+  border-radius: 5px; padding: 4px 10px; cursor: pointer; font-size: 12px;
+}
+.panel button.eylem:hover:not(:disabled) { background: #4066b3; }
+.panel button.eylem:disabled { opacity: 0.45; cursor: not-allowed; }
+.panel button.eylem.tehlike { background: #8f3535; border-color: #b34a4a; }
+.panel .rozet {
+  display: inline-block; padding: 1px 7px; border-radius: 9px;
+  font-size: 11px; background: #2c3140; margin-left: 6px;
+}
+.panel .kontenjan-input {
+  width: 64px; background: #262b38; color: #eee; border: 1px solid #3d4356;
+  border-radius: 4px; padding: 3px 6px; font-size: 13px;
+}
+.panel .aciklama { font-size: 12px; color: #94a0b8; margin: 4px 0 10px; }
+
+#hud-tooltip {
+  position: absolute;
+  background: rgba(12, 14, 18, 0.95);
+  border: 1px solid #3d4356;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  max-width: 300px;
+  pointer-events: none;
+  z-index: 30;
+}
