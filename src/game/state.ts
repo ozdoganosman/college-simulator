@@ -33,6 +33,8 @@ export function createInitialState(): GameState {
 
     nextId: 1,
     insaatSurumu: 0,
+    tutorialAdim: 0,
+    tutorialAcik: true,
     toplamMezun: 0,
     toplamBirakan: 0,
   };
@@ -81,6 +83,8 @@ export function loadGame(): GameState | null {
     const s = JSON.parse(raw) as GameState;
     if (typeof s.para !== 'number' || !Array.isArray(s.wall)) return null;
     if (typeof s.insaatSurumu !== 'number') s.insaatSurumu = 0; // eski kayıt uyumu
+    if (typeof s.tutorialAdim !== 'number') s.tutorialAdim = -1;
+    if (typeof s.tutorialAcik !== 'boolean') s.tutorialAcik = false;
     return s;
   } catch {
     return null;

@@ -9,6 +9,7 @@ import { attachInput } from './ui/input';
 import { render } from './ui/renderer';
 import { initHud, refreshHud } from './ui/hud';
 import { initPanels, refreshOpenPanel } from './ui/panels';
+import { initTutorial, refreshTutorial } from './ui/tutorial';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -35,6 +36,7 @@ const ui = createUIState();
 attachInput(canvas, () => state, cam, ui);
 initHud(() => state, ui);
 initPanels(() => state);
+initTutorial();
 
 // Konsoldan / otomatik testlerden erişim için debug kancası
 import * as build from './game/build';
@@ -66,6 +68,7 @@ function frame(t: number): void {
     hudSayac = 0;
     refreshHud(state, ui);
     refreshOpenPanel(state);
+    refreshTutorial(state);
   }
 
   requestAnimationFrame(frame);

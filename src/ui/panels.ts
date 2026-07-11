@@ -25,10 +25,11 @@ import { cancelProject, startProject } from '../game/research';
 import { hireStaff, removeAgent } from '../game/agents';
 import { BALANCE } from '../data/balance';
 import { DEPT_DEFS, deptDef } from '../data/departments';
-import { ROOM_DEFS } from '../data/rooms';
+import { ROOM_DEFS, ROOM_LIST } from '../data/rooms';
+import { OBJECT_DEFS } from '../data/objects';
 import { STRATEGY_DEFS, strategyDef } from '../data/strategies';
 
-export type PanelName = 'bolumler' | 'kadro' | 'arastirma' | 'strateji' | 'raporlar';
+export type PanelName = 'bolumler' | 'kadro' | 'arastirma' | 'strateji' | 'raporlar' | 'yardim';
 
 let getStateRef: (() => GameState) | null = null;
 let acik: { name: PanelName; el: HTMLDivElement } | null = null;
@@ -39,6 +40,7 @@ const PANEL_BASLIK: Record<PanelName, string> = {
   arastirma: '🔬 Araştırma',
   strateji: '♟️ Strateji',
   raporlar: '📊 Raporlar',
+  yardim: '❓ Nasıl Oynanır',
 };
 
 export function initPanels(getState: () => GameState): void {
@@ -112,6 +114,7 @@ function render(state: GameState): void {
     case 'arastirma': govde = arastirmaGovde(state); break;
     case 'strateji': govde = stratejiGovde(state); break;
     case 'raporlar': govde = raporlarGovde(state); break;
+    case 'yardim': govde = yardimGovde(); break;
   }
   acik.el.innerHTML = baslik(PANEL_BASLIK[acik.name]) + govde;
 }
@@ -670,4 +673,86 @@ function raporlarGovde(state: GameState): string {
     </table>
     <h3>Tehlikeli Bölge</h3>
     <button class="eylem tehlike" data-action="yeni-oyun">Yeni Oyun (kayıt silinir)</button>`;
+}
+
+// --- Nasıl Oynanır -----------------------------------------------------------
+
+function yardimGovde(): string {
+  const odaSatirlari = ROOM_LIST.map((r) => {
+    const gerek = r.gereksinim.map((g) => `${g.adet}× ${OBJECT_DEFS[g.obj].ad}`).join(', ');
+    return `<tr><td><b>${r.ad}</b></td><td>${r.minBoyut} kare</td><td>${gerek || '—'}</td><td>${r.aciklama}</td></tr>`;
+  }).join('');
+
+  return `
+    <div class="aciklama">Prison Architect tarzı üniversite yönetimi: inşa et, kadro kur, bölüm aç,
+    araştırma yap, prestijini yükselt. Sol üstteki 🎓 Öğretici seni adım adım götürür.</div>
+
+    <h3>1) İnşaat — bina nasıl yapılır?</h3>
+    <div class="aciklama">
+      <b>🧱 İnşaat → Zemin</b>: çim üzerine sürükleyerek zemin döşe.
+      <b>Duvar</b>: sürüklediğin dikdörtgenin <i>çerçevesine</i> duvar örer.
+      <b>Kapı</b>: duvarın bir karesine tıkla — kapısız odaya kimse giremez.
+      <b>Yık</b>: alan seç, %25 iade alırsın. Yürüyüş yolu döşemek öğrencileri hızlandırır.
+    </div>
+
+    <h3>2) Odalar — bir oda ne zaman "geçerli" olur?</h3>
+    <div class="aciklama">
+      <b>🏷️ Odalar</b> menüsünden tür seçip binanın İÇ alanını sürükleyerek işaretle. Bir oda şu 4 şartı
+      sağlayınca çalışır: <b>yeterli boyut</b> + <b>tüm kareler zeminli</b> + <b>duvarla çevrili ve kapılı</b> +
+      <b>gerekli eşyalar içinde</b>. Geçersiz odanın üstünde ⚠ ve eksik sebebi yazar;
+      <b>🖱️ Seç</b> ile tıklayınca alt çubukta ✔/✖ kontrol listesi çıkar.
+    </div>
+    <table>
+      <tr><th>Oda</th><th>Min boyut</th><th>Gerekli eşyalar</th><th>Ne işe yarar</th></tr>
+      ${odaSatirlari}
+    </table>
+
+    <h3>3) Kadro — KPSS ve transfer</h3>
+    <div class="aciklama">
+      Akademisyen sayın geçerli ofislerdeki <b>çalışma masası</b> sayısını aşamaz.
+      <b>KPSS/İlan</b>: ucuz, tecrübesiz Arş. Gör. <b>Transfer</b>: rakip üniversitelerden yıldız hoca —
+      imza bonusu ister, prestij getirir. Her akademisyeni <b>Bölüm</b> seçicisinden bir bölüme ata.
+      Hocalar ders verip araştırma yaparak XP toplar; makale şartlarını sağlayınca
+      Arş. Gör. → Dr. Öğr. Üyesi → Doçent → Profesör yükselir. Aşçı (yemekhane servisi) ve
+      temizlikçi (kir) almayı unutma.
+    </div>
+
+    <h3>4) Bölüm, kontenjan ve öğrenci</h3>
+    <div class="aciklama">
+      Bölüm açmak toplam geçerli derslik sayısına, (gerekiyorsa) laboratuvara ve bütçeye bakar.
+      Dönem başında (her 20 günde bir) <b>talep</b> hesaplanır: prestij + tanıtım stratejileri + bölüm
+      popülerliği. Yerleşen = min(talep, kontenjan, derslikteki sıra sayısı). Öğrenci başına
+      <b>devlet ödeneği</b> alırsın. Öğretim üyesi yetersizse YÖK kontenjan vermez!
+      Öğrencilerin açlık/tuvalet/enerji/eğlence ihtiyaçları var; karşılanmazsa mutsuzlaşıp
+      <b>okulu bırakırlar</b> (prestij düşer). Doçent varsa <b>yüksek lisans</b>, profesör varsa
+      <b>doktora</b> programı açabilirsin — lisansüstü öğrenciler araştırmayı hızlandırır.
+    </div>
+
+    <h3>5) Araştırma, yayın ve ödüller</h3>
+    <div class="aciklama">
+      <b>🔬 Araştırma</b> panelinden bölüm başına proje başlat (fen bölümleri laboratuvar ister).
+      Hocalar boş vakitlerinde ve lisansüstü öğrenciler araştırma puanı üretir. Proje bitince:
+      <b>hibe</b> + <b>makale</b> (🌍 uluslararası olabilir) + bazen 💥 <b>çığır açan buluş</b>
+      (patent geliri) ve 🏆 <b>bilim ödülü</b>. Projeler otomatik zincirlenir; istemezsen iptal et.
+      Kütüphanedeki <b>kitaplık</b> sayısı kütüphane seviyesini (0-3) belirler: araştırma ve öğrenme hızı artar.
+    </div>
+
+    <h3>6) Strateji ve prestij</h3>
+    <div class="aciklama">
+      Geçerli bir <b>Rektörlük</b> kurunca ♟️ Strateji paneli açılır: Tanıtım Kampanyası (talep+),
+      TÜBİTAK (araştırma hızı), Erasmus+ (uluslararası yayın), Teknokent (patent 2×),
+      Araştırma Üniversitesi Statüsü... Prestij; yayın, mezun, buluş ve ödülle artar;
+      okul bırakan ve bütçe açığıyla düşer. Yüksek prestij = yüksek talep.
+    </div>
+
+    <h3>Kontroller</h3>
+    <table>
+      <tr><td>Sol tık / sürükle</td><td>Araç kullan</td><td>Boşluk</td><td>Duraklat</td></tr>
+      <tr><td>Sağ/orta tık sürükle</td><td>Kamera kaydır</td><td>1 / 2 / 3</td><td>Hız 1×/2×/4×</td></tr>
+      <tr><td>Tekerlek</td><td>Yakınlaştır</td><td>Esc</td><td>Aracı bırak</td></tr>
+      <tr><td>WASD / Ok tuşları</td><td>Kamera</td><td></td><td></td></tr>
+    </table>
+    <div class="aciklama" style="margin-top:8px">Oyun her gün sonunda otomatik kaydedilir.
+    📊 Raporlar panelinden yeni oyun başlatabilirsin.</div>
+  `;
 }

@@ -2,7 +2,9 @@ import {
   GameState, GATE, MAP_H, MAP_W, TILE, WALL_DOOR, WALL_NONE, WALL_SOLID, tileIndex,
 } from '../core/types';
 import { roomCenter } from '../core/grid';
-import { ROOM_DEFS } from '../data/rooms';
+import { formatMoney } from '../core/util';
+import { FLOOR_DEFS, ROOM_DEFS, WALL_COST } from '../data/rooms';
+import { OBJECT_DEFS } from '../data/objects';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { bushSprite, gateSprite, objectSprite, treeSprite } from './sprites';
 import type { Camera } from './camera';
@@ -375,6 +377,29 @@ export function render(
     ctx.stroke();
   }
 
+  // --- eşya aracı: bu eşyanın konabileceği odaları yeşille vurgula ---
+  if (ui.tool.kind === 'esya') {
+    const izinli = OBJECT_DEFS[ui.tool.obj].odalar;
+    if (izinli !== null) {
+      const nabiz = 0.45 + 0.25 * Math.sin(performance.now() / 300);
+      for (const room of state.rooms) {
+        if (!izinli.includes(room.type)) continue;
+        ctx.fillStyle = `rgba(90, 220, 130, ${0.12})`;
+        ctx.strokeStyle = `rgba(90, 220, 130, ${nabiz})`;
+        ctx.lineWidth = 2;
+        for (const t of room.tiles) {
+          const x = (t % MAP_W) * TILE, y = Math.floor(t / MAP_W) * TILE;
+          ctx.fillRect(x, y, TILE, TILE);
+        }
+        // dış hat: oda merkezine yakın kaba çerçeve yerine kare kare üst çizgi yeterli
+        for (const t of room.tiles) {
+          const x = (t % MAP_W) * TILE, y = Math.floor(t / MAP_W) * TILE;
+          ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
+        }
+      }
+    }
+  }
+
   // --- seçili oda vurgusu ---
   if (ui.selectedRoomId !== -1) {
     const room = state.rooms.find((r) => r.id === ui.selectedRoomId);
@@ -434,6 +459,21 @@ export function render(
       ctx.fill();
       ctx.fillStyle = room.valid ? '#f2f5fa' : '#ffb3a8';
       ctx.fillText(etiket, cx, cy);
+
+      // geçersiz oda: ilk eksik gereksinimi etiketin altına yaz — oyuncu ne yapacağını görsün
+      if (!room.valid && room.missing.length > 0 && cam.zoom >= 0.9) {
+        const eksikFs = fs * 0.8;
+        ctx.font = `500 ${eksikFs}px system-ui, sans-serif`;
+        const metin = room.missing[0];
+        const mw = ctx.measureText(metin).width;
+        const my = cy + fs * 1.3;
+        ctx.fillStyle = 'rgba(140,35,30,0.82)';
+        roundRectPath(ctx, cx - mw / 2 - 5, my - eksikFs * 0.72, mw + 10, eksikFs * 1.5, 3);
+        ctx.fill();
+        ctx.fillStyle = '#ffe3df';
+        ctx.fillText(metin, cx, my);
+        ctx.font = `600 ${fs}px system-ui, sans-serif`;
+      }
     }
   }
 
@@ -487,6 +527,42 @@ function drawToolPreview(ctx: CanvasRenderingContext2D, state: GameState, ui: UI
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(xa * TILE, ya * TILE, (xb - xa + 1) * TILE, (yb - ya + 1) * TILE);
+
+    // canlı bilgi etiketi: maliyet / boyut — oyuncu bırakmadan önce görsün
+    const genis = xb - xa + 1, yuksek = yb - ya + 1;
+    const alan = genis * yuksek;
+    let etiket = '';
+    let uyari = false;
+    if (t.kind === 'zemin') {
+      const birim = FLOOR_DEFS.find((f) => f.id === t.floor)!.maliyet;
+      etiket = `${alan} kare · ≈ ${formatMoney(alan * birim)}`;
+    } else if (t.kind === 'duvar') {
+      const cevre = alan - Math.max(0, genis - 2) * Math.max(0, yuksek - 2);
+      etiket = `${cevre} duvar · ≈ ${formatMoney(cevre * WALL_COST)}`;
+    } else if (t.kind === 'oda') {
+      const min = ROOM_DEFS[t.room].minBoyut;
+      uyari = alan < min;
+      etiket = `${ROOM_DEFS[t.room].ad}: ${alan} kare ${uyari ? `(en az ${min} gerekli!)` : '✔'}`;
+    } else if (t.kind === 'yikim') {
+      etiket = `${alan} kare yıkılacak (%25 iade)`;
+      uyari = true;
+    } else if (t.kind === 'oda_kaldir') {
+      etiket = 'Oda ataması kaldırılacak (inşaat kalır)';
+    }
+    if (etiket) {
+      const fs = Math.max(10, TILE * 0.45);
+      ctx.font = `700 ${fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(etiket).width;
+      const ex = ((xa + xb + 1) / 2) * TILE;
+      const ey = ya * TILE - fs;
+      ctx.fillStyle = uyari ? 'rgba(140,35,30,0.9)' : 'rgba(12,16,22,0.85)';
+      roundRectPath(ctx, ex - tw / 2 - 6, ey - fs * 0.75, tw + 12, fs * 1.5, 4);
+      ctx.fill();
+      ctx.fillStyle = '#f2f5fa';
+      ctx.fillText(etiket, ex, ey);
+    }
   } else if (t.kind !== 'sec') {
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.fillRect(hover.x * TILE, hover.y * TILE, TILE, TILE);

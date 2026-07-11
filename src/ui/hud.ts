@@ -1,8 +1,8 @@
-import { GameState, donemAdi, donemGunu, DONEM_GUN, yil } from '../core/types';
+import { GameState, WALL_NONE, donemAdi, donemGunu, DONEM_GUN, yil } from '../core/types';
 import { formatClock, formatMoney } from '../core/util';
 import { FLOOR_DEFS, ROOM_DEFS, ROOM_LIST, WALL_COST, DOOR_COST } from '../data/rooms';
-import { OBJECT_LIST } from '../data/objects';
-import { libraryLevel } from '../core/grid';
+import { OBJECT_DEFS, OBJECT_LIST } from '../data/objects';
+import { isEnclosed, libraryLevel } from '../core/grid';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
 
@@ -74,6 +74,7 @@ function buildToolbar(getState: () => GameState, ui: UIState): void {
   btn('🔬 Araştırma', 'panel-arastirma', () => openPanel('arastirma'));
   btn('♟️ Strateji', 'panel-strateji', () => openPanel('strateji'));
   btn('📊 Raporlar', 'panel-raporlar', () => openPanel('raporlar'));
+  btn('❓ Nasıl Oynanır', 'panel-yardim', () => openPanel('yardim'));
 }
 
 function toggleKategori(k: Exclude<Kategori, null>, getState: () => GameState, ui: UIState): void {
@@ -128,6 +129,18 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
     }
     item('❌ Oda Kaldır', ui.tool.kind === 'oda_kaldir',
       () => { ui.tool = { kind: 'oda_kaldir' }; });
+    // seçili oda türünün gereksinim özeti — oyuncu ne yapacağını görsün
+    if (ui.tool.kind === 'oda') {
+      const def = ROOM_DEFS[ui.tool.room];
+      const gerekler = def.gereksinim
+        .map((g) => `${g.adet}× ${OBJECT_DEFS[g.obj].ad}`)
+        .join(' · ');
+      const div = document.createElement('div');
+      div.className = 'oda-bilgi';
+      div.innerHTML = `<b>${def.ad}</b> için gerekli: en az ${def.minBoyut} kare · zemin döşeli · `
+        + `duvarla çevrili + kapı${gerekler ? ' · ' + gerekler : ''} — <i>${def.aciklama}</i>`;
+      subbarEl.appendChild(div);
+    }
   } else if (acikKategori === 'esya') {
     for (const o of OBJECT_LIST) {
       item(`${o.glyph} ${o.ad}<span class="fiyat">${formatMoney(o.maliyet)}</span>`,
@@ -140,11 +153,29 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
     if (room) {
       const def = ROOM_DEFS[room.type];
       const div = document.createElement('div');
-      div.className = 'oda-bilgi';
-      const durum = room.valid
-        ? '<span class="ok">✔ Kullanıma hazır</span>'
-        : '<span class="hata">⚠ ' + room.missing.join(' · ') + '</span>';
-      div.innerHTML = `<b>${def.ad}</b> (${room.tiles.length} kare) — ${durum}`;
+      div.className = 'gerek-liste';
+
+      const cip = (etiket: string, tamam: boolean) =>
+        `<span class="gerek${tamam ? '' : ' eksik'}">${tamam ? '✔' : '✖'} ${etiket}</span>`;
+
+      const boyutOk = room.tiles.length >= def.minBoyut;
+      const zeminOk = !room.tiles.some(
+        (t) => state.floor[t] === null && state.wall[t] === WALL_NONE,
+      );
+      const kapaliOk = !def.kapali || isEnclosed(state, room);
+
+      let html = `<span class="baslik">${def.ad} (${room.tiles.length} kare)</span>`;
+      html += cip(`Boyut ${room.tiles.length}/${def.minBoyut}`, boyutOk);
+      html += cip('Zemin döşeli', zeminOk);
+      if (def.kapali) html += cip('Duvarla çevrili + kapı', kapaliOk);
+      for (const g of def.gereksinim) {
+        const adet = state.objects.filter((o) => o.roomId === room.id && o.type === g.obj).length;
+        html += cip(`${OBJECT_DEFS[g.obj].ad} ${Math.min(adet, g.adet)}/${g.adet}`, adet >= g.adet);
+      }
+      html += room.valid
+        ? '<span class="gerek">✔ Oda kullanıma hazır</span>'
+        : '';
+      div.innerHTML = html;
       subbarEl.appendChild(div);
     }
   }

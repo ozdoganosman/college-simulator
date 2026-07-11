@@ -116,6 +116,58 @@ html, body, #app {
 .notice.kotu { border-left-color: #d9534f; }
 .notice.odul { border-left-color: #e8b931; }
 
+/* ---- öğretici ---- */
+#hud-tutorial {
+  position: absolute;
+  left: 10px;
+  top: 52px;
+  width: 320px;
+  z-index: 12;
+}
+.tut-kart {
+  background: rgba(16, 20, 28, 0.94);
+  border: 1px solid #4a7bd4;
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 26px rgba(0,0,0,0.45);
+}
+.tut-baslik {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #8fb3f0;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.tut-btn {
+  background: #2c3140; color: #dde3f0; border: 1px solid #454c60;
+  border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 11px;
+}
+.tut-btn:hover { background: #3a4156; }
+.tut-gorev { font-size: 15px; font-weight: 700; color: #f2f5fa; margin-bottom: 6px; }
+.tut-detay { font-size: 12.5px; line-height: 1.5; color: #c4cddd; }
+.tut-detay b { color: #ffd166; }
+.tut-ilerleme {
+  margin-top: 8px; font-size: 12px; color: #9fe8a8;
+  background: rgba(70, 180, 94, 0.12); border-radius: 5px; padding: 4px 8px;
+}
+.tut-cip {
+  background: rgba(16, 20, 28, 0.94); color: #8fb3f0; border: 1px solid #4a7bd4;
+  border-radius: 16px; padding: 6px 12px; cursor: pointer; font-size: 12px; font-weight: 700;
+}
+
+/* ---- oda kontrol listesi (alt çubuk) ---- */
+.gerek-liste { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 2px 4px; }
+.gerek-liste .baslik { font-weight: 700; font-size: 13px; margin-right: 4px; }
+.gerek {
+  font-size: 12px; padding: 3px 8px; border-radius: 10px;
+  background: rgba(70, 180, 94, 0.15); color: #9fe8a8; border: 1px solid rgba(70,180,94,0.35);
+}
+.gerek.eksik {
+  background: rgba(217, 83, 79, 0.15); color: #f4a09c; border-color: rgba(217,83,79,0.4);
+}
+
 /* ---- paneller ---- */
 #panel-root { z-index: 20; position: relative; }
 .panel {

@@ -3,6 +3,7 @@ import {
   inBounds, tileIndex,
 } from './types';
 import { ROOM_DEFS } from '../data/rooms';
+import { OBJECT_DEFS } from '../data/objects';
 
 /** Yürünebilir mi: duvar değilse (kapı yürünebilir). */
 export function walkable(state: GameState, x: number, y: number): boolean {
@@ -85,7 +86,7 @@ export function validateRooms(state: GameState): void {
     for (const req of def.gereksinim) {
       const adet = state.objects.filter((o) => o.roomId === room.id && o.type === req.obj).length;
       if (adet < req.adet) {
-        missing.push(`${req.adet} adet gerekli eşya eksik: ${req.obj} (${adet}/${req.adet})`);
+        missing.push(`${OBJECT_DEFS[req.obj].ad} eksik (${adet}/${req.adet})`);
       }
     }
 

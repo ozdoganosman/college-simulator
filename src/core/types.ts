@@ -303,6 +303,10 @@ export interface GameState {
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */
   insaatSurumu: number;
+  /** öğretici: aktif adım indeksi (-1 = tamamlandı) */
+  tutorialAdim: number;
+  /** öğretici kartı görünür mü */
+  tutorialAcik: boolean;
   /** toplam mezun, toplam bırakan (istatistik) */
   toplamMezun: number;
   toplamBirakan: number;
