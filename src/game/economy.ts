@@ -30,13 +30,23 @@ export function ogrenciGunlukKazanc(state: GameState, s: Student): number {
   return Math.round(kazanc);
 }
 
-/** Günlük kayıt ücreti geliri ₺ — burs oranı düşülür (raporlar için de kullanılır). */
+/**
+ * Bölümün geçerli yıllık kayıt ücreti ₺: bölüme özel ücret varsa o, yoksa okul
+ * geneli. Okul ücretsizken (devlet modeli) bölüm ücreti de uygulanmaz.
+ */
+export function bolumUcreti(state: GameState, deptId: number): number {
+  if (state.ucret <= 0) return 0;
+  const dept = state.departments.find((d) => d.id === deptId);
+  return dept && dept.ucret !== null ? dept.ucret : state.ucret;
+}
+
+/** Günlük kayıt ücreti geliri ₺ — bölüm ücreti üzerinden, burs oranı düşülür. */
 export function gunlukUcretGeliri(state: GameState): number {
   if (state.ucret <= 0) return 0;
-  const gunluk = state.ucret / 40; // 1 yıl = 40 gün
   let toplam = 0;
   for (const a of state.agents) {
-    if (a.kind === 'ogrenci') toplam += gunluk * (1 - (a.burs ?? 100) / 100);
+    if (a.kind !== 'ogrenci') continue;
+    toplam += (bolumUcreti(state, a.deptId) / 40) * (1 - (a.burs ?? 100) / 100);
   }
   return toplam;
 }

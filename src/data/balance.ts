@@ -27,6 +27,7 @@ export const BALANCE = {
   BURS_YARI_VARSAYILAN: 20,   // kontenjanın %'si %50 burslu
   BURS_EGILIM_TAM: 12,        // tam burslu öğrenci eğilim bonusu (yüksek sıradan gelir)
   BURS_EGILIM_YARI: 6,
+  BURS_GNO_SART: 2.0,         // dönem sonunda GNO bunun altındaysa burs bir kademe düşer
   KREDI_FAIZ: 1.25,           // çekilen tutarın geri ödeme çarpanı
   KREDI_TAKSIT: 6000,         // günlük geri ödeme ₺
 

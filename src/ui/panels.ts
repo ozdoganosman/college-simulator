@@ -430,6 +430,18 @@ function onPanelChange(e: Event): void {
           : action === 'yl-kontenjan' ? dept.ylKontenjan : dept.doktoraKontenjan,
       );
     }
+  } else if (action === 'bolum-ucret') {
+    const input = hedef as HTMLInputElement;
+    const dept = state.departments.find((d) => d.id === id);
+    if (!dept) return;
+    if (input.value.trim() === '') {
+      dept.ucret = null; // boş = okul geneli ücret
+      return;
+    }
+    const deger = Number(input.value);
+    if (!Number.isFinite(deger)) return;
+    dept.ucret = Math.max(0, Math.min(BALANCE.UCRET_MAX, Math.round(deger)));
+    input.value = String(dept.ucret);
   } else if (action === 'ucret-ayarla' || action === 'burs-tam' || action === 'burs-yari') {
     const input = hedef as HTMLInputElement;
     if (input.value.trim() === '') return;
@@ -564,6 +576,10 @@ function bolumlerGovde(state: GameState): string {
         <td>${o.lisans} / ${o.yl} / ${o.dok}</td>
         <td><input type="number" class="kontenjan-input" data-action="kontenjan" data-id="${d.id}"
           value="${d.kontenjan}" min="0" max="300"></td>
+        <td><input type="number" class="kontenjan-input" style="width:76px" data-action="bolum-ucret" data-id="${d.id}"
+          value="${d.ucret ?? ''}" placeholder="${state.ucret}" min="0" max="${BALANCE.UCRET_MAX}" step="5000"
+          ${state.ucret === 0 ? 'disabled' : ''}
+          title="${state.ucret === 0 ? 'Okul geneli ücretsiz (devlet modeli) — bölüm ücreti uygulanmaz' : `Bölüme özel yıllık kayıt ücreti ₺ — boş bırak: okul geneli (${formatMoney(state.ucret)}) geçerli. Popüler bölümü pahalıya satabilirsin; ödeme gücünü aşarsa ücretli kademe boş kalır.`}"></td>
         <td>${d.sonTalep} / ${d.sonKayit}</td>
         <td>${derslikSayisi.get(d.id) ?? 0} derslik · ${seatCapacity(state, d.id)} koltuk</td>
         <td>${k.n} / ${def.minAkademisyen}${uyeRozet}</td>
@@ -575,7 +591,8 @@ function bolumlerGovde(state: GameState): string {
     acikTablo = satirlar === ''
       ? `<p class="aciklama">Aramaya uyan açık bölüm yok ("${esc(bolumAramaMetni())}").</p>`
       : `<table>
-      <tr><th>Bölüm · Popülerlik</th><th>Öğrenci (L/YL/Dok)</th><th>Kontenjan</th><th>Talep/Kayıt</th>
+      <tr><th>Bölüm · Popülerlik</th><th>Öğrenci (L/YL/Dok)</th><th>Kontenjan</th>
+        <th title="Bölüme özel yıllık kayıt ücreti — boş: okul geneli geçerli">Ücret/yıl</th><th>Talep/Kayıt</th>
         <th>Derslik</th><th>Öğr. Üyesi</th><th title="Bölümün okula kazandırdıkları: yayın prestiji ve mezun karnesi">Prestij · Mezun</th><th>Lisansüstü</th></tr>
       ${satirlar}
     </table>`;
@@ -1182,7 +1199,10 @@ function stratejiGovde(state: GameState): string {
         value="${state.bursYari}" min="0" max="100" ${state.ucret === 0 ? 'disabled title="Ücretsiz modelde herkes burslu sayılır"' : ''}>%
       · 💳 Ücretli: <b>%${state.ucret === 0 ? 0 : Math.max(0, 100 - state.bursTam - state.bursYari)}</b>
       <small>(kontenjan yüzdeleri — burslu öğrenci mutlu okur, zor bırakır; ücretli gelir getirir)</small>
-      <br><small>Şu anki günlük ücret geliri: <b>${formatMoney(Math.round(gunlukUcretGeliri(state)))}</b></small>
+      <br><small>Şu anki günlük ücret geliri: <b>${formatMoney(Math.round(gunlukUcretGeliri(state)))}</b>
+      · Bölüme özel ücret: 🎓 Bölümler panelindeki <b>Ücret/yıl</b> sütunu.
+      🎗 <b>Başarı şartı:</b> dönem sonunda GNO &lt; ${BALANCE.BURS_GNO_SART.toFixed(1)} olan burslunun
+      bursu bir kademe düşer; onur listesine giren (not ≥ ${BALANCE.SINAV_ONUR}) başarı bursu kazanır.</small>
     </div>
     <div class="aciklama">Kredi: acil nakit — %25 faizle günlük
     ${formatMoney(BALANCE.KREDI_TAKSIT)} taksitle geri ödenir (Rektörlük gerekmez).</div>

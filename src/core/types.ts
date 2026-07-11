@@ -277,6 +277,8 @@ export interface Department {
   sonTabanSira: number;
   acilisDonemi: number;
   mezunSayisi: number;
+  /** bölüme özel yıllık kayıt ücreti ₺ (null = okul geneli ücret geçerli) */
+  ucret: number | null;
 }
 
 /** Yıllık YKS yerleştirme töreni verisi (açıklanınca null'a çekilir). */
@@ -307,8 +309,8 @@ export interface YerlestirmeSonuc {
   satirlar: YerlestirmeSatir[];
   /** yıllık kayıt ücreti (tören metni için) */
   ucret: number;
-  /** tercih anketi: öğrenciler neden bizi seçti (neden + yüzde) */
-  anket: { neden: string; oran: number }[];
+  /** tercih anketi: öğrenciler neden bizi seçti (neden + yüzde + tıklayınca açılacak panel) */
+  anket: { neden: string; oran: number; panel?: string }[];
 }
 
 // --- Rakip üniversiteler / sıralama ------------------------------------------

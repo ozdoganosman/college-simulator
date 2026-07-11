@@ -5,6 +5,8 @@
  */
 import { GameState } from '../core/types';
 import { formatMoney } from '../core/util';
+import { openPanel } from './panels';
+import type { PanelName } from './panels';
 
 let root: HTMLElement | null = null;
 let acikMi = false;
@@ -147,12 +149,16 @@ function open(state: GameState): void {
 
   const ozetGecikme = 1.4 + y.satirlar.length * 0.55 + 0.4;
 
-  // Tercih anketi: öğrenciler neden bizi seçti (gerçek talep çarpanlarından)
+  // Tercih anketi: öğrenciler neden bizi seçti (gerçek talep çarpanlarından).
+  // Satırlar TIKLANABİLİR: o etkeni büyütebileceğin panel açılır.
   const anket = (y.anket ?? []).length > 0 && y.toplamYerlesen > 0
     ? `<div class="toren-ozet" style="animation-delay:${ozetGecikme}s;text-align:left;max-width:520px;margin:8px auto 0">
-        <div style="text-align:center;margin-bottom:6px"><b>🗳️ Yeni öğrenciler neden bizi seçti?</b></div>
-        ${(y.anket ?? []).map((a2) => `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:13px">
-          <span style="flex:1">${a2.neden}</span>
+        <div style="text-align:center;margin-bottom:6px"><b>🗳️ Yeni öğrenciler neden bizi seçti?</b>
+          <br><small style="opacity:0.75">💡 bir nedene tıkla — geliştirebileceğin panel açılsın</small></div>
+        ${(y.anket ?? []).map((a2) => `<div ${a2.panel ? `data-anket-panel="${a2.panel}"` : ''}
+          style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:13px${a2.panel ? ';cursor:pointer' : ''}"
+          ${a2.panel ? 'title="Tıkla: bu etkeni büyütebileceğin panel açılır" onmouseover="this.style.background=\'rgba(232,198,106,0.12)\'" onmouseout="this.style.background=\'\'"' : ''}>
+          <span style="flex:1">${a2.neden}${a2.panel ? ' <span style="opacity:0.55">↗</span>' : ''}</span>
           <span style="width:130px;background:#2c3140;border-radius:4px;height:8px;overflow:hidden"><span style="display:block;width:${a2.oran}%;height:100%;background:#e8c66a"></span></span>
           <b style="width:38px;text-align:right">%${a2.oran}</b>
         </div>`).join('')}
@@ -179,6 +185,16 @@ function open(state: GameState): void {
     </div>`;
 
   torenKur(state, () => { state.yerlestirme = null; });
+
+  // Anket satırı tıklaması: töreni kapat + ilgili paneli aç (yeni oyuncu rehberi)
+  for (const el of root.querySelectorAll<HTMLElement>('[data-anket-panel]')) {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const p = el.dataset.anketPanel as PanelName | undefined;
+      document.getElementById('toren-kapat')?.click();
+      if (p) openPanel(p);
+    });
+  }
 }
 
 // --- Akademik Yıl Ödülleri töreni ------------------------------------------------

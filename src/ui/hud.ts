@@ -14,6 +14,7 @@ import { gnoHesapla } from '../game/agents';
 import { oyuncuSirasi } from '../game/rivals';
 import { cazibePuani } from '../game/campus';
 import { DERS_LIMIT, asistanlari, dersYukuVerimi } from '../game/schedule';
+import { bolumUcreti } from '../game/economy';
 import { deptDef } from '../data/departments';
 import { deleteRoom } from '../game/build';
 import type { UIState, Tool } from './uistate';
@@ -323,7 +324,7 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     html += cip(nitelikler);
     if (state.ucret > 0) {
       html += cip(a.burs >= 100 ? '🎖 Tam burslu' : a.burs >= 50 ? '🎗 %50 burslu'
-        : `💳 Ücretli (${formatMoney(state.ucret)}/yıl)`);
+        : `💳 Ücretli (${formatMoney(bolumUcreti(state, a.deptId))}/yıl)`);
     }
     html += cip(`💰 Sermaye: ${formatMoney(Math.round(a.sermaye))}`);
     if (hoca && hoca.kind === 'akademisyen') {

@@ -162,6 +162,9 @@ export function eskiKayitUyumu(s: GameState): void {
   if (typeof s.krediBorcu !== 'number') s.krediBorcu = 0;
   if (!Array.isArray(s.mutevelli)) s.mutevelli = [];
   if (typeof s.sonrakiTalepCarpan !== 'number') s.sonrakiTalepCarpan = 1;
+  for (const d of s.departments) {
+    if (d.ucret === undefined) d.ucret = null; // bölüm bazlı ücret sonradan eklendi
+  }
   for (const pr of s.projects) {
     if (pr.tip !== 'uygulamali' && pr.tip !== 'atilim') pr.tip = 'temel';
     if (typeof pr.liderId !== 'number') pr.liderId = -1;

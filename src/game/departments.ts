@@ -59,7 +59,7 @@ import { addPrestij, earn, notify, spend } from './state';
 import { gnoHesapla, removeAgent, spawnStudent } from './agents';
 import { istihdamOrani, mezunEkle, mutevelliBonusu } from './alumni';
 import { cazibePuani, faaliyetPuani } from './campus';
-import { odemeGucu } from './economy';
+import { bolumUcreti, odemeGucu } from './economy';
 
 function sinifMi(r: Room): boolean {
   return r.type === 'derslik' || r.type === 'amfi';
@@ -127,6 +127,7 @@ export function openDepartment(state: GameState, defId: string): boolean {
     sonTabanSira: 0,
     acilisDonemi: donemIndex(state.gun),
     mezunSayisi: 0,
+    ucret: null,
   };
   state.departments.push(dept);
   addPrestij(state, 5);
@@ -335,6 +336,8 @@ export function runYerlestirme(state: GameState): boolean {
     // Kontenjan burs kademelerine bölünür (vakıf modeli); ücret 0 ise herkes burslu.
     // Ücretli/yarı burslu talep adayların ödeme gücüne bağlıdır: fiyat ödeme
     // gücünü aşarsa o kademenin adayı hızla azalır (burslu kademeler hep dolar).
+    // Bölüme özel ücret varsa o geçerlidir — popüler bölüm pahalıya satılabilir.
+    const bUcret = bolumUcreti(state, dept.id);
     const kesir = (fiyat: number): number => (fiyat <= 0 ? 1
       : Math.min(1, Math.pow(odemeGucu(state) / fiyat, 1.5)));
     let tamKont: number;
@@ -350,8 +353,8 @@ export function runYerlestirme(state: GameState): boolean {
     const tAday = Math.floor(talep);
     const istekli = {
       tam: Math.min(tamKont, tAday),
-      yari: Math.min(yariKont, Math.floor(tAday * kesir(state.ucret / 2))),
-      ucretli: Math.min(ucretliKont, Math.floor(tAday * kesir(state.ucret))),
+      yari: Math.min(yariKont, Math.floor(tAday * kesir(bUcret / 2))),
+      ucretli: Math.min(ucretliKont, Math.floor(tAday * kesir(bUcret))),
     };
     const istekliToplam = istekli.tam + istekli.yari + istekli.ucretli;
 
@@ -446,29 +449,33 @@ export function runYerlestirme(state: GameState): boolean {
  * Tercih anketi: yeni öğrenciler "neden bizi seçti?" — gerçek talep
  * çarpanlarından türetilen ağırlıklar yüzdelenir (törende gösterilir).
  */
-function tercihAnketi(state: GameState): { neden: string; oran: number }[] {
+function tercihAnketi(state: GameState): { neden: string; oran: number; panel?: string }[] {
   const acikDefler = state.departments.map((d) => deptDef(d.defId));
   const ortTaban = acikDefler.length > 0
     ? acikDefler.reduce((t, d) => t + d.tabanTalep, 0) / acikDefler.length
     : 0;
-  const adaylar: { neden: string; agirlik: number }[] = [
-    { neden: '🏛️ Üniversitenin prestiji ve sıralaması', agirlik: 10 + state.prestij },
-    { neden: '✨ Kampüs cazibesi (yurt, ulaşım, aktiviteler)', agirlik: cazibePuani(state) },
+  // panel: satıra tıklanınca açılacak yönetim ekranı (o etkeni büyütmenin yolu)
+  const adaylar: { neden: string; agirlik: number; panel?: string }[] = [
+    { neden: '🏛️ Üniversitenin prestiji ve sıralaması', agirlik: 10 + state.prestij, panel: 'arastirma' },
+    { neden: '✨ Kampüs cazibesi (yurt, ulaşım, aktiviteler)', agirlik: cazibePuani(state), panel: 'raporlar' },
     {
       neden: state.ucret === 0 ? '🆓 Ücretsiz eğitim' : '🎗️ Burs imkânları',
       agirlik: state.ucret === 0 ? 45 : state.bursTam * 2 + state.bursYari,
+      panel: 'strateji',
     },
-    { neden: '⭐ Bölümlerin popülerliği', agirlik: ortTaban / 4 },
-    { neden: '📣 Tanıtım kampanyası', agirlik: state.strategies.includes('tanitim') ? 30 : 0 },
-    { neden: '💼 Mezunların iş bulma başarısı', agirlik: (istihdamOrani(state) ?? 0) / 2 },
+    { neden: '⭐ Bölümlerin popülerliği', agirlik: ortTaban / 4, panel: 'bolumler' },
+    { neden: '📣 Tanıtım kampanyası', agirlik: state.strategies.includes('tanitim') ? 30 : 0, panel: 'strateji' },
+    { neden: '💼 Mezunların iş bulma başarısı', agirlik: (istihdamOrani(state) ?? 0) / 2, panel: 'mezunlar' },
   ];
   if (state.ucret > 0 && state.ucret <= odemeGucu(state)) {
-    adaylar.push({ neden: '₺ Ödenebilir kayıt ücreti', agirlik: 25 * (1 - state.ucret / (odemeGucu(state) * 2)) });
+    adaylar.push({ neden: '₺ Ödenebilir kayıt ücreti', agirlik: 25 * (1 - state.ucret / (odemeGucu(state) * 2)), panel: 'strateji' });
   }
   const secilen = adaylar.filter((a) => a.agirlik > 0).sort((a, b) => b.agirlik - a.agirlik).slice(0, 5);
   const toplam = secilen.reduce((t, a) => t + a.agirlik, 0);
   if (toplam <= 0) return [];
-  const sonuc = secilen.map((a) => ({ neden: a.neden, oran: Math.round((100 * a.agirlik) / toplam) }));
+  const sonuc = secilen.map((a) => ({
+    neden: a.neden, oran: Math.round((100 * a.agirlik) / toplam), panel: a.panel,
+  }));
   // yuvarlama artığını en büyüğe ver — toplamları %100 olsun
   const fark = 100 - sonuc.reduce((t, a) => t + a.oran, 0);
   if (sonuc.length > 0) sonuc[0].oran += fark;
@@ -491,10 +498,16 @@ export function semesterEnd(state: GameState): void {
 
   // 📝 DÖNEM SINAVLARI — mezuniyetten önce: not = GNO + eğilim + şans.
   // Kalan öğrenci ilerleme kaybeder (bütünleme = gelecek dönem telafi).
+  // 🎗 BURS BAŞARI ŞARTI (ücretli modelde): GNO şartın altına düşen burslunun
+  // bursu bir kademe düşer; onur listesine giren ücretli/yarı burslu bir kademe
+  // BAŞARI BURSU kazanır (100→50→0 ve tersi).
   let gecen = 0, kalanlar = 0, onur = 0;
+  let bursDusen = 0, bursKazanan = 0;
+  const bursluModel = state.ucret > 0;
   for (const a of state.agents) {
     if (a.kind !== 'ogrenci') continue;
-    const gno = gnoHesapla(a) ?? 1.2;
+    const gercekGno = gnoHesapla(a); // null = henüz yeterli ders verisi yok
+    const gno = gercekGno ?? 1.2;
     const sinavNotu = clamp(
       25 + gno * 20 + (a.egilim - 100) * 0.1 + randRange(state, -8, 8), 0, 100,
     );
@@ -506,8 +519,20 @@ export function semesterEnd(state: GameState): void {
       onur++;
       a.mutluluk = clamp(a.mutluluk + 5, 0, 100);
       gecen++;
+      if (bursluModel && a.level === 'lisans' && a.burs < 100) {
+        a.burs = a.burs >= 50 ? 100 : 50; // başarı bursu: bir kademe yukarı
+        a.mutluluk = clamp(a.mutluluk + 10, 0, 100);
+        bursKazanan++;
+      }
     } else {
       gecen++;
+    }
+    // burs şartı: veri varken GNO eşiğin altındaysa kademe düşer (onurla çakışmaz)
+    if (bursluModel && a.level === 'lisans' && a.burs > 0
+        && gercekGno !== null && gercekGno < BALANCE.BURS_GNO_SART) {
+      a.burs = a.burs >= 100 ? 50 : 0;
+      a.mutluluk = clamp(a.mutluluk - 8, 0, 100);
+      bursDusen++;
     }
   }
   if (gecen + kalanlar > 0) {
@@ -515,6 +540,13 @@ export function semesterEnd(state: GameState): void {
       state,
       `📝 Dönem sınavları: ${gecen} geçti · ${kalanlar} KALDI (bütünleme: ilerleme -15) · ${onur} onur listesinde 🌟`,
       kalanlar > gecen ? 'kotu' : 'bilgi',
+    );
+  }
+  if (bursDusen + bursKazanan > 0) {
+    notify(
+      state,
+      `🎗 Burs güncellemesi: ${bursKazanan} öğrenci BAŞARI BURSU kazandı (onur listesi) · ${bursDusen} öğrencinin bursu düştü (GNO < ${BALANCE.BURS_GNO_SART.toFixed(1)})`,
+      bursDusen > bursKazanan ? 'kotu' : 'iyi',
     );
   }
 
@@ -616,7 +648,10 @@ export function dailyDepartmentUpdate(state: GameState): void {
 
   // Yemekhane sübvansiyonu + mali politikalar + heyetin sosyal üyeleri (mutluluk)
   const subvansiyon = state.strategies.includes('yemek_subvansiyon');
-  const pahali = state.ucret > odemeGucu(state); // ödeme gücünü aşan ücret huzursuzluk yaratır
+  // ödeme gücünü aşan ücret huzursuzluk yaratır — bölüm ücreti bazında
+  const guc = odemeGucu(state);
+  const pahaliBolum = new Map<number, boolean>();
+  for (const d of state.departments) pahaliBolum.set(d.id, bolumUcreti(state, d.id) > guc);
   const ortakMutluluk = (state.ucret === 0 ? 0.3 : 0)
     + 0.4 * mutevelliBonusu(state, 'sosyal')
     + (faaliyetPuani(state) >= 50 ? 0.3 : 0); // canlı kampüs yaşamı moral verir
@@ -626,7 +661,8 @@ export function dailyDepartmentUpdate(state: GameState): void {
     if (a.kind !== 'ogrenci') continue;
     if (subvansiyon) a.mutluluk = clamp(a.mutluluk + 2, 0, 100);
     // burslu okumak moral verir; ücretli öğrenci fahiş fiyatta huzursuzlaşır
-    const bursMutluluk = a.burs >= 100 ? 0.4 : a.burs >= 50 ? 0.2 : pahali ? -0.6 : 0;
+    const bursMutluluk = a.burs >= 100 ? 0.4 : a.burs >= 50 ? 0.2
+      : pahaliBolum.get(a.deptId) ? -0.6 : 0;
     a.mutluluk = clamp(a.mutluluk + ortakMutluluk + bursMutluluk, 0, 100);
     toplamMutluluk += a.mutluluk;
     ogrenciSayisi++;
