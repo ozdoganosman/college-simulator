@@ -164,11 +164,13 @@ export function eskiKayitUyumu(s: GameState): void {
         a.verdigiDersler = [];
         dersSecimiEksik = true;
       }
+      if (typeof a.yetistirdigi !== 'number') a.yetistirdigi = 0;
     } else if (a.kind === 'ogrenci') {
       if (typeof a.egilim !== 'number') a.egilim = 70 + ((a.id * 37) % 61); // 70-130
       if (typeof a.kaliteToplam !== 'number') a.kaliteToplam = 0;
       if (typeof a.dersDakika !== 'number') a.dersDakika = 0;
       if (typeof a.asistani !== 'number') a.asistani = -1;
+      if (typeof a.danisman !== 'number') a.danisman = -1;
       if (!a.nitelik || typeof a.nitelik !== 'object') {
         a.nitelik = { muhendis: 0, artist: 0, filozof: 0, pratik: 0, influencer: 0 };
       }

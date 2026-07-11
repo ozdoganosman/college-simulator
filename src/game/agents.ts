@@ -971,6 +971,31 @@ export function updateAgents(state: GameState, dtMin: number): void {
 
 // --- Ajan yaşam döngüsü -----------------------------------------------------------
 
+/**
+ * YL/doktora öğrencisine danışman seçer: bölümün en kıdemli/araştırmacı hocası,
+ * üzerindeki öğrenci sayısı az olan tercih edilir.
+ */
+function danismanSec(state: GameState, deptId: number): number {
+  const rankPuan: Record<string, number> = { prof: 3, docent: 2, dr: 1, arsgor: 0.4 };
+  const ogrenciSayisi = new Map<number, number>();
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci' && a.danisman !== -1) {
+      ogrenciSayisi.set(a.danisman, (ogrenciSayisi.get(a.danisman) ?? 0) + 1);
+    }
+  }
+  let secilen = -1;
+  let enIyi = -1;
+  for (const a of state.agents) {
+    if (a.kind !== 'akademisyen' || a.deptId !== deptId) continue;
+    const puan = (rankPuan[a.rank] + a.arastirma / 50) / (1 + (ogrenciSayisi.get(a.id) ?? 0) * 0.5);
+    if (puan > enIyi) {
+      enIyi = puan;
+      secilen = a.id;
+    }
+  }
+  return secilen;
+}
+
 export function spawnStudent(state: GameState, deptId: number, level: StudentLevel): Student {
   const s: Student = {
     id: newId(state),
@@ -999,6 +1024,7 @@ export function spawnStudent(state: GameState, deptId: number, level: StudentLev
     kaliteToplam: 0,
     dersDakika: 0,
     asistani: -1,
+    danisman: -1,
     nitelik: {
       muhendis: randInt(state, 0, 8),
       artist: randInt(state, 0, 8),
@@ -1009,6 +1035,7 @@ export function spawnStudent(state: GameState, deptId: number, level: StudentLev
     sermaye: 0,
   };
   state.agents.push(s);
+  if (level !== 'lisans') s.danisman = danismanSec(state, deptId);
   return s;
 }
 
@@ -1044,6 +1071,7 @@ export function spawnAcademic(
     xp: 0,
     makale: 0,
     uluslararasiMakale: 0,
+    yetistirdigi: 0,
   };
   state.agents.push(a);
   return a;
@@ -1074,8 +1102,10 @@ export function removeAgent(state: GameState, agentId: number): void {
   releaseReservations(state, agentId);
   const i = state.agents.findIndex((a) => a.id === agentId);
   if (i !== -1) state.agents.splice(i, 1);
-  // çıkarılan bir hocaysa asistan bağlarını çöz
+  // çıkarılan bir hocaysa asistan/danışman bağlarını çöz
   for (const a of state.agents) {
-    if (a.kind === 'ogrenci' && a.asistani === agentId) a.asistani = -1;
+    if (a.kind !== 'ogrenci') continue;
+    if (a.asistani === agentId) a.asistani = -1;
+    if (a.danisman === agentId) a.danisman = -1;
   }
 }

@@ -112,7 +112,8 @@ export function yilSonuHesapla(state: GameState): YilSonuSonuc {
   let enHoca = 0;
   for (const a of state.agents) {
     if (a.kind !== 'akademisyen') continue;
-    const puan = a.makale * 8 + a.uluslararasiMakale * 6 + a.xp * 0.15 + (a.egitim + a.arastirma) * 0.1;
+    const puan = a.makale * 8 + a.uluslararasiMakale * 6 + a.xp * 0.15 + (a.egitim + a.arastirma) * 0.1
+      + (a.yetistirdigi ?? 0) * 5; // yetiştirdiği doktora mezunu soyağacı puanı
     if (puan > enHoca) {
       enHoca = puan;
       hoca = {

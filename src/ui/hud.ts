@@ -322,6 +322,12 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     if (hoca && hoca.kind === 'akademisyen') {
       html += cip(`🧑‍🔬 Asistanlık: ${RANK_LABEL[hoca.rank]} ${hoca.ad}`);
     }
+    if (a.level !== 'lisans' && a.danisman !== -1) {
+      const d = state.agents.find((x) => x.id === a.danisman);
+      if (d && d.kind === 'akademisyen') {
+        html += cip(`🧭 Danışmanı: ${RANK_LABEL[d.rank]} ${d.ad}`);
+      }
+    }
     return html;
   }
   if (a.kind === 'akademisyen') {
@@ -333,6 +339,8 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     html += cip(`⚡ Yük verimi ${miniBar(verim / 100, verim >= 90 ? '#46b45e' : verim >= 75 ? '#e8b931' : '#d9534f')} %${verim} — kalite ve araştırma çarpanı`, verim < 75);
     html += cip(`🎓 Eğitim: ${Math.round(a.egitim)} · 🔬 Araştırma: ${Math.round(a.arastirma)}`);
     html += cip(`📄 Makale: ${a.makale} (${a.uluslararasiMakale} 🌍)`);
+    if (a.yetistirdigi > 0) html += cip(`🌳 Yetiştirdiği doktora: ${a.yetistirdigi}`);
+    if (a.mezunumuz) html += cip(`🎓 Kendi mezunumuz${a.danismanAd ? ` — danışmanı ${a.danismanAd}` : ''}`);
     return html;
   }
   const rol = a.kind === 'asci' ? 'Aşçı' : 'Temizlikçi';

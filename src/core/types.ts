@@ -178,6 +178,8 @@ export interface Student extends AgentBase {
   dersDakika: number;
   /** asistanı olduğu akademisyen id (YL/doktora; değilse -1) */
   asistani: number;
+  /** akademik danışmanı (YL/doktora öğrencisine kayıtta atanır; yoksa -1) */
+  danisman: number;
   /** gelişim nitelikleri (0-100) — dersler ve kampüs yaşamıyla büyür */
   nitelik: Record<Nitelik, number>;
   /** sermayedar özelliği: öğrencinin girişimlerinden biriktirdiği para ₺ */
@@ -209,6 +211,12 @@ export interface Academic extends AgentBase {
   /** yayın sayıları */
   makale: number;
   uluslararasiMakale: number;
+  /** danışmanlığında doktorasını bitiren öğrenci sayısı (akademik soyağacı) */
+  yetistirdigi: number;
+  /** kendi doktora programımızdan yetişti mi */
+  mezunumuz?: boolean;
+  /** doktora danışmanının adı (soyağacı gösterimi) */
+  danismanAd?: string;
 }
 
 export interface StaffAgent extends AgentBase {
@@ -388,6 +396,10 @@ export interface Candidate {
   bonus: number;
   /** transfer adayının geldiği üniversite (KPSS'de '') */
   kurum: string;
+  /** kendi doktora mezunumuz (KPSS'de indirimli, danışman becerisinden pay alır) */
+  mezunumuz?: boolean;
+  /** doktora danışmanının adı */
+  danismanAd?: string;
 }
 
 // --- Strateji ----------------------------------------------------------------

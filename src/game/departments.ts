@@ -48,12 +48,13 @@
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
 import {
-  ALAN_META, Academic, Department, GameState, Room, Student, YerlestirmeSatir, donemIndex, yil,
+  ALAN_META, Academic, Department, GameState, RANK_LABEL, Room, Student, YerlestirmeSatir,
+  donemIndex, yil,
 } from '../core/types';
 import { courseDef, dersEtki, rebuildDersProgrami, verilemeyenDersler } from './schedule';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
-import { deptDef } from '../data/departments';
+import { bolumBaskinAlan, deptDef } from '../data/departments';
 import { addPrestij, earn, notify, spend } from './state';
 import { gnoHesapla, removeAgent, spawnStudent } from './agents';
 import { mezunEkle } from './alumni';
@@ -427,6 +428,35 @@ export function semesterEnd(state: GameState): void {
     // mezunlar derneğine kayıt: puanına göre işe yerleşir, kariyeri yıllık ilerler
     const mezunDept = deptMap.get(s.deptId);
     mezunEkle(state, s, mezunDept ? deptDef(mezunDept.defId).ad : 'Kapanan Bölüm', gnoHesapla(s));
+    // Doktora → Arş. Gör. döngüsü: kendi doktora mezunumuz KPSS havuzuna düşer —
+    // indirimli maaş ister, becerisi kendi çalışmasına VE danışmanına bağlıdır
+    if (s.level === 'doktora') {
+      const danisman = state.agents.find(
+        (a): a is Academic => a.id === s.danisman && a.kind === 'akademisyen',
+      );
+      const alan = mezunDept ? bolumBaskinAlan(mezunDept.defId) : s.nitelik.muhendis >= s.nitelik.pratik ? 'muhendis' : 'pratik';
+      const gno = gnoHesapla(s) ?? 2;
+      state.kpssPool.push({
+        id: newId(state),
+        ad: s.ad,
+        rank: 'arsgor',
+        alan,
+        egitim: clamp(Math.round(28 + gno * 8 + (danisman?.egitim ?? 40) * 0.25), 25, 90),
+        arastirma: clamp(Math.round(28 + s.nitelik[alan] * 0.3 + (danisman?.arastirma ?? 40) * 0.3), 25, 90),
+        maas: Math.round(BALANCE.MAAS.arsgor * 0.85), // yuvaya dönüş indirimi
+        bonus: 0,
+        kurum: '',
+        mezunumuz: true,
+        danismanAd: danisman ? `${RANK_LABEL[danisman.rank]} ${danisman.ad}` : undefined,
+      });
+      if (danisman) {
+        danisman.yetistirdigi++;
+        addPrestij(state, 1);
+        notify(state, `🌳 ${danisman.ad}'in doktora öğrencisi ${s.ad} mezun oldu — KPSS havuzunda bizi bekliyor!`, 'odul');
+      } else {
+        notify(state, `🎓 Doktora mezunumuz ${s.ad} KPSS havuzuna katıldı — kendi yetiştirdiğimiz akademisyen!`, 'iyi');
+      }
+    }
     removeAgent(state, s.id);
     state.toplamMezun++;
     const dept = deptMap.get(s.deptId);

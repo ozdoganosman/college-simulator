@@ -520,8 +520,10 @@ function kadroGovde(state: GameState): string {
       const asistan = asistanlari(state, a.id).length;
       const verim = Math.round(dersYukuVerimi(state, a) * 100);
       const verimRenk = verim >= 90 ? '#9fd3a8' : verim >= 75 ? '#f0c674' : '#f4a09c';
+      const soyagaci = (a.mezunumuz ? `<span class="rozet" style="color:#ffd166" title="Kendi doktora programımızdan yetişti${a.danismanAd ? ` — danışmanı: ${esc(a.danismanAd)}` : ''}">🎓 mezunumuz</span>` : '')
+        + (a.yetistirdigi > 0 ? `<span class="rozet" style="color:#9fd3a8" title="Danışmanlığında ${a.yetistirdigi} doktora öğrencisi mezun oldu — akademik soyağacı">🌳 ${a.yetistirdigi}</span>` : '');
       return `<tr>
-        <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b> <span class="rozet" title="${ALAN_META[a.alan].tanim}">${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span></td>
+        <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b> <span class="rozet" title="${ALAN_META[a.alan].tanim}">${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>${soyagaci}</td>
         <td><select data-action="bolum-sec" data-id="${a.id}">${bolumSecenekleri(state, a.deptId)}</select></td>
         <td title="${dersSayisi} ders, ${asistan} asistan — ders kalitesi ve araştırma hızı çarpanı (📅 Program panelinden yönetilir)">
           <b style="color:${verimRenk}">⚡ %${verim}</b><br><small>${dersSayisi}📚 ${asistan}👥</small></td>
@@ -542,8 +544,8 @@ function kadroGovde(state: GameState): string {
   }
 
   // KPSS havuzu
-  const kpssSatir = state.kpssPool.map((c) => `<tr>
-      <td>${RANK_LABEL[c.rank]} ${esc(c.ad)} <span class="rozet" title="${ALAN_META[c.alan].tanim}">${ALAN_META[c.alan].emoji} ${ALAN_META[c.alan].ad}</span></td>
+  const kpssSatir = state.kpssPool.map((c) => `<tr${c.mezunumuz ? ' style="background:rgba(255,209,102,0.08)"' : ''}>
+      <td>${RANK_LABEL[c.rank]} ${esc(c.ad)} <span class="rozet" title="${ALAN_META[c.alan].tanim}">${ALAN_META[c.alan].emoji} ${ALAN_META[c.alan].ad}</span>${c.mezunumuz ? `<span class="rozet" style="color:#ffd166" title="Kendi doktora mezunumuz: indirimli maaş ister, becerisi danışmanından pay alır${c.danismanAd ? ` — danışmanı: ${esc(c.danismanAd)}` : ''}. Havuzdan silinmez, seni bekler.">🎓 Kendi Mezunumuz</span>` : ''}</td>
       <td>${c.egitim}</td>
       <td>${c.arastirma}</td>
       <td>${formatMoney(c.maas)}</td>
@@ -1263,6 +1265,11 @@ function yardimGovde(): string {
       <b>Kariyer Günü</b> etkinliği tüm öğrencilere nitelik ve mutluluk kazandırır.
       Not: Oyuna <b>0 prestijle</b> başlarsın — ilk yıllarda talep düşüktür, mezun ver ve
       yayın yap ki prestij ve talep büyüsün.
+      <br>🌳 <b>Akademik soyağacı:</b> doktora öğrencilerine kayıtta danışman atanır (asistan
+      olursa danışmanı o hoca olur). Doktora mezunun <b>KPSS havuzuna "🎓 Kendi Mezunumuz"</b>
+      olarak düşer: indirimli maaş ister, becerisi kendi notlarına VE danışmanının gücüne
+      bağlıdır; havuz yenilense de silinmez. İşe alırsan döngü tamamlanır (+2 prestij) ve
+      danışmanın 🌳 sayacı artar — yılın hocası seçiminde de sayılır.
     </div>
 
     <h3>6) Strateji ve prestij</h3>

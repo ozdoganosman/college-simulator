@@ -60,6 +60,8 @@ function rastgeleAd(state: GameState): string {
 }
 
 export function refreshCandidatePools(state: GameState): void {
+  // Kendi doktora mezunlarımız havuzdan silinmez — işe alınana dek bekler (en yeni 8)
+  const mezunlarimiz = state.kpssPool.filter((c) => c.mezunumuz).slice(-8);
   // KPSS havuzu: hepsi araştırma görevlisi
   const kpss: Candidate[] = [];
   const kpssSayi = randInt(state, 6, 9);
@@ -76,7 +78,7 @@ export function refreshCandidatePools(state: GameState): void {
       kurum: '',
     });
   }
-  state.kpssPool = kpss;
+  state.kpssPool = [...mezunlarimiz, ...kpss];
 
   // Transfer havuzu: deneyimli adaylar, imza bonusu ister
   const transfer: Candidate[] = [];
@@ -138,6 +140,13 @@ export function hireFromPool(
   }
 
   const yeni = spawnAcademic(state, aday.ad, deptId, aday.rank, aday.alan, aday.egitim, aday.arastirma, aday.maas);
+  if (aday.mezunumuz) {
+    // akademik soyağacı: kendi mezunumuz kadroya döndü — döngü tamamlandı
+    yeni.mezunumuz = true;
+    yeni.danismanAd = aday.danismanAd;
+    addPrestij(state, 2);
+    notify(state, `🌳 ${aday.ad} kendi doktora mezunumuz olarak kadroya döndü — akademik soyağacımız büyüyor! (+2 prestij)`, 'odul');
+  }
   otoDersSec(state, yeni.id); // yıllık ders seçimi otomatik başlar — panelden değiştirilebilir
   rebuildDersProgrami(state);
   havuz.splice(idx, 1);
@@ -170,6 +179,7 @@ export function asistanAta(state: GameState, studentId: number, academicId: numb
     return false;
   }
   ogrenci.asistani = academicId;
+  ogrenci.danisman = academicId; // danışmanlık asistanlığı izler (akademik soyağacı)
   notify(
     state,
     `🧑‍🔬 ${ogrenci.ad}, ${RANK_LABEL[hoca.rank]} ${hoca.ad}'in asistanı oldu (günlük ${formatMoney(BALANCE.ASISTAN_MAAS)}).`,
