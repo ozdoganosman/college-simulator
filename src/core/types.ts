@@ -356,10 +356,16 @@ export interface YilSonuSonuc {
 
 // --- Araştırma / Yayın -------------------------------------------------------
 
+export type ProjeTip = 'temel' | 'uygulamali' | 'atilim';
+
 export interface ResearchProject {
   id: number;
   deptId: number;
   baslik: string;
+  /** proje tipi: risk/ödül dengesini belirler */
+  tip: ProjeTip;
+  /** proje lideri akademisyen (riski düşürür, katkısı artar; yoksa -1) */
+  liderId: number;
   /** 0-100 */
   ilerleme: number;
   /** toplam gereken araştırma puanı */
@@ -503,6 +509,16 @@ export interface GameState {
   basarimlar: string[];
   /** üniversite vizyonu (birbirini dışlayan strateji ekseni) */
   vizyon: Vizyon | null;
+  /** harç politikası: gelir ↔ talep/mutluluk dengesi */
+  harc: 'ucretsiz' | 'dusuk' | 'yuksek';
+  /** burs programı: günlük gider, mutluluk + bırakma koruması */
+  burs: boolean;
+  /** kalan kredi borcu ₺ (günlük taksitle ödenir) */
+  krediBorcu: number;
+  /** mütevelli heyetindeki mezun id'leri (en çok 3) — pasif bonuslar */
+  mutevelli: number[];
+  /** rakip olaylarının bir sonraki YKS talebine çarpanı (uygulanınca 1'e döner) */
+  sonrakiTalepCarpan: number;
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */

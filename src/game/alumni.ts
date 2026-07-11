@@ -12,7 +12,7 @@ import {
 } from '../core/types';
 import { chance, clamp, formatMoney, newId, pick, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
-import { earn, notify } from './state';
+import { addPrestij, earn, notify } from './state';
 
 /** Sektör başına kariyer basamakları (kademe 0-4). */
 export const MESLEKLER: Record<Sektor, string[]> = {
@@ -147,6 +147,23 @@ export function yillikMezunGuncelle(state: GameState): void {
     haberEkle(state, `💎 ${enZengin.ad} yıllık ${formatMoney(enZengin.gelir)} gelirle listelerde!`);
   }
 
+  // 🏛️ İsimli bina bağışı: zirvedeki bir mezun nadiren dev bağış yapar
+  const zirvedekiler = state.mezunlar.filter((m) => !m.issiz && m.kademe >= 3 && m.gelir >= 800_000);
+  if (zirvedekiler.length > 0 && chance(state, 0.25)) {
+    const bagisci = pick(state, zirvedekiler);
+    const binaAd: Record<string, string> = {
+      girisim: 'Teknoloji Merkezi', muhendis: 'Mühendislik Laboratuvarı',
+      artist: 'Sanat Galerisi', filozof: 'Kütüphanesi', pratik: 'Konferans Salonu',
+      medya: 'Medya Stüdyosu',
+    };
+    const tutar = Math.round(bagisci.gelir * 0.6 / 1000) * 1000;
+    earn(state, tutar);
+    addPrestij(state, 3);
+    const bina = `${bagisci.ad.split(' ').pop()} ${binaAd[bagisci.sektor]}`;
+    haberEkle(state, `🏛️ BÜYÜK BAĞIŞ: ${bagisci.ad}, "${bina}" için ${formatMoney(tutar)} bağışladı!`);
+    notify(state, `🏛️ ${bagisci.ad} kampüse "${bina}" için ${formatMoney(tutar)} bağışladı! (+3 prestij)`, 'odul');
+  }
+
   if (bagis > 0) {
     const tutar = Math.round(bagis);
     earn(state, tutar);
@@ -199,4 +216,41 @@ export function mentorlukAyarla(state: GameState, acik: boolean): boolean {
   }
   state.mentorluk = acik;
   return true;
+}
+
+// --- Mütevelli Heyeti ---------------------------------------------------------
+
+/** Heyetteki mezunlardan verilen sektörde kaç kişi var (pasif bonus hesabı). */
+export function mutevelliBonusu(state: GameState, sektor: 'girisim' | 'muhendis' | 'pratik' | 'sosyal'): number {
+  let n = 0;
+  for (const id of state.mutevelli) {
+    const m = state.mezunlar.find((x) => x.id === id);
+    if (!m) continue;
+    if (sektor === 'sosyal') {
+      if (m.sektor === 'medya' || m.sektor === 'artist' || m.sektor === 'filozof') n++;
+    } else if (m.sektor === sektor) n++;
+  }
+  return n;
+}
+
+/** Mezunu Mütevelli Heyetine atar (en çok 3 üye; kademe 2+ gerekir). */
+export function mutevelliAta(state: GameState, mezunId: number): boolean {
+  if (state.mutevelli.length >= 3) {
+    notify(state, 'Mütevelli Heyeti dolu (en çok 3 üye) — önce birini çıkar.', 'kotu');
+    return false;
+  }
+  if (state.mutevelli.includes(mezunId)) return false;
+  const m = state.mezunlar.find((x) => x.id === mezunId);
+  if (!m || m.issiz || m.kademe < 2) {
+    notify(state, 'Heyet üyeliği için en az Kıdemli seviye (kademe 2+) çalışan mezun gerekir.', 'kotu');
+    return false;
+  }
+  state.mutevelli.push(mezunId);
+  haberEkle(state, `🏛️ ${m.ad} (${m.meslek}) Mütevelli Heyetine katıldı.`);
+  notify(state, `🏛️ ${m.ad} Mütevelli Heyetine atandı — sektör bonusu aktif (${SEKTOR_META[m.sektor].ad}).`, 'iyi');
+  return true;
+}
+
+export function mutevelliCikar(state: GameState, mezunId: number): void {
+  state.mutevelli = state.mutevelli.filter((id) => id !== mezunId);
 }

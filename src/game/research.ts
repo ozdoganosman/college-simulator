@@ -36,8 +36,37 @@
  * cancelProject(state, projectId): iade yok, notify(kotu).
  */
 import {
-  Academic, GameState, Publication, RANK_LABEL, ResearchProject,
+  Academic, GameState, ProjeTip, Publication, RANK_LABEL, ResearchProject,
 } from '../core/types';
+import { mutevelliBonusu } from './alumni';
+
+/** Proje tipleri: risk/ödül dengesi — lider hocanın araştırma becerisi riski düşürür. */
+export const PROJE_TIPLERI: Record<ProjeTip, {
+  ad: string; emoji: string; maliyetCarpan: number; hibeCarpan: number;
+  bulusCarpan: number; risk: number; aciklama: string;
+}> = {
+  temel: {
+    ad: 'Temel Araştırma', emoji: '🧪', maliyetCarpan: 0.8, hibeCarpan: 0.9,
+    bulusCarpan: 0.6, risk: 0.05, aciklama: 'Güvenli ve ucuz — düşük buluş şansı',
+  },
+  uygulamali: {
+    ad: 'Uygulamalı Proje', emoji: '🔧', maliyetCarpan: 1.0, hibeCarpan: 1.1,
+    bulusCarpan: 1.5, risk: 0.15, aciklama: 'Dengeli — buluş şansı ×1.5, risk %15',
+  },
+  atilim: {
+    ad: 'Yüksek Riskli Atılım', emoji: '💥', maliyetCarpan: 1.6, hibeCarpan: 1.8,
+    bulusCarpan: 3.0, risk: 0.35, aciklama: 'Pahalı kumar — buluş ×3, hibe ×1.8, risk %35',
+  },
+};
+
+/** Projenin gerçek başarısızlık riski: lider güçlüyse düşer. */
+export function projeRiski(state: GameState, proje: ResearchProject): number {
+  const tip = PROJE_TIPLERI[proje.tip];
+  const lider = state.agents.find(
+    (a): a is Academic => a.id === proje.liderId && a.kind === 'akademisyen',
+  );
+  return tip.risk * (lider ? 1 - lider.arastirma / 200 : 1);
+}
 import { chance, clamp, formatMoney, newId, pick, randRange } from '../core/util';
 import { asistanSayilari, yukVerimi } from './schedule';
 import { libraryLevel, validRooms } from '../core/grid';
@@ -46,7 +75,9 @@ import { deptDef } from '../data/departments';
 import { ODUL_ADLARI, PROJE_KALIP, PROJE_KONU } from '../data/names';
 import { addPrestij, earn, notify, spend } from './state';
 
-export function startProject(state: GameState, deptId: number): boolean {
+export function startProject(
+  state: GameState, deptId: number, tip: ProjeTip = 'temel', liderId = -1,
+): boolean {
   const dept = state.departments.find((d) => d.id === deptId);
   if (!dept) return false;
   const def = deptDef(dept.defId);
@@ -72,8 +103,16 @@ export function startProject(state: GameState, deptId: number): boolean {
     return false;
   }
 
-  const maliyet = Math.round(BALANCE.PROJE_MALIYET_TABAN * randRange(state, 0.8, 1.4));
+  const tipMeta = PROJE_TIPLERI[tip];
+  const maliyet = Math.round(
+    BALANCE.PROJE_MALIYET_TABAN * tipMeta.maliyetCarpan * randRange(state, 0.8, 1.4),
+  );
   if (!spend(state, maliyet, 'araştırma projesi')) return false;
+
+  // lider bölümden olmalı (değilse lidersiz başlar — risk tam işler)
+  const lider = state.agents.find(
+    (a): a is Academic => a.id === liderId && a.kind === 'akademisyen' && a.deptId === deptId,
+  );
 
   const konu = pick(state, PROJE_KONU);
   const baslik = pick(state, PROJE_KALIP).replace('{k}', konu);
@@ -81,6 +120,8 @@ export function startProject(state: GameState, deptId: number): boolean {
     id: newId(state),
     deptId,
     baslik,
+    tip,
+    liderId: lider ? lider.id : -1,
     ilerleme: 0,
     hedefPuan: Math.round(BALANCE.PROJE_HEDEF_PUAN * randRange(state, 0.7, 1.3)),
     birikenPuan: 0,
@@ -88,7 +129,11 @@ export function startProject(state: GameState, deptId: number): boolean {
     baslamaGunu: state.gun,
   };
   state.projects.push(proje);
-  notify(state, `${def.ad} bölümünde yeni araştırma projesi: "${baslik}"`, 'bilgi');
+  notify(
+    state,
+    `${tipMeta.emoji} ${def.ad}: "${baslik}" başladı (${tipMeta.ad}${lider ? `, lider: ${lider.ad}` : ', lidersiz — risk tam'}, başarısızlık %${Math.round(projeRiski(state, proje) * 100)})`,
+    'bilgi',
+  );
   return true;
 }
 
@@ -113,12 +158,16 @@ export function updateResearch(state: GameState, dtMin: number): void {
     return k;
   };
   const asistanlar = asistanSayilari(state);
+  const liderMap = new Map<number, number>(); // deptId -> liderId
+  for (const pr of state.projects) liderMap.set(pr.deptId, pr.liderId);
   for (const a of state.agents) {
     if (!a.onCampus || a.activity !== 'arastiriyor') continue;
     if (a.kind === 'akademisyen') {
       const k = al(a.deptId);
-      // ders yükü araştırma hızını da düşürür — asistanlar yükü hafifletir
-      k.akademisyenToplam += a.arastirma
+      // ders yükü araştırma hızını da düşürür — asistanlar yükü hafifletir;
+      // proje LİDERİ araştırırken katkısı ×1.6
+      const liderCarpan = liderMap.get(a.deptId) === a.id ? 1.6 : 1;
+      k.akademisyenToplam += a.arastirma * liderCarpan
         * yukVerimi((a.verdigiDersler ?? []).length, asistanlar.get(a.id) ?? 0);
       k.arastiranlar.push(a);
     } else if (a.kind === 'ogrenci') {
@@ -136,6 +185,7 @@ export function updateResearch(state: GameState, dtMin: number): void {
   if (state.vizyon === 'arastirma') stratCarpan *= 1.25;
   else if (state.vizyon === 'egitim') stratCarpan *= 0.88;
   else if (state.vizyon === 'girisim') stratCarpan *= 0.95;
+  stratCarpan *= 1 + 0.04 * mutevelliBonusu(state, 'muhendis'); // heyetteki mühendis mezunlar
 
   // Geçerli lab + kütüphanedeki bilgisayarlar araştırmayı hızlandırır
   const bilgisayarOdalar = new Set<number>();
@@ -175,8 +225,22 @@ export function updateResearch(state: GameState, dtMin: number): void {
 function completeProject(state: GameState, proje: ResearchProject): void {
   const dept = state.departments.find((d) => d.id === proje.deptId);
   const bolumAdi = dept ? deptDef(dept.defId).ad : 'Bölüm';
+  const tipMeta = PROJE_TIPLERI[proje.tip];
 
-  let hibe = Math.round(BALANCE.ARASTIRMA_HIBE * randRange(state, 0.8, 1.5));
+  // BAŞARISIZLIK zarı: risk tipe ve lider becerisine bağlı
+  if (chance(state, projeRiski(state, proje))) {
+    const lider = state.agents.find(
+      (a): a is Academic => a.id === proje.liderId && a.kind === 'akademisyen',
+    );
+    if (lider) lider.memnuniyet = clamp(lider.memnuniyet - 5, 0, 100);
+    addPrestij(state, -1);
+    notify(state, `❌ "${proje.baslik}" BAŞARISIZ oldu — sonuç üretilemedi (${tipMeta.ad} riski). Hibe yok, moral bozuldu.`, 'kotu');
+    const idx = state.projects.indexOf(proje);
+    if (idx >= 0) state.projects.splice(idx, 1);
+    return;
+  }
+
+  let hibe = Math.round(BALANCE.ARASTIRMA_HIBE * tipMeta.hibeCarpan * randRange(state, 0.8, 1.5));
 
   // Yazar: araştırma becerisiyle ağırlıklı rastgele seçim — böylece araştırma
   // görevlileri de zamanla makale yazıp terfi edebilir.
@@ -215,7 +279,7 @@ function completeProject(state: GameState, proje: ResearchProject): void {
 
   // Çığır açan buluş (yazar yoksa buluş da yok)
   if (yazar) {
-    const bulusOlasilik = BALANCE.BULUS_OLASILIK + (yazar.arastirma > 80 ? 0.05 : 0);
+    const bulusOlasilik = (BALANCE.BULUS_OLASILIK + (yazar.arastirma > 80 ? 0.05 : 0)) * tipMeta.bulusCarpan;
     if (chance(state, bulusOlasilik)) {
       if (anaYayin) anaYayin.cigirAcici = true;
       let gelir = BALANCE.BULUS_GELIR;

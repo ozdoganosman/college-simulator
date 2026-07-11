@@ -43,7 +43,7 @@
 import {
   Academic, AcademicRank, Agent, AgentActivity, AgentKind, GameState, GATE, MAP_H, MAP_W,
   Needs, PlacedObject, Point, Room, StaffAgent, Student, StudentLevel, T,
-  donemIndex, inBounds, tileIndex,
+  DONEM_GUN, donemGunu, donemIndex, inBounds, tileIndex,
 } from '../core/types';
 import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
 import { courseDef, dersEtki } from '../data/courses';
@@ -607,8 +607,10 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       const kalite = ogretmenli
         ? (0.6 + (ctx.teacherSkill.get(rid) ?? 50) / 125) * (ctx.teacherEtki.get(rid) ?? 1)
         : BALANCE.OGRETMENSIZ_CARPAN;
-      // öğrencinin kendi öğrenme eğilimi de hızı ve not ortalamasını belirler
-      const efektif = kalite * (s.egilim / 100) * ctx.ogrenmeCarpan;
+      // öğrencinin kendi öğrenme eğilimi de hızı ve not ortalamasını belirler;
+      // dönemin son 3 günü SINAV HAFTASI: herkes asılır (×1.25)
+      const sinavHaftasi = donemGunu(state.gun) > DONEM_GUN - 3 ? 1.25 : 1;
+      const efektif = kalite * (s.egilim / 100) * ctx.ogrenmeCarpan * sinavHaftasi;
       s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * efektif, 0, 100);
       s.kaliteToplam += efektif * dtMin;
       s.dersDakika += dtMin;

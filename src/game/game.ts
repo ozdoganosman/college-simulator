@@ -3,7 +3,7 @@ import {
 } from '../core/types';
 import { AYARLAR } from '../core/settings';
 import { validateRooms } from '../core/grid';
-import { pick, randInt } from '../core/util';
+import { clamp, pick, randInt } from '../core/util';
 import { AD, SOYAD } from '../data/names';
 import { BALANCE } from '../data/balance';
 import { buildFloor } from './build';
@@ -14,7 +14,7 @@ import { dailyAcademicUpdate, refreshCandidatePools } from './academics';
 import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } from './departments';
 import { rebuildDersProgrami, tumunuOtoSec } from './schedule';
 import { dailyEconomy } from './economy';
-import { kurRakipler, rakipleriGelistir, yilSonuHesapla } from './rivals';
+import { kurRakipler, rakipleriGelistir, siralama, yilSonuHesapla } from './rivals';
 import { yillikMezunGuncelle } from './alumni';
 import { donemIstifaKontrol, yillikYaslanma } from './academics';
 import { kontrolBasarimlar } from './goals';
@@ -66,6 +66,7 @@ function endOfDay(state: GameState): void {
   if (donemGunu(state.gun) === 1) {
     semesterEnd(state);
     donemIstifaKontrol(state); // mutsuz hocalar rakiplere gidebilir
+    donemRakipOlayi(state); // rakipler boş durmaz: skandal, atılım, ayartma, kampanya
     refreshCandidatePools(state);
     donemDestegi(state);
     if (donemIndex(state.gun) % 2 === 0) {
@@ -108,6 +109,47 @@ function endOfDay(state: GameState): void {
   }
 
   if (AYARLAR.otomatikKayit) saveGame(state);
+}
+
+/**
+ * Rakip olayları: dönem başında %45 şansla rakipler bir hamle yapar —
+ * skandal (talebin artar), atılım, hoca ayartma girişimi ya da tanıtım savaşı.
+ */
+function donemRakipOlayi(state: GameState): void {
+  if (state.rakipler.length === 0 || randInt(state, 0, 99) >= 45) return;
+  const zar = randInt(state, 0, 3);
+  const guclu = siralama(state).filter((s) => !s.oyuncu).slice(0, 8);
+  const rakipAd = guclu.length > 0 ? pick(state, guclu).ad : state.rakipler[0].ad;
+  const rakip = state.rakipler.find((r) => r.ad === rakipAd);
+
+  if (zar === 0 && rakip) {
+    rakip.prestij = Math.max(30, rakip.prestij - 20);
+    state.sonrakiTalepCarpan *= 1.15;
+    notify(state, `📰 ${rakip.ad}'de intihal skandalı patladı! Öğrenciler alternatif arıyor — bir sonraki YKS talebin artacak (×1.15).`, 'iyi');
+  } else if (zar === 1 && rakip) {
+    rakip.prestij = Math.min(1000, rakip.prestij + 20);
+    rakip.yayin += 10;
+    notify(state, `🚀 ${rakip.ad} dev bir AR-GE hibesi kaptı — sıralamada güçleniyor.`, 'bilgi');
+  } else if (zar === 2) {
+    // en değerli hocaya ayartma girişimi: morali sarsılır
+    let hedef: Academic | null = null;
+    let enIyi = -1;
+    for (const a of state.agents) {
+      if (a.kind !== 'akademisyen') continue;
+      const deger = a.egitim + a.arastirma + a.makale * 5;
+      if (deger > enIyi) {
+        enIyi = deger;
+        hedef = a;
+      }
+    }
+    if (hedef) {
+      hedef.memnuniyet = clamp(hedef.memnuniyet - 12, 0, 100);
+      notify(state, `🎣 ${rakipAd}, ${hedef.ad}'a transfer teklif etti — morali sarsıldı (%${Math.round(hedef.memnuniyet)}). Zam vermenin tam zamanı olabilir!`, 'kotu');
+    }
+  } else {
+    state.sonrakiTalepCarpan *= 0.88;
+    notify(state, `📉 ${rakipAd} dev bir tanıtım kampanyası başlattı — bir sonraki YKS talebin düşebilir (×0.88).`, 'kotu');
+  }
 }
 
 /** Yeni oyun kurulumu (boş kampüs + başlangıç aday havuzları). */

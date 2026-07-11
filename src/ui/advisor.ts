@@ -5,7 +5,7 @@
  * çipe tıklamak ilgili paneli açar. Yeni oyuncu "şimdi ne yapmalıyım?" sorusunun
  * cevabını hep ekranda görür. ✕ ile öneri o günlüğüne kapatılabilir.
  */
-import { GameState, Student } from '../core/types';
+import { DONEM_GUN, GameState, Student, donemGunu } from '../core/types';
 import { validRooms } from '../core/grid';
 import { BALANCE } from '../data/balance';
 import { dersYukuVerimi } from '../game/schedule';
@@ -52,6 +52,11 @@ function onerileriHesapla(state: GameState): Oneri[] {
 
   if (state.dunAcKalan > 0) {
     ekle('ac-kalan', `🍽️ Dün ${state.dunAcKalan} öğrenci aç kaldı`, 'Yemek stoğu yetmedi: aşçı ekle (her aşçı dakikada ~1.4 porsiyon üretir, ayrı yemek bankosu ister) ya da kantine otomat koy.', 'kadro');
+  }
+
+  if (donemGunu(state.gun) > DONEM_GUN - 3
+      && state.agents.some((a) => a.kind === 'ogrenci')) {
+    ekle('sinav', '📝 SINAV HAFTASI — dönemin son 3 günü', 'Öğrenciler sınava asılıyor (öğrenme ×1.25). Dönem sonunda not <40 olan KALIR: ilerleme -15, mutluluk -10. GNO\'yu yükselt: hocalı dersler, kitaplı kütüphane, mentorluk.', 'raporlar');
   }
 
   // --- kuruluş akışı ---

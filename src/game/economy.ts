@@ -14,6 +14,7 @@ import { GameState, Student } from '../core/types';
 import { formatMoney } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { strategyDef } from '../data/strategies';
+import { mutevelliBonusu } from './alumni';
 import { addPrestij, earn, notify } from './state';
 
 /**
@@ -25,6 +26,7 @@ export function ogrenciGunlukKazanc(state: GameState, s: Student): number {
   let kazanc = n.pratik * 6 + n.influencer * 5 + (n.muhendis + n.artist + n.filozof) * 2;
   if (state.strategies.includes('teknokent')) kazanc *= 1.5;
   if (state.vizyon === 'girisim') kazanc *= 1.35;
+  kazanc *= 1 + 0.05 * mutevelliBonusu(state, 'girisim'); // heyetteki girişimci mezunlar
   return Math.round(kazanc);
 }
 
@@ -54,8 +56,10 @@ export function dailyEconomy(state: GameState): void {
   // alır, kalanı öğrencinin sermayesine eklenir (mezuniyette bağışa dönüşür).
   let okulPayi = 0;
   let toplamSermaye = 0;
+  let ogrenciSayisi = 0;
   for (const a of state.agents) {
     if (a.kind !== 'ogrenci') continue;
+    ogrenciSayisi++;
     const kazanc = ogrenciGunlukKazanc(state, a);
     if (kazanc > 0) {
       const pay = Math.round(kazanc * BALANCE.GIRISIM_OKUL_PAYI);
@@ -71,7 +75,20 @@ export function dailyEconomy(state: GameState): void {
     }
   }
 
-  const toplam = maas + bakim + politikaGideri + mentorlukGider + malzeme;
+  // Harç geliri (politikaya göre) ve burs gideri
+  const harcGelir = ogrenciSayisi * BALANCE.HARC_GELIR[state.harc];
+  if (harcGelir > 0) earn(state, harcGelir);
+  const bursGider = state.burs ? ogrenciSayisi * BALANCE.BURS_GIDER : 0;
+
+  // Kredi taksiti: borç bitene dek günlük kesinti
+  let taksit = 0;
+  if (state.krediBorcu > 0) {
+    taksit = Math.min(state.krediBorcu, BALANCE.KREDI_TAKSIT);
+    state.krediBorcu -= taksit;
+    if (state.krediBorcu === 0) notify(state, '🏦 Kredi borcu kapandı!', 'iyi');
+  }
+
+  const toplam = maas + bakim + politikaGideri + mentorlukGider + malzeme + bursGider + taksit;
   if (toplam <= 0) return;
 
   state.para -= toplam; // borca girebilir — spend kullanma
@@ -83,4 +100,16 @@ export function dailyEconomy(state: GameState): void {
     addPrestij(state, -1);
     notify(state, '💸 Bütçe açığı! Prestij düşüyor.', 'kotu');
   }
+}
+
+/** Banka kredisi: tek kredi aynı anda; faizli geri ödeme günlük taksitle. */
+export function krediCek(state: GameState, tutar: number): boolean {
+  if (state.krediBorcu > 0) {
+    notify(state, 'Zaten aktif bir kredin var — önce onu kapat.', 'kotu');
+    return false;
+  }
+  earn(state, tutar);
+  state.krediBorcu = Math.round(tutar * BALANCE.KREDI_FAIZ);
+  notify(state, `🏦 ${formatMoney(tutar)} kredi çekildi — geri ödeme ${formatMoney(state.krediBorcu)} (günlük ${formatMoney(BALANCE.KREDI_TAKSIT)} taksit).`, 'bilgi');
+  return true;
 }

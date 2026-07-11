@@ -18,6 +18,17 @@ export const BALANCE = {
   PERSONEL_ALIM: { asci: 5000, temizlikci: 3000 }, // ilan maliyeti
   ASISTAN_MAAS: 500,           // asistan atanan YL/doktora öğrencisinin günlük maaşı ₺
 
+  // Mali politikalar
+  HARC_GELIR: { ucretsiz: 0, dusuk: 50, yuksek: 120 },   // öğrenci başına günlük ₺
+  HARC_TALEP: { ucretsiz: 1.1, dusuk: 1.0, yuksek: 0.85 }, // YKS talep çarpanı
+  BURS_GIDER: 25,             // öğrenci başına günlük ₺ (mutluluk +1, bırakma yarıya)
+  KREDI_FAIZ: 1.25,           // çekilen tutarın geri ödeme çarpanı
+  KREDI_TAKSIT: 6000,         // günlük geri ödeme ₺
+
+  // Sınavlar (dönem sonunda)
+  SINAV_GECME: 40,            // altı KALIR: ilerleme -15, mutluluk -10
+  SINAV_ONUR: 85,             // üstü onur listesi: mutluluk +5
+
   // Araştırma
   PROJE_MALIYET_TABAN: 40000,
   PROJE_HEDEF_PUAN: 1000,      // taban; rastgele ±%30

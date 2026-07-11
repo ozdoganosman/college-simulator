@@ -53,6 +53,11 @@ export function createInitialState(): GameState {
     oyunBitti: null,
     basarimlar: [],
     vizyon: null,
+    harc: 'ucretsiz',
+    burs: false,
+    krediBorcu: 0,
+    mutevelli: [],
+    sonrakiTalepCarpan: 1,
 
     nextId: 1,
     insaatSurumu: 0,
@@ -146,6 +151,15 @@ export function eskiKayitUyumu(s: GameState): void {
   if (s.oyunBitti === undefined) s.oyunBitti = null;
   if (!Array.isArray(s.basarimlar)) s.basarimlar = [];
   if (s.vizyon === undefined) s.vizyon = null;
+  if (s.harc !== 'dusuk' && s.harc !== 'yuksek') s.harc = 'ucretsiz';
+  if (typeof s.burs !== 'boolean') s.burs = false;
+  if (typeof s.krediBorcu !== 'number') s.krediBorcu = 0;
+  if (!Array.isArray(s.mutevelli)) s.mutevelli = [];
+  if (typeof s.sonrakiTalepCarpan !== 'number') s.sonrakiTalepCarpan = 1;
+  for (const pr of s.projects) {
+    if (pr.tip !== 'uygulamali' && pr.tip !== 'atilim') pr.tip = 'temel';
+    if (typeof pr.liderId !== 'number') pr.liderId = -1;
+  }
   for (const r of s.rakipler) {
     if (typeof r.istihdam !== 'number') r.istihdam = 60 + (r.ad.length % 20);
     if (!r.sehir) r.sehir = 'Ankara';

@@ -57,7 +57,7 @@ import { BALANCE } from '../data/balance';
 import { bolumBaskinAlan, deptDef } from '../data/departments';
 import { addPrestij, earn, notify, spend } from './state';
 import { gnoHesapla, removeAgent, spawnStudent } from './agents';
-import { mezunEkle } from './alumni';
+import { mezunEkle, mutevelliBonusu } from './alumni';
 
 function sinifMi(r: Room): boolean {
   return r.type === 'derslik' || r.type === 'amfi';
@@ -321,6 +321,9 @@ export function runYerlestirme(state: GameState): boolean {
     // prestij 0'ken bile %12 taban talep vardır (yeni kurulan üniversiteye
     // yine de öğrenci gelir) — prestij yükseldikçe tam talebe yaklaşılır
     let talep = def.tabanTalep * (0.12 + 0.88 * Math.pow(state.prestij / 100, 0.7));
+    talep *= BALANCE.HARC_TALEP[state.harc];          // harç politikası
+    talep *= state.sonrakiTalepCarpan;                 // rakip olayı etkisi
+    talep *= 1 + 0.03 * mutevelliBonusu(state, 'pratik'); // heyetteki iş dünyası mezunları
     if (state.strategies.includes('tanitim')) talep *= 1.25;
     if (state.strategies.includes('uluslararasi_ofis')) talep *= 1.15;
     talep *= randRange(state, 0.8, 1.2);
@@ -380,6 +383,8 @@ export function runYerlestirme(state: GameState): boolean {
     notify(state, `📥 Dönem ödeneği: ${formatMoney(odenek)}  (${toplamYeni} yeni öğrenci)`, 'iyi');
   }
 
+  state.sonrakiTalepCarpan = 1; // rakip olayı etkisi bu yerleştirmeyle tüketildi
+
   // Sonuçlar her zaman törenle açıklanır
   state.yerlestirme = {
     yil: yil(state.gun),
@@ -403,6 +408,35 @@ export function donemDestegi(state: GameState): void {
 export function semesterEnd(state: GameState): void {
   const deptMap = new Map<number, Department>();
   for (const d of state.departments) deptMap.set(d.id, d);
+
+  // 📝 DÖNEM SINAVLARI — mezuniyetten önce: not = GNO + eğilim + şans.
+  // Kalan öğrenci ilerleme kaybeder (bütünleme = gelecek dönem telafi).
+  let gecen = 0, kalanlar = 0, onur = 0;
+  for (const a of state.agents) {
+    if (a.kind !== 'ogrenci') continue;
+    const gno = gnoHesapla(a) ?? 1.2;
+    const sinavNotu = clamp(
+      25 + gno * 20 + (a.egilim - 100) * 0.1 + randRange(state, -8, 8), 0, 100,
+    );
+    if (sinavNotu < BALANCE.SINAV_GECME) {
+      kalanlar++;
+      a.ilerleme = Math.max(0, a.ilerleme - 15);
+      a.mutluluk = clamp(a.mutluluk - 10, 0, 100);
+    } else if (sinavNotu >= BALANCE.SINAV_ONUR) {
+      onur++;
+      a.mutluluk = clamp(a.mutluluk + 5, 0, 100);
+      gecen++;
+    } else {
+      gecen++;
+    }
+  }
+  if (gecen + kalanlar > 0) {
+    notify(
+      state,
+      `📝 Dönem sınavları: ${gecen} geçti · ${kalanlar} KALDI (bütünleme: ilerleme -15) · ${onur} onur listesinde 🌟`,
+      kalanlar > gecen ? 'kotu' : 'bilgi',
+    );
+  }
 
   // önce topla (removeAgent diziyi değiştirir), sonra çıkar.
   // önlisans 2 yıllıktır: mezuniyet eşiği yarısıdır.
@@ -486,7 +520,7 @@ export function dailyDepartmentUpdate(state: GameState): void {
   const birakanlar: number[] = [];
   for (const a of state.agents) {
     if (a.kind === 'ogrenci' && a.mutluluk < BALANCE.MUTLULUK_BIRAKMA_ESIK
-        && chance(state, BALANCE.BIRAKMA_OLASILIK)) {
+        && chance(state, BALANCE.BIRAKMA_OLASILIK * (state.burs ? 0.5 : 1))) {
       birakanlar.push(a.id);
     }
   }
@@ -499,13 +533,17 @@ export function dailyDepartmentUpdate(state: GameState): void {
     notify(state, `😞 ${birakanlar.length} öğrenci okulu bıraktı`, 'kotu');
   }
 
-  // Yemekhane sübvansiyonu: mutluluk +2 (gider economy.ts'te)
+  // Yemekhane sübvansiyonu + mali politikalar + heyetin sosyal üyeleri (mutluluk)
   const subvansiyon = state.strategies.includes('yemek_subvansiyon');
+  const politikaMutluluk = (state.harc === 'yuksek' ? -0.5 : state.harc === 'ucretsiz' ? 0.3 : 0)
+    + (state.burs ? 1 : 0)
+    + 0.4 * mutevelliBonusu(state, 'sosyal');
   let toplamMutluluk = 0;
   let ogrenciSayisi = 0;
   for (const a of state.agents) {
     if (a.kind !== 'ogrenci') continue;
     if (subvansiyon) a.mutluluk = clamp(a.mutluluk + 2, 0, 100);
+    a.mutluluk = clamp(a.mutluluk + politikaMutluluk, 0, 100);
     toplamMutluluk += a.mutluluk;
     ogrenciSayisi++;
   }
