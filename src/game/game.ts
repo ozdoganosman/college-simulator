@@ -1,7 +1,14 @@
-import { GameState, GUN_DAKIKA, donemGunu, donemIndex } from '../core/types';
+import {
+  AcademicRank, Alan, GameState, GUN_DAKIKA, MAP_H, donemGunu, donemIndex,
+} from '../core/types';
 import { AYARLAR } from '../core/settings';
 import { validateRooms } from '../core/grid';
-import { updateAgents } from './agents';
+import { pick, randInt } from '../core/util';
+import { AD, SOYAD } from '../data/names';
+import { BALANCE } from '../data/balance';
+import { buildFloor } from './build';
+import { placePrefab, prefabDef } from './prefab';
+import { hireStaff, spawnAcademic, updateAgents } from './agents';
 import { updateResearch } from './research';
 import { dailyAcademicUpdate, refreshCandidatePools } from './academics';
 import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } from './departments';
@@ -59,10 +66,56 @@ function endOfDay(state: GameState): void {
 
 /** Yeni oyun kurulumu (boş kampüs + başlangıç aday havuzları). */
 export function initNewGame(state: GameState): void {
+  kurHazirKampus(state);
   refreshCandidatePools(state);
   assignClassrooms(state);
   rebuildDersProgrami(state);
-  notify(state, 'Üniversiteye hoş geldiniz, Rektörüm! Önce zemin döşeyip duvarlarla bir bina yapın.', 'bilgi');
-  notify(state, 'Derslik + ofis + tuvalet kurup KPSS ile akademisyen alınca ilk bölümünüzü açabilirsiniz.', 'bilgi');
-  notify(state, '🎓 Acele etme: kampüsün hazır olunca üstteki "YKS Yerleştirmeyi Başlat" butonuna bas — öğrenciler o zaman gelir.', 'odul');
+  notify(state, 'Üniversiteye hoş geldiniz, Rektörüm! Temel kampüsünüz hazır: 4 derslik, ofis, yemekhane, kantin ve tuvaletler.', 'bilgi');
+  notify(state, '5 akademisyeniniz ve mutfak/temizlik personeliniz göreve hazır. Bölümler panelinden ilk bölümünüzü açın.', 'bilgi');
+  notify(state, '🎓 Hazır olunca üstteki "YKS Yerleştirmeyi Başlat" butonuna bas — öğrenciler o zaman gelir.', 'odul');
+}
+
+/** Yeni oyunda temel gereksinimleri karşılayan ücretsiz başlangıç kampüsü. */
+function kurHazirKampus(state: GameState): void {
+  const paraOnce = state.para;
+  state.para = 50_000_000; // şablon hediyedir — sonda eski bütçeye dönülür
+
+  const koy = (id: string, x: number, y: number) => placePrefab(state, prefabDef(id), x, y);
+  // üst sıra: 4 derslik
+  koy('p_derslik', 12, 5);
+  koy('p_derslik', 22, 5);
+  koy('p_derslik', 32, 5);
+  koy('p_derslik', 42, 5);
+  // orta sıra: ofis + yemekhane + kantin + 2 tuvalet
+  koy('p_ofis', 12, 15);
+  koy('p_yemekhane', 21, 15);
+  koy('p_kantin', 33, 15);
+  koy('p_tuvalet', 41, 15);
+  koy('p_tuvalet', 48, 15);
+  // yürüyüş yolları: kapıdan kampüse omurga
+  buildFloor(state, 31, 24, 33, MAP_H - 1, 'yol');
+  buildFloor(state, 12, 12, 52, 13, 'yol');
+  buildFloor(state, 12, 22, 52, 23, 'yol');
+
+  // personel + 5 akademisyen (tüm alanlardan)
+  hireStaff(state, 'asci');
+  hireStaff(state, 'temizlikci');
+  const kadro: [AcademicRank, Alan][] = [
+    ['dr', 'muhendis'], ['arsgor', 'muhendis'], ['arsgor', 'artist'],
+    ['arsgor', 'filozof'], ['arsgor', 'pratik'],
+  ];
+  for (const [rank, alan] of kadro) {
+    spawnAcademic(
+      state,
+      `${pick(state, AD)} ${pick(state, SOYAD)}`,
+      -1,
+      rank,
+      alan,
+      randInt(state, 30, rank === 'dr' ? 70 : 55),
+      randInt(state, 30, rank === 'dr' ? 70 : 55),
+      BALANCE.MAAS[rank],
+    );
+  }
+
+  state.para = paraOnce;
 }

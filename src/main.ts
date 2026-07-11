@@ -9,7 +9,7 @@ import { attachInput } from './ui/input';
 import { render } from './ui/renderer';
 import { initHud, refreshHud } from './ui/hud';
 import { initPanels, refreshOpenPanel } from './ui/panels';
-import { initTutorial, refreshTutorial } from './ui/tutorial';
+import { fastForwardTutorial, initTutorial, refreshTutorial } from './ui/tutorial';
 import { initMenu, isMenuOpen, openMainMenu } from './ui/menu';
 import { checkCeremony, initCeremony, isCeremonyOpen } from './ui/ceremony';
 import { invalidateGround } from './ui/renderer';
@@ -31,6 +31,7 @@ if (kayit) {
 } else {
   state = createInitialState();
   initNewGame(state);
+  fastForwardTutorial(state);
 }
 
 const cam = createCamera(canvas);
@@ -55,6 +56,7 @@ initMenu({
   yeniOyun: () => {
     const s = createInitialState();
     initNewGame(s);
+    fastForwardTutorial(s);
     swapState(s);
   },
   yukleState: (s) => swapState(s),

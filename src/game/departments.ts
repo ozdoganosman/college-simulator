@@ -48,9 +48,9 @@
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
 import {
-  ALAN_META, Department, GameState, Room, Student, YerlestirmeSatir, donemIndex, yil,
+  ALAN_META, Academic, Department, GameState, Room, Student, YerlestirmeSatir, donemIndex, yil,
 } from '../core/types';
-import { courseDef, rebuildDersProgrami, verilemeyenDersler } from './schedule';
+import { courseDef, dersEtki, rebuildDersProgrami, verilemeyenDersler } from './schedule';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { deptDef } from '../data/departments';
@@ -80,10 +80,36 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
     eksik.push('Geçerli laboratuvar yok');
   }
   // Müfredat şartı: bölümün dersleri uygun alanda akademisyenle verilebilmeli
-  for (const dersId of verilemeyenDersler(state, defId)) {
+  const verilemeyen = verilemeyenDersler(state, defId);
+  for (const dersId of verilemeyen) {
     const ders = courseDef(dersId);
     const alan = ALAN_META[ders.birincil];
     eksik.push(`${ders.kod} ${ders.ad} verilemiyor — ${alan.emoji} ${alan.ad} alanında akademisyen gerekli`);
+  }
+
+  // Yıllık ders yükü: her hoca en fazla 4 farklı ders verebilir. Açık bölümlerin
+  // TÜM dersleri + bu bölümün dersleri kadroya sığmalı.
+  if (verilemeyen.length === 0) {
+    const gerekli = new Set<string>(def.dersler);
+    for (const d of state.departments) {
+      for (const c of deptDef(d.defId).dersler) gerekli.add(c);
+    }
+    const hocalar = state.agents.filter((a): a is Academic => a.kind === 'akademisyen');
+    const yuk = new Map<number, number>();
+    let acikta = 0;
+    for (const dersId of gerekli) {
+      let secilen = -1, enIyi = 0;
+      for (const h of hocalar) {
+        if ((yuk.get(h.id) ?? 0) >= 4) continue;
+        const e = dersEtki(dersId, h.alan);
+        if (e >= 0.9 && e > enIyi) { enIyi = e; secilen = h.id; }
+      }
+      if (secilen === -1) acikta++;
+      else yuk.set(secilen, (yuk.get(secilen) ?? 0) + 1);
+    }
+    if (acikta > 0) {
+      eksik.push(`Ders yükü kapasitesi yetersiz: ${acikta} ders açıkta kalır (her hoca yılda en çok 4 ders verebilir — kadroyu büyüt)`);
+    }
   }
   if (state.para < def.acilisMaliyeti) {
     eksik.push(`Bütçe yetersiz (${formatMoney(def.acilisMaliyeti)} gerekli)`);
@@ -313,7 +339,11 @@ export function runYerlestirme(state: GameState): boolean {
     for (let i = 0; i < yeniKayit; i++) spawnStudent(state, dept.id, 'lisans');
     dept.sonTalep = Math.floor(talep);
     dept.sonKayit = yeniKayit;
-    odenek += yeniKayit * BALANCE.OGRENCI_ODENEK;
+    // önlisans öğrencisi için ödenek daha düşük
+    const birimOdenek = def.tur === 'onlisans'
+      ? Math.round(BALANCE.OGRENCI_ODENEK * 0.65)
+      : BALANCE.OGRENCI_ODENEK;
+    odenek += yeniKayit * birimOdenek;
     toplamYeni += yeniKayit;
 
     // YKS başarı sıraları: çekicilik arttıkça tavan/taban sırası iyileşir (küçülür)
@@ -383,10 +413,16 @@ export function semesterEnd(state: GameState): void {
   const deptMap = new Map<number, Department>();
   for (const d of state.departments) deptMap.set(d.id, d);
 
-  // önce topla (removeAgent diziyi değiştirir), sonra çıkar
+  // önce topla (removeAgent diziyi değiştirir), sonra çıkar.
+  // önlisans 2 yıllıktır: mezuniyet eşiği yarısıdır.
   const mezunlar: Student[] = [];
   for (const a of state.agents) {
-    if (a.kind === 'ogrenci' && a.ilerleme >= BALANCE.MEZUNIYET_ESIK) mezunlar.push(a);
+    if (a.kind !== 'ogrenci') continue;
+    const dept = deptMap.get(a.deptId);
+    const esik = dept && deptDef(dept.defId).tur === 'onlisans'
+      ? BALANCE.MEZUNIYET_ESIK / 2
+      : BALANCE.MEZUNIYET_ESIK;
+    if (a.ilerleme >= esik) mezunlar.push(a);
   }
   if (mezunlar.length === 0) return;
 

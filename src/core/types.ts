@@ -205,6 +205,8 @@ export interface DeptDef {
   arastirmaCarpani: number;
   /** müfredat: bölümün verilmesi zorunlu dersleri (course id listesi) */
   dersler: string[];
+  /** önlisans (2 yıllık, min 4 ders) ya da lisans (4 yıllık, min 8 ders) */
+  tur: 'onlisans' | 'lisans';
 }
 
 export interface Department {

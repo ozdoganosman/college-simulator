@@ -101,6 +101,18 @@ const STEPS: TutorialStep[] = [
 let elem: HTMLElement | null = null;
 let sonImza = '';
 
+/** Hazır kampüsle başlanınca zaten tamamlanmış adımları sessizce atlar. */
+export function fastForwardTutorial(state: GameState): void {
+  while (
+    state.tutorialAdim >= 0
+    && state.tutorialAdim < STEPS.length
+    && STEPS[state.tutorialAdim].kontrol(state).tamam
+  ) {
+    state.tutorialAdim++;
+  }
+  if (state.tutorialAdim >= STEPS.length) state.tutorialAdim = -1;
+}
+
 export function initTutorial(): void {
   elem = document.getElementById('hud-tutorial');
 }

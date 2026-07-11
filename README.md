@@ -13,7 +13,8 @@ npm run dev        # http://localhost:5173
 
 ## Nasıl oynanır?
 
-1. **İnşaat**: Zemin döşe, çevresine duvar ör, kapı koy. Odalar duvarla kapalı olmalı.
+1. **Hazır başlangıç**: Yeni oyun temel kampüsle açılır — 4 derslik, ofis, yemekhane, kantin, 2 tuvalet, 4 alanı kapsayan 5 akademisyen ve mutfak/temizlik personeli. İnşaata sıfırdan başlamak istersen odaları silebilirsin.
+2. **İnşaat**: Zemin döşe, çevresine duvar ör, kapı koy (ya da 🏗️ Hazır Bina ile tek tıkla kur). Odalar duvarla kapalı olmalı.
 2. **Oda ata**: Derslik, ofis, tuvalet, yemekhane, kütüphane, laboratuvar, kantin, rektörlük… Her odanın minimum boyutu ve eşya gereksinimi var (Seç aracıyla odaya tıklayınca eksikleri görürsün).
 3. **Kadro kur**: KPSS/ilan ile ucuz araştırma görevlisi al ya da rakip üniversitelerden yıldız profesör **transfer et** (imza bonusu ister). Akademisyen sayın ofis masası sayısını aşamaz.
 4. **Bölüm aç**: Yeterli boş geçerli derslik (+ gerekiyorsa laboratuvar) ve bütçeyle bölüm açılır. Öğretim üyesi yetersizse YÖK kontenjan vermez!

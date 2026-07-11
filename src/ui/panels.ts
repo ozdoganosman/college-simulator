@@ -780,8 +780,9 @@ function programGovde(state: GameState): string {
   }
 
   let html = `<div class="aciklama">Her blokta bölümün müfredatından bir ders işlenir; derse
-    <b>en uygun alandaki</b> hoca otomatik atanır (hoca başına günde en çok 2 blok).
-    Alan uyumu öğrenme hızını doğrudan etkiler: birincil alan %100, ikincil %76, alan dışı %44.</div>`;
+    <b>en uygun alandaki</b> hoca otomatik atanır (hoca başına günde en çok 2 blok, yılda en çok
+    <b>4 farklı ders</b>). Alan uyumu öğrenme hızını doğrudan etkiler: birincil alan %100,
+    ikincil %76, alan dışı %44. Müfredat: <b>önlisans 4 ders</b> (2 yıl), <b>lisans 8 ders</b> (4 yıl).</div>`;
 
   // bugünün takvimi
   html += '<table><tr><th>Bölüm</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';

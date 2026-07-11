@@ -2,6 +2,8 @@ import {
   GameState, MAP_H, MAP_W, Notice, NoticeKind,
 } from '../core/types';
 import { BALANCE } from '../data/balance';
+import { DEPT_DEFS } from '../data/departments';
+import { courseExists } from '../data/courses';
 
 export function createInitialState(): GameState {
   const size = MAP_W * MAP_H;
@@ -100,6 +102,19 @@ export function loadGame(): GameState | null {
 /** Eski kayıtlara sonradan eklenen alanları tamamlar. */
 export function eskiKayitUyumu(s: GameState): void {
   if (!Array.isArray(s.dersProgrami)) s.dersProgrami = [];
+  // katalogdan kalkan bölüm/dersler kayıttan da temizlenir
+  const bolumVar = new Set(DEPT_DEFS.map((d) => d.id));
+  const silinen = new Set(s.departments.filter((d) => !bolumVar.has(d.defId)).map((d) => d.id));
+  if (silinen.size > 0) {
+    s.departments = s.departments.filter((d) => !silinen.has(d.id));
+    s.agents = s.agents.filter((a) => !(a.kind === 'ogrenci' && silinen.has(a.deptId)));
+    for (const a of s.agents) {
+      if (a.kind === 'akademisyen' && silinen.has(a.deptId)) a.deptId = -1;
+    }
+    for (const r of s.rooms) if (r.deptId !== null && silinen.has(r.deptId)) r.deptId = null;
+    s.projects = s.projects.filter((p) => !silinen.has(p.deptId));
+  }
+  s.dersProgrami = s.dersProgrami.filter((p) => courseExists(p.courseId) && !silinen.has(p.deptId));
   const alanlar = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
   for (const a of s.agents) {
     if (a.kind === 'akademisyen' && !(a as { alan?: string }).alan) {
