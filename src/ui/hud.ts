@@ -35,13 +35,24 @@ export function initHud(getState: () => GameState, ui: UIState): void {
   // Üst bar BİR kez kurulur; refreshHud yalnızca metinleri günceller —
   // böylece hız/duraklat butonlarına tıklama asla yutulmaz.
   topEl.innerHTML = `
-    <span class="stat para" data-st="para"></span>
-    <span class="stat" data-st="prestij"></span>
-    <span class="stat" data-st="ogrenci" title="Öğrenci"></span>
-    <span class="stat" data-st="akademisyen" title="Akademisyen"></span>
-    <span class="stat" data-st="kutuphane" title="Kütüphane seviyesi"></span>
-    <span class="stat" data-st="sira" title="Türkiye Üniversite Sıralaması — 📊 Raporlar panelinde tam tablo"></span>
-    <span class="stat tarih" data-st="tarih"></span>
+    <span class="stat para tikla" data-st="para" data-panel="raporlar"
+      title="Bütçe — tıkla: 📊 Raporlar&#10;Gelir: YKS ödeneği, dönem desteği, hibe, mezun bağışı, girişim payı&#10;Gider: maaşlar, bakım, inşaat"></span>
+    <span class="stat tikla" data-st="prestij" data-panel="raporlar"
+      title="Prestij (0-1000) — tıkla: 📊 Raporlar&#10;Kazanç: mezun, makale, buluş, ödül, terfi, sıralama yükselişi&#10;Kayıp: okulu bırakan öğrenci, bütçe açığı&#10;Prestij yükseldikçe YKS talebi artar"></span>
+    <span class="stat tikla" data-st="ogrenci" data-panel="bolumler"
+      title="Öğrenci sayısı — tıkla: 🎓 Bölümler&#10;YKS yerleştirmesiyle gelir; mutsuz olan okulu bırakır"></span>
+    <span class="stat tikla" data-st="akademisyen" data-panel="kadro"
+      title="Akademisyen sayısı — tıkla: 👩‍🏫 Kadro&#10;KPSS/transferle alınır; ders verir, araştırma yapar, terfi eder"></span>
+    <span class="stat tikla" data-st="yemek" data-panel="kadro"
+      title="Mutfak yemek stoğu (porsiyon) — tıkla: 👩‍🏫 Kadro&#10;Aşçılar 11:00-14:00 banko başında üretir; her öğrenci 1 porsiyon yer&#10;Stok biterse öğrenciler aç kalır ve mutsuzlaşır; kalan yemek gece bayatlar"></span>
+    <span class="stat tikla" data-st="kutuphane" data-panel="kutuphane"
+      title="Kütüphane seviyesi (0-3) — tıkla: 📚 Kütüphane&#10;Kitaplık rafı sayısıyla yükselir; araştırma ve öğrenmeyi hızlandırır"></span>
+    <span class="stat tikla" data-st="sira" data-panel="raporlar"
+      title="Türkiye Üniversite Sıralaması — tıkla: 📊 Raporlar&#10;Skor = prestij + yayın + mezun · Hedef: 1 numara olmak!"></span>
+    <span class="stat tarih" data-st="tarih" title="Dönem 20 gün sürer (Güz + Bahar = 1 yıl)&#10;Dönem sonunda mezuniyet; yıl başında YKS ve Akademik Yıl Ödülleri">
+      <span data-st="tarih-metin"></span>
+      <span class="donem-bar" title="Dönem ilerlemesi"><span class="donem-dolu" data-st="donem-bar"></span></span>
+    </span>
     <span class="hiz-grup">
       <button class="hiz" data-hiz="0">⏸</button>
       <button class="hiz" data-hiz="1">▶</button>
@@ -53,6 +64,12 @@ export function initHud(getState: () => GameState, ui: UIState): void {
   document.getElementById('menu-ac')?.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('toggle-menu'));
   });
+  for (const s of topEl.querySelectorAll<HTMLElement>('.stat.tikla')) {
+    s.addEventListener('click', () => {
+      const panel = s.dataset.panel;
+      if (panel) openPanel(panel as Parameters<typeof openPanel>[0]);
+    });
+  }
 
   // YKS yerleştirme butonu: YKS dönemi açıkken görünür, basınca sonuç töreni gelir
   document.getElementById('yks-cta')?.addEventListener('click', () => {
@@ -77,30 +94,45 @@ export function initHud(getState: () => GameState, ui: UIState): void {
 
 function buildToolbar(getState: () => GameState, ui: UIState): void {
   toolbarEl.innerHTML = '';
-  const btn = (etiket: string, id: string, onClick: () => void) => {
+  const btn = (etiket: string, id: string, onClick: () => void, ipucu = '') => {
     const b = document.createElement('button');
     b.className = 'tb-btn';
     b.dataset.id = id;
     b.textContent = etiket;
+    if (ipucu) b.title = ipucu;
     b.addEventListener('click', onClick);
     toolbarEl.appendChild(b);
     return b;
   };
 
-  btn('🖱️ Seç', 'sec', () => setTool(ui, { kind: 'sec' }, getState));
-  btn('🏗️ Hazır Bina', 'hazir', () => toggleKategori('hazir', getState, ui));
-  btn('🧱 İnşaat', 'insaat', () => toggleKategori('insaat', getState, ui));
-  btn('🏷️ Odalar', 'oda', () => toggleKategori('oda', getState, ui));
-  btn('🪑 Eşyalar', 'esya', () => toggleKategori('esya', getState, ui));
-  btn('🎓 Bölümler', 'panel-bolumler', () => openPanel('bolumler'));
-  btn('👩‍🏫 Kadro', 'panel-kadro', () => openPanel('kadro'));
-  btn('📅 Program', 'panel-program', () => openPanel('program'));
-  btn('🔬 Araştırma', 'panel-arastirma', () => openPanel('arastirma'));
-  btn('📚 Kütüphane', 'panel-kutuphane', () => openPanel('kutuphane'));
-  btn('🤝 Mezunlar', 'panel-mezunlar', () => openPanel('mezunlar'));
-  btn('♟️ Strateji', 'panel-strateji', () => openPanel('strateji'));
-  btn('📊 Raporlar', 'panel-raporlar', () => openPanel('raporlar'));
-  btn('❓ Nasıl Oynanır', 'panel-yardim', () => openPanel('yardim'));
+  btn('🖱️ Seç', 'sec', () => setTool(ui, { kind: 'sec' }, getState),
+    'Odaya tıkla: gereksinim listesi · Kişiye tıkla: öğrenci/hoca kartı');
+  btn('🏗️ Hazır Bina', 'hazir', () => toggleKategori('hazir', getState, ui),
+    'Tek tıkla kurulan hazır binalar — zemin, duvar, kapı ve eşyalar dahil');
+  btn('🧱 İnşaat', 'insaat', () => toggleKategori('insaat', getState, ui),
+    'Zemin döşe, duvar ör, kapı koy, yık — kendi binanı parça parça kur');
+  btn('🏷️ Odalar', 'oda', () => toggleKategori('oda', getState, ui),
+    'Kapalı alanı oda olarak işaretle (derslik, ofis, tuvalet...)');
+  btn('🪑 Eşyalar', 'esya', () => toggleKategori('esya', getState, ui),
+    'Odalara eşya yerleştir — her odanın zorunlu eşyaları vardır');
+  btn('🎓 Bölümler', 'panel-bolumler', () => openPanel('bolumler'),
+    'Açık bölümler, kontenjanlar, YL/doktora programları');
+  btn('👩‍🏫 Kadro', 'panel-kadro', () => openPanel('kadro'),
+    'Akademisyen al (KPSS/transfer), bölüme ata, personel yönet');
+  btn('📅 Program', 'panel-program', () => openPanel('program'),
+    'Hocalara yıllık ders seç → açık derslerle bölüm aç · asistan ata');
+  btn('🔬 Araştırma', 'panel-arastirma', () => openPanel('arastirma'),
+    'Araştırma projeleri: hibe, makale, buluş ve prestij kazandırır');
+  btn('📚 Kütüphane', 'panel-kutuphane', () => openPanel('kutuphane'),
+    'Alan bazlı kitap koleksiyonları — kütüphanede çalışan öğrenciyi hızlandırır');
+  btn('🤝 Mezunlar', 'panel-mezunlar', () => openPanel('mezunlar'),
+    'Mezun kariyerleri, dernek haberleri, istihdam kıyası, mentorluk');
+  btn('♟️ Strateji', 'panel-strateji', () => openPanel('strateji'),
+    'Üniversite stratejileri (Rektörlük binası gerekir)');
+  btn('📊 Raporlar', 'panel-raporlar', () => openPanel('raporlar'),
+    'Bütçe dengesi, Türkiye sıralaması, tüm istatistikler');
+  btn('❓ Nasıl Oynanır', 'panel-yardim', () => openPanel('yardim'),
+    'Oyunun tüm sistemlerinin anlatımı');
 }
 
 function toggleKategori(k: Exclude<Kategori, null>, getState: () => GameState, ui: UIState): void {
@@ -259,6 +291,12 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
   }
 }
 
+/** Çip içinde mini ilerleme barı (0-1 oran). */
+function miniBar(oran: number, renk: string): string {
+  const y = Math.max(3, Math.min(100, Math.round(oran * 100)));
+  return `<span class="mini-bar"><span style="width:${y}%;background:${renk}"></span></span>`;
+}
+
 /** Tıklanan kişinin bilgi kartı (öğrenci: GNO + eğilim; hoca: yük verimi). */
 function agentCard(state: GameState, a: GameState['agents'][number]): string {
   const cip = (metin: string, kotu = false) =>
@@ -271,10 +309,11 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     const egilimEtiket = a.egilim >= 115 ? 'çalışkan' : a.egilim >= 85 ? 'normal' : 'zorlanıyor';
     const hoca = a.asistani !== -1 ? state.agents.find((x) => x.id === a.asistani) : undefined;
     let html = `<span class="baslik">🎓 ${a.ad} — ${LEVEL_LABEL[a.level]} · ${bolum}</span>`;
-    html += cip(gno === null ? '📖 GNO: henüz yok' : `📖 GNO: ${gno.toFixed(2)}/4.00`, gno !== null && gno < 2);
+    html += cip(gno === null ? '📖 GNO: henüz yok'
+      : `📖 GNO ${miniBar(gno / 4, gno >= 2.5 ? '#46b45e' : gno >= 1.5 ? '#e8b931' : '#d9534f')} ${gno.toFixed(2)}`, gno !== null && gno < 2);
     html += cip(`🧠 Öğrenme eğilimi: %${a.egilim} (${egilimEtiket})`, a.egilim < 85);
-    html += cip(`📈 Mezuniyet ilerlemesi: %${Math.round(a.ilerleme)}`);
-    html += cip(`😊 Mutluluk: %${Math.round(a.mutluluk)}`, a.mutluluk < 40);
+    html += cip(`📈 Mezuniyet ${miniBar(a.ilerleme / 100, '#4a7bd4')} %${Math.round(a.ilerleme)}`);
+    html += cip(`😊 Mutluluk ${miniBar(a.mutluluk / 100, a.mutluluk >= 60 ? '#46b45e' : a.mutluluk >= 40 ? '#e8b931' : '#d9534f')} %${Math.round(a.mutluluk)}`, a.mutluluk < 40);
     const nitelikler = (Object.keys(NITELIK_META) as Nitelik[])
       .map((k) => `${NITELIK_META[k].emoji} ${Math.round(a.nitelik[k])}`)
       .join(' · ');
@@ -291,7 +330,7 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     const ders = (a.verdigiDersler ?? []).length;
     let html = `<span class="baslik">${RANK_LABEL[a.rank]} ${a.ad} · ${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>`;
     html += cip(`📚 Ders: ${ders}/${DERS_LIMIT} · 👥 Asistan: ${asistan}`);
-    html += cip(`⚡ Yük verimi: %${verim} — ders kalitesi ve araştırma hızı çarpanı`, verim < 75);
+    html += cip(`⚡ Yük verimi ${miniBar(verim / 100, verim >= 90 ? '#46b45e' : verim >= 75 ? '#e8b931' : '#d9534f')} %${verim} — kalite ve araştırma çarpanı`, verim < 75);
     html += cip(`🎓 Eğitim: ${Math.round(a.egitim)} · 🔬 Araştırma: ${Math.round(a.arastirma)}`);
     html += cip(`📄 Makale: ${a.makale} (${a.uluslararasiMakale} 🌍)`);
     return html;
@@ -319,9 +358,13 @@ export function refreshHud(state: GameState, ui: UIState): void {
   setStat('prestij', `⭐ ${Math.round(state.prestij)}`);
   setStat('ogrenci', `🎓 ${ogrenci}`);
   setStat('akademisyen', `👩‍🏫 ${akademisyen}`);
+  setStat('yemek', `🍲 ${Math.floor(state.yemekStok)}`);
   setStat('kutuphane', `📚 Ktp. Sv. ${libraryLevel(state)}`);
   setStat('sira', `🏆 ${oyuncuSirasi(state)}/${state.rakipler.length + 1}`);
-  setStat('tarih', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}`);
+  setStat('tarih-metin', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}`);
+  const donemOran = ((donemGunu(state.gun) - 1) * 1440 + state.dakika) / (DONEM_GUN * 1440);
+  const bar = topEl.querySelector<HTMLElement>('[data-st="donem-bar"]');
+  if (bar) bar.style.width = `${Math.round(donemOran * 100)}%`;
   for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
     b.classList.toggle('active', Number(b.dataset.hiz) === state.hiz);
   }

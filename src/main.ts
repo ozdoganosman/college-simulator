@@ -10,6 +10,7 @@ import { render } from './ui/renderer';
 import { initHud, refreshHud } from './ui/hud';
 import { initPanels, refreshOpenPanel } from './ui/panels';
 import { fastForwardTutorial, initTutorial, refreshTutorial } from './ui/tutorial';
+import { initAdvisor, refreshAdvisor } from './ui/advisor';
 import { initMenu, isMenuOpen, openMainMenu } from './ui/menu';
 import { checkCeremony, initCeremony, isCeremonyOpen } from './ui/ceremony';
 import { invalidateGround } from './ui/renderer';
@@ -51,6 +52,7 @@ attachInput(canvas, () => state, cam, ui);
 initHud(() => state, ui);
 initPanels(() => state);
 initTutorial();
+initAdvisor();
 initCeremony();
 initMenu({
   getState: () => state,
@@ -100,6 +102,7 @@ function frame(t: number): void {
     refreshHud(state, ui);
     refreshOpenPanel(state);
     refreshTutorial(state);
+    refreshAdvisor(state);
     if (!isMenuOpen()) checkCeremony(state);
   }
 

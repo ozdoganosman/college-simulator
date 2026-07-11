@@ -116,6 +116,57 @@ html, body, #app {
 .notice.kotu { border-left-color: #d9534f; }
 .notice.odul { border-left-color: #e8b931; }
 
+/* ---- üst bar etkileşimi ---- */
+#hud-top .stat.tikla { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin: 0 -6px 0 0; }
+#hud-top .stat.tikla:hover { background: rgba(74, 123, 212, 0.25); }
+.donem-bar {
+  display: inline-block; width: 72px; height: 5px; margin-left: 8px;
+  background: #2c3140; border-radius: 3px; overflow: hidden; vertical-align: middle;
+}
+.donem-dolu { display: block; height: 100%; background: #4a7bd4; border-radius: 3px; width: 0; }
+
+/* ---- rektör danışmanı (bilgi barı) ---- */
+#hud-advisor {
+  position: absolute;
+  top: 104px; /* YKS butonunun altında — çakışmasın */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(760px, 60vw);
+  flex-wrap: wrap;
+  justify-content: center;
+  z-index: 11;
+  user-select: none;
+}
+.onr-etiket { font-size: 16px; filter: drop-shadow(0 0 6px rgba(255, 209, 102, 0.6)); }
+.onr-cip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(24, 30, 44, 0.94);
+  color: #ffe9b3;
+  border: 1px solid #8a6d2f;
+  border-radius: 16px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  animation: onrGel 0.4s ease-out;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+.onr-cip:hover { background: rgba(50, 58, 80, 0.96); border-color: #c9a227; }
+@keyframes onrGel { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.onr-kapat { color: #8f9ab0; font-size: 11px; padding: 0 2px; }
+.onr-kapat:hover { color: #f4a09c; }
+
+/* ---- mini ilerleme barı (kişi kartı çipleri) ---- */
+.mini-bar {
+  display: inline-block; width: 54px; height: 7px; margin: 0 3px;
+  background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden; vertical-align: middle;
+}
+.mini-bar > span { display: block; height: 100%; border-radius: 4px; }
+
 /* ---- öğretici ---- */
 #hud-tutorial {
   position: absolute;

@@ -80,6 +80,13 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   if (def.labGerekli && !state.rooms.some((r) => r.type === 'laboratuvar' && r.valid)) {
     eksik.push('Geçerli laboratuvar yok');
   }
+  // Öğretim kapasitesi: her bölüm günde 4 blok ders ister, bir hoca günde en çok
+  // 2 blok verebilir — kapasite yetmezse program "hoca yok!" ile dolar
+  const hocaSayisi = state.agents.filter((a) => a.kind === 'akademisyen').length;
+  const blokIhtiyac = (state.departments.length + 1) * 4;
+  if (hocaSayisi * 2 < blokIhtiyac) {
+    eksik.push(`Öğretim kapasitesi yetersiz: ${Math.ceil((blokIhtiyac - hocaSayisi * 2) / 2)} hoca daha gerek (bir hoca günde en çok 2 blok ders verir)`);
+  }
   // Müfredat şartı: bölümün TÜM dersleri "açık derslerde" olmalı — yani her ders
   // en az bir hocanın yıllık ders seçiminde bulunmalı (derslerden bölümlere).
   for (const dersId of verilemeyenDersler(state, defId)) {
@@ -94,7 +101,12 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
 }
 
 export function openDepartment(state: GameState, defId: string): boolean {
-  if (!canOpenDepartment(state, defId).ok) return false;
+  const kontrol = canOpenDepartment(state, defId);
+  if (!kontrol.ok) {
+    // buton "hazır" gösterdiyse bile son durum değişmiş olabilir — sebebi söyle
+    notify(state, `Bölüm açılamadı: ${kontrol.eksik[0]}`, 'kotu');
+    return false;
+  }
   const def = deptDef(defId);
   if (!spend(state, def.acilisMaliyeti, `${def.ad} açılışı`)) return false;
 

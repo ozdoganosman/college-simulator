@@ -39,6 +39,14 @@ function stepSim(state: GameState, dt: number): void {
 }
 
 function endOfDay(state: GameState): void {
+  // yemek sistemi gün kapanışı: kalan yemek bayatlar, aç kalanlar raporlanır
+  if (state.acKalanBugun > 0) {
+    notify(state, `🍽️ Bugün ${state.acKalanBugun} öğrenci yemekhanede aç kaldı — aşçı sayısını artır!`, 'kotu');
+  }
+  state.dunAcKalan = state.acKalanBugun;
+  state.acKalanBugun = 0;
+  state.yemekStok = 0; // kalan yemek bayatladı
+
   dailyEconomy(state);
   dailyAcademicUpdate(state);
   dailyDepartmentUpdate(state);

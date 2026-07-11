@@ -462,6 +462,14 @@ export interface GameState {
   sonKariyerGunu: number;   // son Kariyer Günü'nün yapıldığı gün (0 = hiç)
   /** yıl sonlarındaki sıralama geçmişi (trend grafiği) */
   siraGecmisi: number[];
+  /** mutfak yemek stoğu (porsiyon) — aşçılar üretir, öğrenciler tüketir, gece bayatlar */
+  yemekStok: number;
+  /** bugün üretilen porsiyon (malzeme gideri için) */
+  gunlukUretim: number;
+  /** bugün yemekhanede aç kalan öğrenci */
+  acKalanBugun: number;
+  /** dün aç kalan (danışman uyarısı) */
+  dunAcKalan: number;
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */

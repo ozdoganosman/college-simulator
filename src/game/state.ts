@@ -44,6 +44,10 @@ export function createInitialState(): GameState {
     mentorluk: false,
     sonKariyerGunu: 0,
     siraGecmisi: [],
+    yemekStok: 0,
+    gunlukUretim: 0,
+    acKalanBugun: 0,
+    dunAcKalan: 0,
 
     nextId: 1,
     insaatSurumu: 0,
@@ -128,6 +132,10 @@ export function eskiKayitUyumu(s: GameState): void {
   if (typeof s.mentorluk !== 'boolean') s.mentorluk = false;
   if (typeof s.sonKariyerGunu !== 'number') s.sonKariyerGunu = 0;
   if (!Array.isArray(s.siraGecmisi)) s.siraGecmisi = [];
+  if (typeof s.yemekStok !== 'number') s.yemekStok = 0;
+  if (typeof s.gunlukUretim !== 'number') s.gunlukUretim = 0;
+  if (typeof s.acKalanBugun !== 'number') s.acKalanBugun = 0;
+  if (typeof s.dunAcKalan !== 'number') s.dunAcKalan = 0;
   for (const r of s.rakipler) {
     if (typeof r.istihdam !== 'number') r.istihdam = 60 + (r.ad.length % 20);
     if (!r.sehir) r.sehir = 'Ankara';

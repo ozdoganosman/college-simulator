@@ -58,10 +58,10 @@ import { notify, spend } from './state';
 
 // kare/oyun-dakikası yürüme hızları
 const SPEED: Record<AgentKind, number> = {
-  ogrenci: 0.6,
-  akademisyen: 0.55,
-  asci: 0.5,
-  temizlikci: 0.5,
+  ogrenci: 0.5,
+  akademisyen: 0.45,
+  asci: 0.42,
+  temizlikci: 0.42,
 };
 
 const DERS_BLOKLARI: number[] = [T.DERS1, T.DERS2, T.DERS3, T.DERS4];
@@ -479,7 +479,8 @@ function trySatisfy(state: GameState, s: Student, ctx: Ctx, need: keyof Needs): 
     obj = ctx.freeKlozet.pop();
   } else if (need === 'aclik') {
     git = 'yemege_gidiyor';
-    if (ctx.mutfak) obj = ctx.freeYemekSandalye.pop();
+    // yemekhane ancak servis açıksa VE yemek stoğu varsa doyurur
+    if (ctx.mutfak && state.yemekStok >= 1) obj = ctx.freeYemekSandalye.pop();
     if (!obj) obj = ctx.freeOtomat.pop();
   } else {
     obj = ctx.freeKantinSandalye.pop() ?? ctx.freeBank.pop();
@@ -625,16 +626,33 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
     }
     case 'yemege_gidiyor':
       if (s.path.length === 0) {
+        // yemekhane sandalyesindeyse tabldot alınır: 1 porsiyon stoktan düşer;
+        // yürürken stok bittiyse aç kalır (mutsuzluk + sayaç) — otomat porsiyon istemez
+        const oturak = ctx.objById.get(s.usingObject);
+        if (oturak && oturak.type === 'sandalye') {
+          if (state.yemekStok >= 1) {
+            state.yemekStok -= 1;
+          } else {
+            state.acKalanBugun++;
+            s.mutluluk = clamp(s.mutluluk - 3, 0, 100);
+            finishActivity(state, s, ctx);
+            break;
+          }
+        }
         s.activity = 'yemekte';
         s.activityUntil = dk + 30;
       }
       break;
-    case 'yemekte':
-      n.aclik = clamp(n.aclik - 3 * dtMin, 0, 100);
+    case 'yemekte': {
+      // sıcak yemek (sandalye) hızlı doyurur, otomat atıştırması yavaş
+      const oturak = ctx.objById.get(s.usingObject);
+      const doyma = oturak && oturak.type === 'sandalye' ? 3 : 1.8;
+      n.aclik = clamp(n.aclik - doyma * dtMin, 0, 100);
       if (n.aclik <= 5 || (s.activityUntil !== -1 && dk >= s.activityUntil)) {
         finishActivity(state, s, ctx);
       }
       break;
+    }
     case 'ihtiyaca_gidiyor':
       if (s.path.length === 0) {
         s.activity = 'ihtiyacta';
@@ -813,6 +831,11 @@ function updateAcademic(state: GameState, a: Academic, dtMin: number, ctx: Ctx):
 
 function updateCook(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
   const mesai = ctx.dk >= ASCI_BASLA && ctx.dk < ASCI_BITIS;
+  if (a.activity === 'calisiyor' && mesai) {
+    // mutfak üretimi: banko başındaki her aşçı porsiyon üretir (malzeme gideri günlük düşülür)
+    state.yemekStok += BALANCE.ASCI_URETIM_DK * dtMin;
+    state.gunlukUretim += BALANCE.ASCI_URETIM_DK * dtMin;
+  }
   if (!mesai) {
     if (a.activity === 'calisiyor' || a.usingObject !== -1) finishActivity(state, a, ctx);
     const banko = ctx.bankoOf.get(a.id);

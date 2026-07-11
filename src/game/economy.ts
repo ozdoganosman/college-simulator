@@ -43,6 +43,8 @@ export function dailyEconomy(state: GameState): void {
 
   const subvansiyon = state.strategies.includes('yemek_subvansiyon') ? 2000 : 0;
   const mentorlukGider = state.mentorluk ? BALANCE.MENTORLUK_GIDER : 0;
+  const malzeme = Math.round(state.gunlukUretim * BALANCE.YEMEK_MALZEME);
+  state.gunlukUretim = 0;
 
   // Girişim ekosistemi: nitelikli öğrenciler gelir üretir — okul kuluçka payı
   // alır, kalanı öğrencinin sermayesine eklenir (mezuniyette bağışa dönüşür).
@@ -65,7 +67,7 @@ export function dailyEconomy(state: GameState): void {
     }
   }
 
-  const toplam = maas + bakim + subvansiyon + mentorlukGider;
+  const toplam = maas + bakim + subvansiyon + mentorlukGider + malzeme;
   if (toplam <= 0) return;
 
   state.para -= toplam; // borca girebilir — spend kullanma

@@ -240,18 +240,22 @@ export function rebuildDersProgrami(state: GameState): void {
       // müfredat gün + blok üzerinden döner: her gün farklı ders kombinasyonu
       const courseId = dersler[(state.gun + blok) % dersler.length];
 
-      // dersi SEÇMİŞ hocalardan en uygunu (önce bölümün kendi hocası), günde en çok 2 blok
+      // dersi SEÇMİŞ hocalardan en uygunu (önce bölümün kendi hocası), günde en çok 2 blok;
+      // kimse boşta değilse limit gevşer (yorgun hoca boş dersten iyidir — yük cezası zaten var)
       let secilen: Academic | null = null;
-      let enIyi = -1;
-      for (const a of tumHocalar) {
-        if (!(a.verdigiDersler ?? []).includes(courseId)) continue;
-        if ((gunlukBlok.get(a.id) ?? 0) >= 2) continue;
-        const puan = dersEtki(courseId, a.alan) * (0.5 + a.egitim / 100)
-          + (a.deptId === dept.id ? 0.6 : 0); // kendi bölümü öncelikli
-        if (puan > enIyi) {
-          enIyi = puan;
-          secilen = a;
+      for (const blokLimit of [2, 4]) {
+        let enIyi = -1;
+        for (const a of tumHocalar) {
+          if (!(a.verdigiDersler ?? []).includes(courseId)) continue;
+          if ((gunlukBlok.get(a.id) ?? 0) >= blokLimit) continue;
+          const puan = dersEtki(courseId, a.alan) * (0.5 + a.egitim / 100)
+            + (a.deptId === dept.id ? 0.6 : 0); // kendi bölümü öncelikli
+          if (puan > enIyi) {
+            enIyi = puan;
+            secilen = a;
+          }
         }
+        if (secilen) break;
       }
       if (secilen) gunlukBlok.set(secilen.id, (gunlukBlok.get(secilen.id) ?? 0) + 1);
 

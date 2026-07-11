@@ -1204,7 +1204,10 @@ function yardimGovde(): string {
       popülerliği. Yerleşen = min(talep, kontenjan, derslikteki sıra sayısı). Öğrenci başına
       <b>devlet ödeneği</b> alırsın. Öğretim üyesi yetersizse YÖK kontenjan vermez!
       Öğrencilerin açlık/tuvalet/enerji/eğlence ihtiyaçları var; karşılanmazsa mutsuzlaşıp
-      <b>okulu bırakırlar</b> (prestij düşer). Doçent varsa <b>yüksek lisans</b>, profesör varsa
+      <b>okulu bırakırlar</b> (prestij düşer). 🍲 <b>Yemek sistemi:</b> aşçılar 11:00-14:00 banko
+      başında porsiyon üretir (üst barda stok görünür); yemekhanede yiyen her öğrenci 1 porsiyon
+      tüketir. <b>Stok biterse aç kalırlar</b> — öğrenci arttıkça aşçı ve banko ekle. Kantindeki
+      otomat yedek ama yavaş doyurur; kalan yemek gece bayatlar, malzeme günlük gidere yazılır. Doçent varsa <b>yüksek lisans</b>, profesör varsa
       <b>doktora</b> programı açabilirsin — lisansüstü öğrenciler araştırmayı hızlandırır.
       Haritada bir <b>öğrenciye tıkla</b>: not ortalaması (GNO), öğrenme eğilimi, ilerlemesi ve
       mutluluğu alt çubukta görünür. Her öğrencinin <b>öğrenme eğilimi</b> farklıdır — çalışkanlar

@@ -47,6 +47,10 @@ export const BALANCE = {
   MEZUN_BAGIS_ORANI: 0.20,     // mezuniyette sermayeden okula bağış oranı
   ZENGIN_MEZUN_ESIK: 150_000,  // bu sermayenin üstünde mezun olan prestij getirir
 
+  // Yemek sistemi: aşçılar mesaide porsiyon üretir, öğrenciler tüketir
+  ASCI_URETIM_DK: 1.4,         // aşçı başına dakikada üretilen porsiyon
+  YEMEK_MALZEME: 5,            // porsiyon başına malzeme gideri ₺ (günlük düşülür)
+
   // Öğrenci
   DERS_ILERLEME: 1.2,          // ders periyodu başına ilerleme puanı (öğretmenli)
   OGRETMENSIZ_CARPAN: 0.3,
@@ -77,5 +81,5 @@ export const BALANCE = {
   KITAP_CALISMA_BONUS: 0.35,      // koleksiyon seviyesi başına ek çalışma hızı
 
   // Zaman
-  DAKIKA_SANIYE: 20,           // 1x hızda saniye başına oyun dakikası (1 gün ≈ 72 sn)
+  DAKIKA_SANIYE: 12,           // 1x hızda saniye başına oyun dakikası (1 gün = 2 dk; insanlar sakin yürür)
 } as const;
