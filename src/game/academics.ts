@@ -33,6 +33,7 @@ import { BALANCE } from '../data/balance';
 import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
 import { removeAgent, spawnAcademic } from './agents';
 import { ASISTAN_LIMIT, asistanlari, otoDersSec, rebuildDersProgrami } from './schedule';
+import { transferBonusCarpani } from './rivals';
 
 const ALANLAR = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
 import { addPrestij, notify, spend } from './state';
@@ -83,16 +84,23 @@ export function refreshCandidatePools(state: GameState): void {
   for (let i = 0; i < transferSayi; i++) {
     const rank = pick(state, ['dr', 'docent', 'prof'] as const);
     const [bonusMin, bonusMax] = BONUS_ARALIK[rank];
+    // aday sıralamadaki bir rakipten gelir: zirvedeki üniden ayartmak pahalı,
+    // dibe düşenden ucuz — becerileri de kurumunun gücünü yansıtır
+    const kurum = state.rakipler.length > 0
+      ? pick(state, state.rakipler).ad
+      : pick(state, RAKIP_UNILER);
+    const carpan = transferBonusCarpani(state, kurum);
+    const beceriTaban = Math.round(clamp(40 + (carpan - 0.7) * 45, 40, 78)); // iyi üni = iyi hoca
     transfer.push({
       id: newId(state),
       ad: rastgeleAd(state),
       rank,
       alan: pick(state, ALANLAR),
-      egitim: randInt(state, 50, 95),
-      arastirma: randInt(state, 50, 95),
+      egitim: randInt(state, beceriTaban, 95),
+      arastirma: randInt(state, beceriTaban, 95),
       maas: Math.round(BALANCE.MAAS[rank] * randRange(state, 1.1, 1.5)),
-      bonus: Math.round(randRange(state, bonusMin, bonusMax) / 1000) * 1000,
-      kurum: pick(state, RAKIP_UNILER),
+      bonus: Math.round((randRange(state, bonusMin, bonusMax) * carpan) / 1000) * 1000,
+      kurum,
     });
   }
   state.transferPool = transfer;

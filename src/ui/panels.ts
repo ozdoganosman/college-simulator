@@ -32,6 +32,7 @@ import {
 } from '../game/academics';
 import { cancelProject, startProject } from '../game/research';
 import { ogrenciGunlukKazanc } from '../game/economy';
+import { siralama } from '../game/rivals';
 import {
   KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
   toplamKoleksiyon,
@@ -783,6 +784,32 @@ function ekosistemBolumu(state: GameState): string {
     </table>` : ''}`;
 }
 
+/** Raporlar: Türkiye Üniversite Sıralaması tablosu. */
+function siralamaBolumu(state: GameState): string {
+  const liste = siralama(state);
+  const oyuncuSira = liste.findIndex((s) => s.oyuncu) + 1;
+  const satirlar = liste.map((s, i) => {
+    const madalya = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+    return `<tr${s.oyuncu ? ' style="background:rgba(255,209,102,0.12)"' : ''}>
+      <td><b>${madalya}</b></td>
+      <td>${s.oyuncu ? '<b style="color:#ffd166">🎓 ÜNİVERSİTEN</b>' : esc(s.ad)}</td>
+      <td>${s.prestij}</td>
+      <td>${s.yayin}</td>
+      <td>${s.mezun}</td>
+      <td><b>${s.skor}</b></td>
+    </tr>`;
+  }).join('');
+  return `<h3>🏆 Türkiye Üniversite Sıralaması</h3>
+    <div class="aciklama">Skor = prestij + yayın×0.5 + mezun×0.1. Rakipler her yıl gelişir;
+    sıralamada yükselmek yıl sonunda prestij ödülü getirir — hedef: <b>1 numara olmak!</b>
+    Sıran: <b>${oyuncuSira}/${liste.length}</b>${state.sonSira > 0 ? ` (geçen yıl ${state.sonSira}.)` : ''}
+    · 💡 Transfer bonusları adayın kurumunun sırasına göre değişir: zirvedekiler pahalı, dibe düşenler ucuz.</div>
+    <table>
+      <tr><th></th><th>Üniversite</th><th>Prestij</th><th>Yayın</th><th>Mezun</th><th>Skor</th></tr>
+      ${satirlar}
+    </table>`;
+}
+
 function raporlarGovde(state: GameState): string {
   // Tek geçişte tüm ajan istatistikleri
   const seviye: Record<StudentLevel, number> = { lisans: 0, yl: 0, doktora: 0 };
@@ -833,6 +860,7 @@ function raporlarGovde(state: GameState): string {
       ${satir('Günlük maaş yükü', formatMoney(maasYuku))}
       ${satir('Kütüphane seviyesi', `${libraryLevel(state)} / 3`)}
     </table>
+    ${siralamaBolumu(state)}
     <h3>Öğrenciler</h3>
     <table>
       ${satir('Lisans / YL / Doktora', `${seviye.lisans} / ${seviye.yl} / ${seviye.doktora}`)}
@@ -949,6 +977,16 @@ function yardimGovde(): string {
       📚 <b>Kütüphane panelinden</b> alan bazlı <b>kitap koleksiyonları</b> satın al: kütüphanede
       çalışan öğrenci, bölümünün alanında kitap yoksa yavaş, koleksiyon büyüdükçe hızlı gelişir
       (ilerleme + not + nitelik). Her koleksiyon seviyesi 3 kitaplık rafı ister.
+    </div>
+
+    <h3>5b) 🏆 Sıralama ve yıl sonu ödülleri</h3>
+    <div class="aciklama">
+      10 rakip üniversiteyle <b>Türkiye Üniversite Sıralaması</b>'nda yarışırsın (üst barda 🏆,
+      tam tablo 📊 Raporlar'da). Skor prestij + yayın + mezundan oluşur; rakipler her yıl gelişir.
+      Her yıl sonunda <b>Akademik Yıl Ödülleri</b> töreni: sıralama açıklanır (yükselmek prestij
+      ödülü getirir), yılın hocası, yılın girişimci öğrencisi ve yılın buluşu sahnelenir.
+      Transfer adayları rakiplerden gelir: <b>zirvedeki üniden hoca ayartmak pahalı, dibe
+      düşenden ucuzdur</b> — iyi üninin adayı daha becerikli olur.
     </div>
 
     <h3>6) Strateji ve prestij</h3>

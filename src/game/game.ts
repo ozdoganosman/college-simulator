@@ -14,7 +14,8 @@ import { dailyAcademicUpdate, refreshCandidatePools } from './academics';
 import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } from './departments';
 import { rebuildDersProgrami, tumunuOtoSec } from './schedule';
 import { dailyEconomy } from './economy';
-import { notify, saveGame } from './state';
+import { kurRakipler, rakipleriGelistir, yilSonuHesapla } from './rivals';
+import { addPrestij, notify, saveGame } from './state';
 
 /** Simülasyonu dtMin oyun-dakikası ilerletir (büyük adımları böler). */
 export function advance(state: GameState, dtMin: number): void {
@@ -55,9 +56,23 @@ function endOfDay(state: GameState): void {
     semesterEnd(state);
     refreshCandidatePools(state);
     donemDestegi(state);
-    if (donemIndex(state.gun) % 2 === 0 && !state.yksBekliyor) {
-      state.yksBekliyor = true;
-      notify(state, '🎓 YKS dönemi açıldı! Hazırlıkların bitince yerleştirmeyi başlat.', 'odul');
+    if (donemIndex(state.gun) % 2 === 0) {
+      // Yıl dönümü: biten yılın Akademik Yıl Ödülleri töreni (oyunun ilk günü hariç)
+      if (state.gun > 1) {
+        const sonuc = yilSonuHesapla(state);
+        state.yilSonu = sonuc;
+        if (sonuc.siraPrestij > 0) {
+          addPrestij(state, sonuc.siraPrestij);
+          notify(state, `🏆 Sıralamada yükseliş: ${sonuc.oncekiSira}. → ${sonuc.sira}. (+${sonuc.siraPrestij} prestij)`, 'odul');
+        }
+        state.sonSira = sonuc.sira;
+        state.yilBasi = { mezun: state.toplamMezun, yayin: state.publications.length };
+        rakipleriGelistir(state); // rakipler de boş durmuyor
+      }
+      if (!state.yksBekliyor) {
+        state.yksBekliyor = true;
+        notify(state, '🎓 YKS dönemi açıldı! Hazırlıkların bitince yerleştirmeyi başlat.', 'odul');
+      }
     }
   }
 
@@ -67,6 +82,7 @@ function endOfDay(state: GameState): void {
 /** Yeni oyun kurulumu (boş kampüs + başlangıç aday havuzları). */
 export function initNewGame(state: GameState): void {
   kurHazirKampus(state);
+  kurRakipler(state);
   refreshCandidatePools(state);
   assignClassrooms(state);
   rebuildDersProgrami(state);

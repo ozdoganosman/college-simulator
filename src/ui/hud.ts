@@ -11,6 +11,7 @@ import {
 } from '../game/prefab';
 import { runYerlestirme } from '../game/departments';
 import { gnoHesapla } from '../game/agents';
+import { oyuncuSirasi } from '../game/rivals';
 import { DERS_LIMIT, asistanlari, dersYukuVerimi } from '../game/schedule';
 import { deptDef } from '../data/departments';
 import { deleteRoom } from '../game/build';
@@ -39,6 +40,7 @@ export function initHud(getState: () => GameState, ui: UIState): void {
     <span class="stat" data-st="ogrenci" title="Öğrenci"></span>
     <span class="stat" data-st="akademisyen" title="Akademisyen"></span>
     <span class="stat" data-st="kutuphane" title="Kütüphane seviyesi"></span>
+    <span class="stat" data-st="sira" title="Türkiye Üniversite Sıralaması — 📊 Raporlar panelinde tam tablo"></span>
     <span class="stat tarih" data-st="tarih"></span>
     <span class="hiz-grup">
       <button class="hiz" data-hiz="0">⏸</button>
@@ -317,6 +319,7 @@ export function refreshHud(state: GameState, ui: UIState): void {
   setStat('ogrenci', `🎓 ${ogrenci}`);
   setStat('akademisyen', `👩‍🏫 ${akademisyen}`);
   setStat('kutuphane', `📚 Ktp. Sv. ${libraryLevel(state)}`);
+  setStat('sira', `🏆 ${oyuncuSirasi(state)}/${state.rakipler.length + 1}`);
   setStat('tarih', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}`);
   for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
     b.classList.toggle('active', Number(b.dataset.hiz) === state.hiz);

@@ -1,6 +1,7 @@
 /**
- * YKS Yerleştirme Sonuçları töreni — yıl başında tam ekran, animasyonlu açıklama.
- * state.yerlestirme dolduğunda otomatik açılır; tören açıkken simülasyon durur.
+ * Tam ekran törenler: YKS Yerleştirme Sonuçları ve Akademik Yıl Ödülleri.
+ * state.yerlestirme / state.yilSonu dolduğunda otomatik açılır; tören açıkken
+ * simülasyon durur. Yıl sonu töreni öncelıklidir (önce ödüller, sonra YKS).
  */
 import { GameState } from '../core/types';
 import { formatMoney } from '../core/util';
@@ -16,14 +17,57 @@ export function isCeremonyOpen(): boolean {
   return acikMi;
 }
 
-/** main.ts her çeyrek saniyede çağırır; bekleyen sonuç varsa töreni başlatır. */
+/** main.ts her çeyrek saniyede çağırır; bekleyen tören varsa başlatır. */
 export function checkCeremony(state: GameState): void {
-  if (!acikMi && state.yerlestirme) open(state);
+  if (acikMi) return;
+  if (state.yilSonu) openYilSonu(state);
+  else if (state.yerlestirme) open(state);
 }
 
 function sira(n: number): string {
   return n > 0 ? n.toLocaleString('tr-TR') : '—';
 }
+
+/** Kapat düğmesi + Esc/Enter bağlama ve sayaç animasyonları (ortak). */
+function torenKur(state: GameState, onKapat: () => void): void {
+  if (!root) return;
+  root.classList.add('acik');
+
+  // sayaç animasyonları: satır göründüğünde 0'dan hedefe say
+  for (const el of root.querySelectorAll<HTMLElement>('.sayac')) {
+    const hedef = Number(el.dataset.hedef ?? '0');
+    const gecikme = Number(el.dataset.gecikme ?? '0') * 1000;
+    const sure = 900;
+    setTimeout(() => {
+      const t0 = performance.now();
+      const adim = (t: number) => {
+        const k = Math.min(1, (t - t0) / sure);
+        el.textContent = Math.round(hedef * (1 - Math.pow(1 - k, 3))).toLocaleString('tr-TR');
+        if (k < 1) requestAnimationFrame(adim);
+      };
+      requestAnimationFrame(adim);
+    }, gecikme + 200);
+  }
+
+  const kapat = () => {
+    onKapat();
+    acikMi = false;
+    root!.classList.remove('acik');
+    root!.innerHTML = '';
+    document.removeEventListener('keydown', escKapat);
+    if (state.hiz === 0) state.hiz = 1;
+  };
+  const escKapat = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' || e.key === 'Enter') {
+      e.stopPropagation(); // genel Esc kısayolu (menü aç/kapat) tetiklenmesin
+      kapat();
+    }
+  };
+  document.getElementById('toren-kapat')?.addEventListener('click', kapat);
+  document.addEventListener('keydown', escKapat); // güvence: buton görünmese bile geçilebilsin
+}
+
+// --- YKS Yerleştirme töreni ----------------------------------------------------
 
 function open(state: GameState): void {
   if (!root || !state.yerlestirme) return;
@@ -79,40 +123,91 @@ function open(state: GameState): void {
       </div>
     </div>`;
 
-  root.classList.add('acik');
+  torenKur(state, () => { state.yerlestirme = null; });
+}
 
-  // sayaç animasyonları: satır göründüğünde 0'dan hedefe say
-  for (const el of root.querySelectorAll<HTMLElement>('.sayac')) {
-    const hedef = Number(el.dataset.hedef ?? '0');
-    const gecikme = Number(el.dataset.gecikme ?? '0') * 1000;
-    const sure = 900;
-    setTimeout(() => {
-      const t0 = performance.now();
-      const adim = (t: number) => {
-        const k = Math.min(1, (t - t0) / sure);
-        el.textContent = String(Math.round(hedef * (1 - Math.pow(1 - k, 3))));
-        if (k < 1) requestAnimationFrame(adim);
-      };
-      requestAnimationFrame(adim);
-    }, gecikme + 200);
+// --- Akademik Yıl Ödülleri töreni ------------------------------------------------
+
+function openYilSonu(state: GameState): void {
+  if (!root || !state.yilSonu) return;
+  acikMi = true;
+  const y = state.yilSonu;
+
+  // sıralama: ilk 5 + (oyuncu ilk 5'te değilse) oyuncunun bulunduğu kesit
+  const oyuncuIdx = y.siralama.findIndex((s) => s.oyuncu);
+  const gosterilecek: { idx: number; atla: boolean }[] = [];
+  for (let i = 0; i < Math.min(5, y.siralama.length); i++) gosterilecek.push({ idx: i, atla: false });
+  if (oyuncuIdx >= 5) {
+    gosterilecek.push({ idx: oyuncuIdx, atla: oyuncuIdx > 5 });
   }
 
-  const kapat = () => {
-    state.yerlestirme = null;
-    acikMi = false;
-    root!.classList.remove('acik');
-    root!.innerHTML = '';
-    document.removeEventListener('keydown', escKapat);
-    if (state.hiz === 0) state.hiz = 1; // dersler başlasın!
-  };
-  const escKapat = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' || e.key === 'Enter') {
-      e.stopPropagation(); // genel Esc kısayolu (menü aç/kapat) tetiklenmesin
-      kapat();
+  let g = 1.2;
+  const siraSatirlari = gosterilecek.map(({ idx, atla }) => {
+    const s = y.siralama[idx];
+    const gecikme = (g += 0.45);
+    const madalya = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
+    let ok = '';
+    if (s.oyuncu && y.oncekiSira > 0) {
+      const fark = y.oncekiSira - y.sira;
+      if (fark > 0) ok = `<span class="toren-rozet doldu">▲ ${fark} YÜKSELDİ</span>`;
+      else if (fark < 0) ok = `<span class="toren-rozet iptal">▼ ${-fark} DÜŞTÜ</span>`;
+      else ok = '<span class="toren-rozet yari">SIRASINI KORUDU</span>';
+    } else if (s.oyuncu) {
+      ok = '<span class="toren-rozet yari">İLK SIRALAMASI</span>';
     }
+    return `${atla ? '<div class="toren-atla">⋮</div>' : ''}
+      <div class="toren-satir${s.oyuncu ? ' vurgu' : ''}" style="animation-delay:${gecikme}s">
+        <span class="toren-sira">${madalya}</span>
+        <span class="toren-bolum">${s.oyuncu ? '🎓 ' : ''}${s.ad}</span>
+        <span class="toren-veri"><small>Skor</small><b class="sayac" data-hedef="${s.skor}" data-gecikme="${gecikme}">0</b></span>
+        <span class="toren-veri"><small>Prestij</small><b>${s.prestij}</b></span>
+        <span class="toren-veri"><small>Yayın</small><b>${s.yayin}</b></span>
+        ${ok}
+      </div>`;
+  }).join('');
+
+  const odul = (emoji: string, baslik: string, ad: string, detay: string) => {
+    const gecikme = (g += 0.55);
+    return `<div class="toren-satir" style="animation-delay:${gecikme}s">
+      <span class="toren-sira">${emoji}</span>
+      <span class="toren-bolum"><small style="color:#c9a227">${baslik}</small><br><b>${ad}</b></span>
+      <span class="toren-veri" style="flex:1"><small>${detay}</small></span>
+    </div>`;
   };
-  document.getElementById('toren-kapat')?.addEventListener('click', kapat);
-  document.addEventListener('keydown', escKapat); // güvence: buton görünmese bile geçilebilsin
+  let oduller = '';
+  if (y.yilinHocasi) oduller += odul('👩‍🏫', 'YILIN HOCASI', y.yilinHocasi.ad, y.yilinHocasi.detay);
+  if (y.yilinGirisimcisi) oduller += odul('💰', 'YILIN GİRİŞİMCİ ÖĞRENCİSİ', y.yilinGirisimcisi.ad, y.yilinGirisimcisi.detay);
+  if (y.yilinBulusu) oduller += odul('💥', 'YILIN BULUŞU', `"${y.yilinBulusu}"`, 'bilim dünyasında ses getirdi');
+  if (oduller === '') {
+    oduller = `<div class="toren-satir" style="animation-delay:${(g += 0.55)}s">
+      <span class="toren-veri"><small>Bu yıl ödüle aday çıkmadı — kadroyu ve öğrencileri geliştir!</small></span></div>`;
+  }
+
+  const ozetGecikme = g + 0.6;
+  const konfetiVar = y.sira <= 3 || (y.oncekiSira > 0 && y.sira < y.oncekiSira);
+
+  root.innerHTML = `
+    <div class="toren-perde">
+      ${konfetiHtml(konfetiVar ? 80 : 0, ozetGecikme)}
+      <div class="toren-kart">
+        <div class="toren-ust">🏆 AKADEMİK YIL ÖDÜLLERİ</div>
+        <div class="toren-yil">${y.yil}. Yıl · Türkiye Üniversite Sıralaması: <b>${y.sira}/${y.siralama.length}</b></div>
+        <div class="toren-liste">${siraSatirlari}</div>
+        <div class="toren-liste" style="margin-top:6px">${oduller}</div>
+        <div class="toren-ozet" style="animation-delay:${ozetGecikme}s">
+          🎓 <b class="sayac" data-hedef="${y.mezun}" data-gecikme="${ozetGecikme}">0</b> mezun ·
+          📄 <b>${y.yayin}</b> yayın ·
+          📖 GNO ort. <b>${y.ortGno === null ? '—' : y.ortGno.toFixed(2)}</b> ·
+          💰 öğrenci sermayesi <b>${formatMoney(y.toplamSermaye)}</b>
+          ${y.siraPrestij > 0 ? `<br>🏆 Sıralama ödülü: <b>+${y.siraPrestij} prestij</b>` : ''}
+        </div>
+        <button class="menu-btn toren-btn" id="toren-kapat" style="animation-delay:${ozetGecikme + 0.5}s">
+          🎉 Yeni Yıla Başla!
+        </button>
+      </div>
+    </div>`;
+
+  torenKur(state, () => { state.yilSonu = null; });
 }
 
 /** Basit CSS konfetisi: rastgele renk/konum/gecikmeli düşen parçalar. */

@@ -281,6 +281,42 @@ export interface YerlestirmeSonuc {
   satirlar: YerlestirmeSatir[];
 }
 
+// --- Rakip üniversiteler / sıralama ------------------------------------------
+
+export interface RakipUni {
+  ad: string;
+  prestij: number;   // 0-1000
+  yayin: number;     // toplam yayın
+  mezun: number;     // toplam mezun
+  /** yıllık gelişim karakteri (0.6 durgun – 1.5 yükselen), zamanla oynar */
+  guc: number;
+}
+
+export interface SiralamaSatir {
+  ad: string;
+  prestij: number;
+  yayin: number;
+  mezun: number;
+  skor: number;
+  oyuncu: boolean;
+}
+
+/** Yıl sonu "Akademik Yıl Ödülleri" töreni verisi (kapanınca null). */
+export interface YilSonuSonuc {
+  yil: number;                 // biten yıl
+  sira: number;                // oyuncunun bu yılki sırası
+  oncekiSira: number;          // geçen yılki sıra (0 = ilk yıl)
+  siralama: SiralamaSatir[];   // skor sırasıyla tüm üniversiteler
+  yilinHocasi: { ad: string; detay: string } | null;
+  yilinGirisimcisi: { ad: string; detay: string } | null;
+  yilinBulusu: string | null;
+  mezun: number;               // bu yıl mezun olan
+  yayin: number;               // bu yıl çıkan yayın
+  ortGno: number | null;       // öğrenci not ortalaması
+  toplamSermaye: number;       // öğrenci girişim sermayesi
+  siraPrestij: number;         // sıralama yükselişi prestij ödülü
+}
+
 // --- Araştırma / Yayın -------------------------------------------------------
 
 export interface ResearchProject {
@@ -384,6 +420,14 @@ export interface GameState {
   strategies: string[];
   /** kütüphane kitap koleksiyonu seviyeleri (alan başına 0-4) */
   kitapKoleksiyon: Record<Alan, number>;
+  /** rakip üniversiteler — her yıl gelişirler */
+  rakipler: RakipUni[];
+  /** geçen yıl sonundaki sıralama (0 = henüz yıl bitmedi) */
+  sonSira: number;
+  /** yıl başı istatistik tabanı (yıl sonu delta hesabı için) */
+  yilBasi: { mezun: number; yayin: number };
+  /** bekleyen yıl sonu ödül töreni (tören kapanınca null) */
+  yilSonu: YilSonuSonuc | null;
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */

@@ -5,6 +5,7 @@ import { BALANCE } from '../data/balance';
 import { DEPT_DEFS } from '../data/departments';
 import { courseExists } from '../data/courses';
 import { tumunuOtoSec } from './schedule';
+import { kurRakipler } from './rivals';
 
 export function createInitialState(): GameState {
   const size = MAP_W * MAP_H;
@@ -34,6 +35,10 @@ export function createInitialState(): GameState {
     transferPool: [],
     strategies: [],
     kitapKoleksiyon: { muhendis: 0, artist: 0, filozof: 0, pratik: 0 },
+    rakipler: [],
+    sonSira: 0,
+    yilBasi: { mezun: 0, yayin: 0 },
+    yilSonu: null,
 
     nextId: 1,
     insaatSurumu: 0,
@@ -107,6 +112,12 @@ export function eskiKayitUyumu(s: GameState): void {
   if (!s.kitapKoleksiyon || typeof s.kitapKoleksiyon !== 'object') {
     s.kitapKoleksiyon = { muhendis: 0, artist: 0, filozof: 0, pratik: 0 };
   }
+  if (!Array.isArray(s.rakipler) || s.rakipler.length === 0) kurRakipler(s);
+  if (typeof s.sonSira !== 'number') s.sonSira = 0;
+  if (!s.yilBasi || typeof s.yilBasi !== 'object') {
+    s.yilBasi = { mezun: s.toplamMezun ?? 0, yayin: s.publications?.length ?? 0 };
+  }
+  if (s.yilSonu === undefined) s.yilSonu = null;
   // katalogdan kalkan bölüm/dersler kayıttan da temizlenir
   const bolumVar = new Set(DEPT_DEFS.map((d) => d.id));
   const silinen = new Set(s.departments.filter((d) => !bolumVar.has(d.defId)).map((d) => d.id));

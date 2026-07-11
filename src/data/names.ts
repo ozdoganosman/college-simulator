@@ -17,6 +17,7 @@ export const RAKIP_UNILER = [
   'Boğaziçi Teknik Üniversitesi', 'Anadolu Bilim Üniversitesi', 'Karadeniz Araştırma Üniversitesi',
   'Ege Fen Üniversitesi', 'Başkent Politeknik', 'Marmara Teknoloji Enstitüsü',
   'Akdeniz İleri Araştırmalar Üniversitesi', 'İç Anadolu Üniversitesi',
+  'Doğu Anadolu Teknik Üniversitesi', 'Trakya Bilimler Üniversitesi',
 ];
 
 /** Araştırma projesi başlık üreteci parçaları */
