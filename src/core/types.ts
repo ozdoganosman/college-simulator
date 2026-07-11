@@ -90,6 +90,17 @@ export const ALAN_META: Record<Alan, { ad: string; emoji: string; renk: string; 
   pratik: { ad: 'Pratik', emoji: '💼', renk: '#59a14f', tanim: 'İşletme, iktisat ve meslek dersleri' },
 };
 
+/** Öğrenci gelişim nitelikleri: 4 akademik alan + sosyal etki. */
+export type Nitelik = Alan | 'influencer';
+
+export const NITELIK_META: Record<Nitelik, { ad: string; emoji: string }> = {
+  muhendis: { ad: 'Mühendis', emoji: '🔬' },
+  artist: { ad: 'Artist', emoji: '🎨' },
+  filozof: { ad: 'Filozof', emoji: '📜' },
+  pratik: { ad: 'Pratik', emoji: '💼' },
+  influencer: { ad: 'Influencer', emoji: '📣' },
+};
+
 /** Günlük ders programı girdisi: bölümün o bloktaki dersi ve atanan hocası. */
 export interface DersSlot {
   deptId: number;
@@ -167,6 +178,10 @@ export interface Student extends AgentBase {
   dersDakika: number;
   /** asistanı olduğu akademisyen id (YL/doktora; değilse -1) */
   asistani: number;
+  /** gelişim nitelikleri (0-100) — dersler ve kampüs yaşamıyla büyür */
+  nitelik: Record<Nitelik, number>;
+  /** sermayedar özelliği: öğrencinin girişimlerinden biriktirdiği para ₺ */
+  sermaye: number;
 }
 
 export const LEVEL_LABEL: Record<StudentLevel, string> = {

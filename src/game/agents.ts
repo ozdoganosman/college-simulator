@@ -46,7 +46,7 @@ import {
   donemIndex, inBounds, tileIndex,
 } from '../core/types';
 import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
-import { dersEtki } from '../data/courses';
+import { courseDef, dersEtki } from '../data/courses';
 import { asistanSayilari, yukVerimi } from './schedule';
 import { findPath } from '../core/pathfinding';
 import { libraryLevel, roomCenter, walkable } from '../core/grid';
@@ -127,6 +127,8 @@ interface Ctx {
   teacherSkill: Map<number, number>;
   /** roomId -> bloktaki dersin hocaya alan uyumu (0.55-1.25) */
   teacherEtki: Map<number, number>;
+  /** deptId -> güncel bloktaki ders (nitelik gelişimi için) */
+  blokDersleri: Map<number, string>;
   objById: Map<number, PlacedObject>;
   /** deptId -> boş sıra yığını (geçerli, bölüme atanmış dersliklerde) */
   freeSira: Map<number, PlacedObject[]>;
@@ -288,6 +290,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     teacherRooms,
     teacherSkill,
     teacherEtki,
+    blokDersleri,
     objById,
     freeSira,
     freeKlozet,
@@ -578,6 +581,16 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * efektif, 0, 100);
       s.kaliteToplam += efektif * dtMin;
       s.dersDakika += dtMin;
+      // her ders alanına göre nitelik kazandırır (artist/pratik dersleri influencer'ı da besler)
+      const dersId = ctx.blokDersleri.get(s.deptId);
+      if (dersId) {
+        const alan = courseDef(dersId).birincil;
+        const artis = (2.0 / BLOK_SURE) * dtMin * efektif;
+        s.nitelik[alan] = clamp(s.nitelik[alan] + artis, 0, 100);
+        if (alan === 'artist' || alan === 'pratik') {
+          s.nitelik.influencer = clamp(s.nitelik.influencer + artis * 0.35, 0, 100);
+        }
+      }
       break;
     }
     case 'yemege_gidiyor':
@@ -605,9 +618,10 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
         n.tuvalet = clamp(n.tuvalet - 2 * dtMin, 0, 100);
         bitti = n.tuvalet <= 5;
       } else if (o) {
-        // kantin sandalyesi / bank: dinlenme + eğlence
+        // kantin sandalyesi / bank: dinlenme + eğlence + sosyal çevre (influencer)
         n.enerji = clamp(n.enerji - 2 * dtMin, 0, 100);
         n.eglence = clamp(n.eglence - 2 * dtMin, 0, 100);
+        s.nitelik.influencer = clamp(s.nitelik.influencer + 0.04 * dtMin, 0, 100);
         bitti = n.enerji <= 5 && n.eglence <= 5;
       }
       if (bitti || (s.activityUntil !== -1 && dk >= s.activityUntil)) {
@@ -924,6 +938,14 @@ export function spawnStudent(state: GameState, deptId: number, level: StudentLev
     kaliteToplam: 0,
     dersDakika: 0,
     asistani: -1,
+    nitelik: {
+      muhendis: randInt(state, 0, 8),
+      artist: randInt(state, 0, 8),
+      filozof: randInt(state, 0, 8),
+      pratik: randInt(state, 0, 8),
+      influencer: randInt(state, 0, 12),
+    },
+    sermaye: 0,
   };
   state.agents.push(s);
   return s;

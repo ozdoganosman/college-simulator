@@ -130,6 +130,10 @@ export function eskiKayitUyumu(s: GameState): void {
       if (typeof a.kaliteToplam !== 'number') a.kaliteToplam = 0;
       if (typeof a.dersDakika !== 'number') a.dersDakika = 0;
       if (typeof a.asistani !== 'number') a.asistani = -1;
+      if (!a.nitelik || typeof a.nitelik !== 'object') {
+        a.nitelik = { muhendis: 0, artist: 0, filozof: 0, pratik: 0, influencer: 0 };
+      }
+      if (typeof a.sermaye !== 'number') a.sermaye = 0;
     }
   }
   if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç

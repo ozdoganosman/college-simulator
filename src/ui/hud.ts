@@ -1,5 +1,6 @@
 import {
-  GameState, LEVEL_LABEL, RANK_LABEL, ALAN_META, WALL_NONE, donemAdi, donemGunu, DONEM_GUN, yil,
+  GameState, LEVEL_LABEL, NITELIK_META, Nitelik, RANK_LABEL, ALAN_META, WALL_NONE, donemAdi,
+  donemGunu, DONEM_GUN, yil,
 } from '../core/types';
 import { formatClock, formatMoney } from '../core/util';
 import { FLOOR_DEFS, ROOM_DEFS, ROOM_LIST, WALL_COST, DOOR_COST } from '../data/rooms';
@@ -270,6 +271,11 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     html += cip(`🧠 Öğrenme eğilimi: %${a.egilim} (${egilimEtiket})`, a.egilim < 85);
     html += cip(`📈 Mezuniyet ilerlemesi: %${Math.round(a.ilerleme)}`);
     html += cip(`😊 Mutluluk: %${Math.round(a.mutluluk)}`, a.mutluluk < 40);
+    const nitelikler = (Object.keys(NITELIK_META) as Nitelik[])
+      .map((k) => `${NITELIK_META[k].emoji} ${Math.round(a.nitelik[k])}`)
+      .join(' · ');
+    html += cip(nitelikler);
+    html += cip(`💰 Sermaye: ${formatMoney(Math.round(a.sermaye))}`);
     if (hoca && hoca.kind === 'akademisyen') {
       html += cip(`🧑‍🔬 Asistanlık: ${RANK_LABEL[hoca.rank]} ${hoca.ad}`);
     }

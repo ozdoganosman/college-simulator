@@ -34,6 +34,11 @@ export const BALANCE = {
     mezun: 0.5, birakan: -1.5, terfi: 3,
   },
 
+  // Öğrenci girişim ekosistemi
+  GIRISIM_OKUL_PAYI: 0.10,     // öğrenci günlük girişim gelirinden okulun kuluçka payı
+  MEZUN_BAGIS_ORANI: 0.20,     // mezuniyette sermayeden okula bağış oranı
+  ZENGIN_MEZUN_ESIK: 150_000,  // bu sermayenin üstünde mezun olan prestij getirir
+
   // Öğrenci
   DERS_ILERLEME: 1.2,          // ders periyodu başına ilerleme puanı (öğretmenli)
   OGRETMENSIZ_CARPAN: 0.3,

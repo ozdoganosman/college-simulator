@@ -402,12 +402,18 @@ export function semesterEnd(state: GameState): void {
   if (mezunlar.length === 0) return;
 
   const bolumMezun = new Map<number, number>();
+  let toplamBagis = 0;
+  let zenginMezun = 0;
   for (const s of mezunlar) {
+    // girişim ekosistemi: mezun, sermayesinin bir kısmını okula bağışlar
+    const bagis = Math.round(s.sermaye * BALANCE.MEZUN_BAGIS_ORANI);
+    toplamBagis += bagis;
+    if (s.sermaye >= BALANCE.ZENGIN_MEZUN_ESIK) zenginMezun++;
     removeAgent(state, s.id);
     state.toplamMezun++;
     const dept = deptMap.get(s.deptId);
     if (dept) dept.mezunSayisi++;
-    earn(state, BALANCE.MEZUN_BONUS);
+    earn(state, BALANCE.MEZUN_BONUS + bagis);
     addPrestij(state, BALANCE.PRESTIJ.mezun);
     if (s.level === 'doktora') addPrestij(state, 1); // doktora mezunu ekstra prestij
     bolumMezun.set(s.deptId, (bolumMezun.get(s.deptId) ?? 0) + 1);
@@ -417,6 +423,13 @@ export function semesterEnd(state: GameState): void {
     const dept = deptMap.get(deptId);
     if (!dept) continue;
     notify(state, `🎓 ${deptDef(dept.defId).ad} bölümünden ${n} öğrenci mezun oldu`, 'iyi');
+  }
+  if (toplamBagis > 0) {
+    notify(state, `💝 Mezun bağışları: ${formatMoney(toplamBagis)} — girişimci mezunlar okulunu unutmaz!`, 'odul');
+  }
+  if (zenginMezun > 0) {
+    addPrestij(state, Math.min(10, zenginMezun * 2));
+    notify(state, `💰 ${zenginMezun} zengin girişimci mezun verdik — prestij +${Math.min(10, zenginMezun * 2)}!`, 'odul');
   }
 }
 

@@ -11,8 +11,8 @@
  *   (styles.css'te hazır).
  */
 import {
-  ALAN_META, AcademicRank, Alan, GameState, LEVEL_LABEL, RANK_LABEL, RoomType, StrategyDef,
-  StudentLevel,
+  ALAN_META, AcademicRank, Alan, GameState, LEVEL_LABEL, NITELIK_META, Nitelik, RANK_LABEL,
+  RoomType, StrategyDef, Student, StudentLevel,
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
 import {
@@ -31,6 +31,7 @@ import {
   asistanAta, asistanBirak, assignAcademicDept, fireAcademic, hireFromPool, officeCapacity,
 } from '../game/academics';
 import { cancelProject, startProject } from '../game/research';
+import { ogrenciGunlukKazanc } from '../game/economy';
 import { hireStaff, removeAgent } from '../game/agents';
 import { BALANCE } from '../data/balance';
 import { DEPT_DEFS, deptDef } from '../data/departments';
@@ -640,6 +641,63 @@ function stratejiGovde(state: GameState): string {
 
 // --- Raporlar ------------------------------------------------------------------
 
+/** Raporlar: öğrenci girişim ekosistemi — nitelikler, sermaye, okul payı. */
+function ekosistemBolumu(state: GameState): string {
+  const ogrenciler = state.agents.filter((a): a is Student => a.kind === 'ogrenci');
+  if (ogrenciler.length === 0) {
+    return `<h3>🚀 Girişim Ekosistemi</h3>
+      <div class="aciklama">Henüz öğrenci yok. Dersler öğrencilerin niteliklerini
+      (🔬🎨📜💼📣) geliştirir; nitelikli öğrenciler girişim geliri üretir — okul
+      %${Math.round(BALANCE.GIRISIM_OKUL_PAYI * 100)} kuluçka payı alır, mezunlar
+      sermayelerinin %${Math.round(BALANCE.MEZUN_BAGIS_ORANI * 100)}'sini bağışlar.</div>`;
+  }
+
+  let toplamSermaye = 0;
+  let gunlukToplam = 0;
+  const ortNitelik: Record<Nitelik, number> = { muhendis: 0, artist: 0, filozof: 0, pratik: 0, influencer: 0 };
+  for (const s of ogrenciler) {
+    toplamSermaye += s.sermaye;
+    gunlukToplam += ogrenciGunlukKazanc(state, s);
+    for (const k of Object.keys(ortNitelik) as Nitelik[]) ortNitelik[k] += s.nitelik[k];
+  }
+  const okulPayi = Math.round(gunlukToplam * BALANCE.GIRISIM_OKUL_PAYI);
+  const ortalamalar = (Object.keys(ortNitelik) as Nitelik[])
+    .map((k) => `${NITELIK_META[k].emoji} ${NITELIK_META[k].ad} ${Math.round(ortNitelik[k] / ogrenciler.length)}`)
+    .join(' · ');
+
+  const zenginler = [...ogrenciler].sort((a, b) => b.sermaye - a.sermaye).slice(0, 5);
+  const zenginSatir = zenginler.map((s) => {
+    const dept = state.departments.find((d) => d.id === s.deptId);
+    const bolum = dept ? deptDef(dept.defId).kisa : '—';
+    let baskin: Nitelik = 'muhendis';
+    for (const k of Object.keys(NITELIK_META) as Nitelik[]) {
+      if (s.nitelik[k] > s.nitelik[baskin]) baskin = k;
+    }
+    return `<tr><td><b>${esc(s.ad)}</b> <small>(${bolum})</small></td>
+      <td>${NITELIK_META[baskin].emoji} ${NITELIK_META[baskin].ad}</td>
+      <td>${formatMoney(Math.round(s.sermaye))}</td>
+      <td>${formatMoney(ogrenciGunlukKazanc(state, s))}/gün</td></tr>`;
+  }).join('');
+
+  return `<h3>🚀 Girişim Ekosistemi</h3>
+    <div class="aciklama">Dersler nitelik geliştirir, nitelikli öğrenciler girişim geliri üretir.
+    Okul günlük %${Math.round(BALANCE.GIRISIM_OKUL_PAYI * 100)} kuluçka payı alır; mezunlar
+    sermayelerinin %${Math.round(BALANCE.MEZUN_BAGIS_ORANI * 100)}'sini okula bağışlar
+    (${formatMoney(BALANCE.ZENGIN_MEZUN_ESIK)}+ sermayeli mezun prestij de getirir).
+    ${state.strategies.includes('teknokent') ? '<b>Teknokent aktif: gelirler ×1.5!</b>' : '♟️ Teknokent stratejisi gelirleri ×1.5 yapar.'}</div>
+    <table>
+      <tr><td>Toplam öğrenci sermayesi</td><td><b>${formatMoney(Math.round(toplamSermaye))}</b></td></tr>
+      <tr><td>Günlük ekosistem geliri</td><td>${formatMoney(gunlukToplam)} (okul payı ${formatMoney(okulPayi)}/gün)</td></tr>
+      <tr><td>Ortalama nitelikler</td><td>${ortalamalar}</td></tr>
+    </table>
+    ${zenginler[0] && zenginler[0].sermaye > 0 ? `
+    <h3>En Zengin Öğrenciler</h3>
+    <table>
+      <tr><th>Öğrenci</th><th>Baskın nitelik</th><th>💰 Sermaye</th><th>Gelir</th></tr>
+      ${zenginSatir}
+    </table>` : ''}`;
+}
+
 function raporlarGovde(state: GameState): string {
   // Tek geçişte tüm ajan istatistikleri
   const seviye: Record<StudentLevel, number> = { lisans: 0, yl: 0, doktora: 0 };
@@ -697,6 +755,7 @@ function raporlarGovde(state: GameState): string {
       ${satir('Toplam mezun', String(state.toplamMezun))}
       ${satir('Toplam bırakan', String(state.toplamBirakan))}
     </table>
+    ${ekosistemBolumu(state)}
     <h3>Kadro</h3>
     <table>
       ${satir(RANK_LABEL.arsgor, String(unvan.arsgor))}
@@ -785,6 +844,16 @@ function yardimGovde(): string {
       1 dersin yükünü üstlenir (hoca başına en çok 2), okul asistana günlük maaş öder.
     </div>
 
+    <h3>4c) 🚀 Girişim ekosistemi</h3>
+    <div class="aciklama">
+      Her ders, alanına göre öğrencinin niteliklerini geliştirir: 🔬 Mühendis, 🎨 Artist,
+      📜 Filozof, 💼 Pratik — kantin/bank sosyalleşmesi ve sanat dersleri 📣 <b>Influencer</b>'ı
+      büyütür. Nitelikli öğrenciler girişimlerinden <b>💰 sermaye</b> (gerçek ₺) kazanır:
+      okul her gün <b>%10 kuluçka payı</b> alır, mezunlar sermayelerinin <b>%20</b>'sini bağışlar,
+      zengin mezunlar prestij getirir. Ekosistemin durumu 📊 Raporlar panelinde;
+      ♟️ Teknokent stratejisi gelirleri ×1.5 yapar.
+    </div>
+
     <h3>5) Araştırma, yayın ve ödüller</h3>
     <div class="aciklama">
       <b>🔬 Araştırma</b> panelinden bölüm başına proje başlat (fen bölümleri laboratuvar ister).
@@ -845,7 +914,7 @@ function dersCipi(courseId: string, alan: Alan, hocaId?: number): string {
   const cikar = hocaId !== undefined
     ? `<button class="cip-cikar" data-action="ders-cikar" data-id="${hocaId}" data-ders="${courseId}" title="Dersi bırak">×</button>`
     : '';
-  return `<span class="ders-cip${dusuk}" style="border-color:${ALAN_META[c.birincil].renk}" title="${c.ad} · ${ALAN_META[c.birincil].ad} dersi · bu hocayla %${uyum} verim">`
+  return `<span class="ders-cip${dusuk}" style="border-color:${ALAN_META[c.birincil].renk}" title="${c.ad} · ${ALAN_META[c.birincil].ad} dersi · bu hocayla %${uyum} verim · öğrencide ${NITELIK_META[c.birincil].emoji} ${NITELIK_META[c.birincil].ad} niteliğini geliştirir">`
     + `${ALAN_META[c.birincil].emoji} <b>${c.kod}</b> <small>%${uyum}</small>${cikar}</span>`;
 }
 
