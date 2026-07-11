@@ -116,16 +116,8 @@ function kurHazirKampus(state: GameState): void {
       BALANCE.MAAS[rank],
     );
   }
-  tumunuOtoSec(state); // başlangıç hocalarının yıllık ders seçimleri hazır gelsin
-
-  // Onboarding: seçimleri iki bölümün müfredatını tam karşılayacak şekilde tohumla —
-  // Bilgisayar Programcılığı (BP) ve Muhasebe-Vergi (MV) ilk günden açılabilir olsun.
-  const hocalarim = state.agents.filter((a): a is Academic => a.kind === 'akademisyen');
-  const muhendisler = hocalarim.filter((h) => h.alan === 'muhendis');
-  if (muhendisler[1]) muhendisler[1].verdigiDersler = ['blg102', 'blg231', 'stat201', 'fiz102'];
-  const pratikci = hocalarim.find((h) => h.alan === 'pratik');
-  if (pratikci) pratikci.verdigiDersler = ['isl201', 'muh101', 'mly205', 'bro101'];
-  rebuildDersProgrami(state);
+  // Başlangıç ders seçimleri akıllı yapılır: birkaç bölüm ilk günden açılabilir olsun
+  tumunuOtoSec(state);
 
   state.para = paraOnce;
 }

@@ -73,7 +73,7 @@ const STEPS: TutorialStep[] = [
   },
   {
     baslik: 'İlk bölümünü aç',
-    detay: 'Bu oyunda <b>derslerden bölümlere</b> gidilir: <b>📅 Program</b> panelinde her hocaya yıllık dersleri seçilir; bir bölüm ancak müfredatı <b>açık derslerle</b> karşılanıyorsa açılır. Başlangıç seçimleriyle <b>Bilgisayar Programcılığı</b> ve <b>Muhasebe-Vergi (Önlisans)</b> hazır — <b>🎓 Bölümler</b> panelinden birini aç. Başka bölüm istersen önce Program panelinden dersleri ayarla.',
+    detay: 'Bu oyunda <b>derslerden bölümlere</b> gidilir: <b>📅 Program</b> panelinde her hocaya yıllık dersleri seçilir; bir bölüm ancak müfredatı <b>açık derslerle</b> karşılanıyorsa açılır. Program panelindeki <b>"✔ Açılabilecek Bölümler"</b> listesinden birini tek tıkla aç — ya da bir bölümü <b>🎯 Dersleri Ata</b> ile hedefleyip eksik derslerini hocalara dağıt.',
     kontrol: (s) => ({ tamam: s.departments.length >= 1 }),
   },
   {
