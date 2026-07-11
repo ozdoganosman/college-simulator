@@ -53,8 +53,9 @@ export function createInitialState(): GameState {
     oyunBitti: null,
     basarimlar: [],
     vizyon: null,
-    harc: 'ucretsiz',
-    burs: false,
+    ucret: BALANCE.UCRET_VARSAYILAN,
+    bursTam: BALANCE.BURS_TAM_VARSAYILAN,
+    bursYari: BALANCE.BURS_YARI_VARSAYILAN,
     krediBorcu: 0,
     mutevelli: [],
     sonrakiTalepCarpan: 1,
@@ -151,14 +152,23 @@ export function eskiKayitUyumu(s: GameState): void {
   if (s.oyunBitti === undefined) s.oyunBitti = null;
   if (!Array.isArray(s.basarimlar)) s.basarimlar = [];
   if (s.vizyon === undefined) s.vizyon = null;
-  if (s.harc !== 'dusuk' && s.harc !== 'yuksek') s.harc = 'ucretsiz';
-  if (typeof s.burs !== 'boolean') s.burs = false;
+  // eski harç/burs politikası → kayıt ücreti + burs kontenjanları
+  const eskiMali = s as unknown as { harc?: string; burs?: boolean };
+  if (typeof s.ucret !== 'number') {
+    s.ucret = eskiMali.harc === 'yuksek' ? 60000 : eskiMali.harc === 'dusuk' ? 25000 : 0;
+  }
+  if (typeof s.bursTam !== 'number') s.bursTam = eskiMali.burs === true ? 15 : BALANCE.BURS_TAM_VARSAYILAN;
+  if (typeof s.bursYari !== 'number') s.bursYari = BALANCE.BURS_YARI_VARSAYILAN;
   if (typeof s.krediBorcu !== 'number') s.krediBorcu = 0;
   if (!Array.isArray(s.mutevelli)) s.mutevelli = [];
   if (typeof s.sonrakiTalepCarpan !== 'number') s.sonrakiTalepCarpan = 1;
   for (const pr of s.projects) {
     if (pr.tip !== 'uygulamali' && pr.tip !== 'atilim') pr.tip = 'temel';
     if (typeof pr.liderId !== 'number') pr.liderId = -1;
+    if (typeof pr.gunlukButce !== 'number') {
+      pr.gunlukButce = Math.round(BALANCE.PROJE_GUNLUK_BUTCE
+        * (pr.tip === 'atilim' ? 1.6 : pr.tip === 'uygulamali' ? 1.0 : 0.8));
+    }
   }
   for (const r of s.rakipler) {
     if (typeof r.istihdam !== 'number') r.istihdam = 60 + (r.ad.length % 20);
@@ -201,6 +211,8 @@ export function eskiKayitUyumu(s: GameState): void {
         a.nitelik = { muhendis: 0, artist: 0, filozof: 0, pratik: 0, influencer: 0 };
       }
       if (typeof a.sermaye !== 'number') a.sermaye = 0;
+      // eski kayıt: ücretsiz modelde herkes tam burslu sayılır, ücretliyse öder
+      if (typeof a.burs !== 'number') a.burs = s.ucret === 0 ? 100 : 0;
     }
   }
   if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç

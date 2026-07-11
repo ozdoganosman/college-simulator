@@ -67,10 +67,10 @@ function onerileriHesapla(state: GameState): Oneri[] {
   } else {
     const bolumsuz = hocalar.filter((a) => a.deptId === -1).length;
     if (bolumsuz > 0) {
-      ekle('hoca-bolumsuz', `👩‍🏫 ${bolumsuz} hoca bölümsüz`, 'Bölüme atanmamış hoca derse giremez; öğretim üyesi eksik bölüme YÖK kontenjan vermez. Kadro panelinden bölüm seç.', 'kadro');
+      ekle('hoca-bolumsuz', `👩‍🏫 ${bolumsuz} hoca bölümsüz`, 'Hoca, açık bir bölümün müfredatından ders verince o bölüme OTOMATİK bağlanır. 📅 Program panelinden ders dağıt (Oto Doldur işini görür); öğretim üyesi eksik bölüme YÖK kontenjan vermez.', 'program');
     }
     if (state.yksBekliyor) {
-      ekle('yks', '🎓 YKS dönemi açık — hazırsan başlat!', 'Üstteki altın butona basınca yerleştirme yapılır, öğrenciler ve devlet ödeneği gelir. Önce derslik/kadro hazırlığını bitir.', null);
+      ekle('yks', '🎓 YKS dönemi açık — hazırsan başlat!', 'Üstteki altın butona basınca yerleştirme yapılır, öğrenciler ve devlet ödeneği gelir. Önce derslik/kadro hazırlığını bitir; ♟️ Strateji > Mali Politikalar\'dan kayıt ücreti ve burs kontenjanlarını ayarla.', 'strateji');
     }
   }
 

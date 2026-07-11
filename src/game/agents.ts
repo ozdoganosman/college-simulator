@@ -1063,7 +1063,9 @@ function danismanSec(state: GameState, deptId: number): number {
   return secilen;
 }
 
-export function spawnStudent(state: GameState, deptId: number, level: StudentLevel): Student {
+export function spawnStudent(
+  state: GameState, deptId: number, level: StudentLevel, burs = 100,
+): Student {
   const s: Student = {
     id: newId(state),
     kind: 'ogrenci',
@@ -1100,6 +1102,7 @@ export function spawnStudent(state: GameState, deptId: number, level: StudentLev
       influencer: randInt(state, 0, 12),
     },
     sermaye: 0,
+    burs,
   };
   state.agents.push(s);
   if (level !== 'lisans') s.danisman = danismanSec(state, deptId);

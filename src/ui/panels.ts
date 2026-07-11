@@ -28,12 +28,12 @@ import {
   toggleGradProgram,
 } from '../game/departments';
 import {
-  asistanAta, asistanBirak, assignAcademicDept, beklenenMaas, fireAcademic, hireFromPool,
+  asistanAta, asistanBirak, beklenenMaas, fireAcademic, hireFromPool,
   officeCapacity, zamVer,
 } from '../game/academics';
 import { BASARIMLAR } from '../game/goals';
 import { PROJE_TIPLERI, cancelProject, projeRiski, startProject } from '../game/research';
-import { ogrenciGunlukKazanc } from '../game/economy';
+import { gunlukUcretGeliri, odemeGucu, ogrenciGunlukKazanc } from '../game/economy';
 import { rakipBilgi, siralama } from '../game/rivals';
 import {
   MESLEKLER, SEKTOR_META, istihdamOrani, kariyerGunu, mentorlukAyarla, mutevelliAta,
@@ -88,12 +88,13 @@ export function openPanel(name: PanelName): void {
   if (!root || !getStateRef) return;
 
   const el = document.createElement('div');
-  el.className = 'panel' + (name === 'program' ? ' genis' : '');
+  el.className = 'panel' + (name === 'program' || name === 'bolumler' ? ' genis' : '');
   // Olay delegasyonu: panel açıkken BİR kez bağlanır, innerHTML yenilense de yaşar.
   el.addEventListener('click', onPanelClick);
   el.addEventListener('change', onPanelChange);
   el.addEventListener('mouseover', onPanelHover);
   el.addEventListener('mouseout', dersTipGizle);
+  el.addEventListener('input', onPanelInput);
   // fare basılıyken yeniden çizme — mousedown/mouseup arası DOM değişirse tık yutulur
   el.addEventListener('pointerdown', () => { isaretciBasili = true; });
   window.addEventListener('pointerup', () => { isaretciBasili = false; });
@@ -250,6 +251,32 @@ function dersTipGizle(): void {
   if (dersTipEl) dersTipEl.style.display = 'none';
 }
 
+// --- Bölüm arama (canlı filtre; yeniden çizimde odak korunur) --------------------
+
+let bolumArama = '';
+
+function onPanelInput(e: Event): void {
+  if (!(e.target instanceof HTMLInputElement) || !getStateRef || !acik) return;
+  if (e.target.id !== 'bolum-ara') return;
+  bolumArama = e.target.value;
+  render(getStateRef());
+  // yeniden çizim odağı düşürür — imleci sona koyarak geri ver
+  const inp = acik.el.querySelector<HTMLInputElement>('#bolum-ara');
+  if (inp) {
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+  }
+}
+
+function bolumAramaMetni(): string {
+  return bolumArama.trim();
+}
+
+function bolumEslesir(ad: string): boolean {
+  if (bolumAramaMetni() === '') return true;
+  return ad.toLocaleLowerCase('tr').includes(bolumAramaMetni().toLocaleLowerCase('tr'));
+}
+
 // --- Olay işleyiciler ----------------------------------------------------------
 
 function onPanelClick(e: Event): void {
@@ -274,12 +301,10 @@ function onPanelClick(e: Event): void {
       toggleGradProgram(state, Number(id), 'doktora');
       break;
     case 'ise-al-kpss':
-    case 'ise-al-transfer': {
-      const sec = hedef.closest('tr')?.querySelector<HTMLSelectElement>('select[data-role="aday-bolum"]');
-      const deptId = sec ? Number(sec.value) : -1;
-      hireFromPool(state, action === 'ise-al-kpss' ? 'kpss' : 'transfer', Number(id), deptId);
+    case 'ise-al-transfer':
+      // bölüm seçilmez — aidiyet, hocaya ders dağıtılınca derslerden türer
+      hireFromPool(state, action === 'ise-al-kpss' ? 'kpss' : 'transfer', Number(id), -1);
       break;
-    }
     case 'akademisyen-cikar':
       fireAcademic(state, Number(id));
       break;
@@ -349,16 +374,6 @@ function onPanelClick(e: Event): void {
       startProject(state, Number(id), tip, lider);
       break;
     }
-    case 'harc-sec':
-      state.harc = id as GameState['harc'];
-      notify(state, `💰 Harç politikası: ${id === 'ucretsiz' ? 'Ücretsiz (talep +%10, mutluluk +)' : id === 'dusuk' ? 'Düşük harç (₺50/öğrenci/gün)' : 'Yüksek harç (₺120/gün ama talep -%15, mutluluk düşer)'}`, 'bilgi');
-      break;
-    case 'burs-toggle':
-      state.burs = !state.burs;
-      notify(state, state.burs
-        ? `🎗️ Burs programı başladı: öğrenci başına günlük ${formatMoney(BALANCE.BURS_GIDER)} — mutluluk +1/gün, okul bırakma yarıya iner.`
-        : '🎗️ Burs programı durduruldu.', 'bilgi');
-      break;
     case 'kredi-cek':
       krediCek(state, Number(id));
       break;
@@ -415,8 +430,22 @@ function onPanelChange(e: Event): void {
           : action === 'yl-kontenjan' ? dept.ylKontenjan : dept.doktoraKontenjan,
       );
     }
-  } else if (action === 'bolum-sec') {
-    assignAcademicDept(state, id, Number((hedef as HTMLSelectElement).value));
+  } else if (action === 'ucret-ayarla' || action === 'burs-tam' || action === 'burs-yari') {
+    const input = hedef as HTMLInputElement;
+    if (input.value.trim() === '') return;
+    const deger = Number(input.value);
+    if (!Number.isFinite(deger)) return;
+    if (action === 'ucret-ayarla') {
+      state.ucret = Math.max(0, Math.min(BALANCE.UCRET_MAX, Math.round(deger)));
+      notify(state, state.ucret === 0
+        ? '🆓 Devlet modeli: eğitim ücretsiz — talep +%10, gelir devlet ödeneğinden.'
+        : `💰 Yıllık kayıt ücreti ${formatMoney(state.ucret)} — bir sonraki YKS yerleştirmesinde geçerli.`, 'bilgi');
+    } else if (action === 'burs-tam') {
+      state.bursTam = Math.max(0, Math.min(100 - state.bursYari, Math.round(deger)));
+    } else {
+      state.bursYari = Math.max(0, Math.min(100 - state.bursTam, Math.round(deger)));
+    }
+    render(state);
   } else if (action === 'ders-ekle') {
     const sec = hedef as HTMLSelectElement;
     if (sec.value) hocaDersEkle(state, id, sec.value);
@@ -429,6 +458,12 @@ function onPanelChange(e: Event): void {
 }
 
 // --- Bölümler ------------------------------------------------------------------
+
+/** Popülerlik yıldızı: taban talebin katalogdaki en yüksek talebe oranı (1-5 ⭐). */
+function populerlikYildiz(tabanTalep: number, maxTaban: number): string {
+  const n = Math.max(1, Math.min(5, Math.round((5 * tabanTalep) / Math.max(1, maxTaban))));
+  return `<span title="Popülerlik: YKS taban talebi ${tabanTalep} aday/yıl — popüler bölümler daha kolay dolar, prestijle talep büyür" style="letter-spacing:-2px">${'⭐'.repeat(n)}<span style="opacity:0.22">${'⭐'.repeat(5 - n)}</span></span>`;
+}
 
 function bolumlerGovde(state: GameState): string {
   // Paylaşılan sayımlar — tek geçiş
@@ -455,10 +490,31 @@ function bolumlerGovde(state: GameState): string {
       derslikSayisi.set(r.deptId, (derslikSayisi.get(r.deptId) ?? 0) + 1);
     }
   }
+  const maxTaban = Math.max(...DEPT_DEFS.map((d) => d.tabanTalep));
+
+  // Bölüm başına prestij katkısı (yayınlardan) ve mezun başarısı
+  const prestijKatki = new Map<number, { makale: number; uluslararasi: number; bulus: number; puan: number }>();
+  for (const p of state.publications) {
+    let k = prestijKatki.get(p.deptId);
+    if (!k) { k = { makale: 0, uluslararasi: 0, bulus: 0, puan: 0 }; prestijKatki.set(p.deptId, k); }
+    k.makale++;
+    if (p.uluslararasi) k.uluslararasi++;
+    if (p.cigirAcici) k.bulus++;
+    k.puan += (p.uluslararasi ? BALANCE.PRESTIJ.uluslararasiMakale : BALANCE.PRESTIJ.makale)
+      + (p.cigirAcici ? BALANCE.PRESTIJ.bulus : 0);
+  }
+  const mezunOzet = new Map<string, { n: number; calisan: number; gelir: number; puan: number }>();
+  for (const m of state.mezunlar) {
+    let k = mezunOzet.get(m.bolumAd);
+    if (!k) { k = { n: 0, calisan: 0, gelir: 0, puan: 0 }; mezunOzet.set(m.bolumAd, k); }
+    k.n++;
+    k.puan += m.puan;
+    if (!m.issiz) { k.calisan++; k.gelir += m.gelir; }
+  }
 
   let acikTablo = '<p class="aciklama">Henüz açık bölüm yok — aşağıdan ilk bölümünüzü açın.</p>';
   if (state.departments.length > 0) {
-    const satirlar = state.departments.map((d) => {
+    const satirlar = state.departments.filter((d) => bolumEslesir(deptDef(d.defId).ad)).map((d) => {
       const def = deptDef(d.defId);
       const o = ogr.get(d.id) ?? { lisans: 0, yl: 0, dok: 0 };
       const k = akd.get(d.id) ?? { n: 0, docentProf: false, prof: false };
@@ -491,27 +547,44 @@ function bolumlerGovde(state: GameState): string {
           ${nedenler.length > 0 ? `disabled title="${esc(nedenler.join(', '))}"` : ''}>Dok. Aç</button>`;
       }
 
+      // Prestij katkısı + mezun başarısı — bölümün okula "ne kazandırdığı"
+      const pk = prestijKatki.get(d.id);
+      const mz = mezunOzet.get(def.ad);
+      const mezunPrestij = mz ? mz.n * BALANCE.PRESTIJ.mezun : 0;
+      const toplamKatki = (pk?.puan ?? 0) + mezunPrestij;
+      const prestijHucre = toplamKatki > 0
+        ? `<span title="Bu bölümün okul prestijine katkısı:&#10;${pk ? `📄 ${pk.makale} makale (${pk.uluslararasi} uluslararası, ${pk.bulus} buluş)` : '📄 yayın yok'}&#10;🎓 ${mz?.n ?? 0} mezun × ${BALANCE.PRESTIJ.mezun}&#10;= yaklaşık +${Math.round(toplamKatki)} prestij"><b style="color:#e8c66a">🏛️ +${Math.round(toplamKatki)}</b></span>`
+        : '<span style="color:#8f9ab0" title="Henüz katkı yok — yayınlar ve mezunlar prestij üretir">🏛️ —</span>';
+      const mezunHucre = mz
+        ? `<span title="${mz.n} mezun · ${mz.calisan} çalışıyor (%${Math.round((100 * mz.calisan) / mz.n)})&#10;Ortalama yıllık gelir: ${mz.calisan > 0 ? formatMoney(Math.round(mz.gelir / mz.calisan)) : '—'}&#10;Ortalama mezuniyet puanı: ${Math.round(mz.puan / mz.n)} — bölümün mezun karnesi">🎓 ${mz.n} · %${Math.round((100 * mz.calisan) / mz.n)} işte</span>`
+        : '<span style="color:#8f9ab0" title="Henüz mezun vermedi">🎓 —</span>';
+
       return `<tr>
-        <td><b>${esc(def.ad)}</b></td>
+        <td><b>${esc(def.ad)}</b><br>${populerlikYildiz(def.tabanTalep, maxTaban)}</td>
         <td>${o.lisans} / ${o.yl} / ${o.dok}</td>
         <td><input type="number" class="kontenjan-input" data-action="kontenjan" data-id="${d.id}"
           value="${d.kontenjan}" min="0" max="300"></td>
         <td>${d.sonTalep} / ${d.sonKayit}</td>
         <td>${derslikSayisi.get(d.id) ?? 0} derslik · ${seatCapacity(state, d.id)} koltuk</td>
         <td>${k.n} / ${def.minAkademisyen}${uyeRozet}</td>
+        <td>${prestijHucre}<br>${mezunHucre}</td>
         <td>${yl} ${dok}</td>
       </tr>`;
     }).join('');
 
-    acikTablo = `<table>
-      <tr><th>Bölüm</th><th>Öğrenci (L/YL/Dok)</th><th>Kontenjan</th><th>Talep/Kayıt</th>
-        <th>Derslik</th><th>Öğr. Üyesi</th><th>Lisansüstü</th></tr>
+    acikTablo = satirlar === ''
+      ? `<p class="aciklama">Aramaya uyan açık bölüm yok ("${esc(bolumAramaMetni())}").</p>`
+      : `<table>
+      <tr><th>Bölüm · Popülerlik</th><th>Öğrenci (L/YL/Dok)</th><th>Kontenjan</th><th>Talep/Kayıt</th>
+        <th>Derslik</th><th>Öğr. Üyesi</th><th title="Bölümün okula kazandırdıkları: yayın prestiji ve mezun karnesi">Prestij · Mezun</th><th>Lisansüstü</th></tr>
       ${satirlar}
     </table>`;
   }
 
   const acikIdler = new Set(state.departments.map((d) => d.defId));
-  const kapali = DEPT_DEFS.filter((def) => !acikIdler.has(def.id));
+  const kapali = DEPT_DEFS
+    .filter((def) => !acikIdler.has(def.id) && bolumEslesir(def.ad))
+    .sort((a, b) => b.tabanTalep - a.tabanTalep);
   let yeniBolum = '<p class="aciklama">Tüm bölümler açıldı — tebrikler!</p>';
   if (kapali.length > 0) {
     const satirlar = kapali.map((def) => {
@@ -523,6 +596,7 @@ function bolumlerGovde(state: GameState): string {
         : `<span style="color:#f4a09c">${esc(eksik.join(', '))}</span>`;
       return `<tr>
         <td><b>${esc(def.ad)}</b></td>
+        <td>${populerlikYildiz(def.tabanTalep, maxTaban)}</td>
         <td>${gereksinim}</td>
         <td>${formatMoney(def.acilisMaliyeti)}</td>
         <td>${durum}</td>
@@ -531,26 +605,34 @@ function bolumlerGovde(state: GameState): string {
       </tr>`;
     }).join('');
     yeniBolum = `<table>
-      <tr><th>Bölüm</th><th>Gereksinim</th><th>Maliyet</th><th>Durum</th><th></th></tr>
+      <tr><th>Bölüm</th><th title="YKS taban talebi — popüler bölümler daha kolay dolar">Popülerlik</th><th>Gereksinim</th><th>Maliyet</th><th>Durum</th><th></th></tr>
       ${satirlar}
     </table>`;
+  } else if (bolumAramaMetni() !== '') {
+    yeniBolum = `<p class="aciklama">Aramaya uyan kapalı bölüm yok ("${esc(bolumAramaMetni())}").</p>`;
   }
 
-  return `${acikTablo}
+  return `<div style="margin-bottom:8px">
+      <input type="text" id="bolum-ara" class="kontenjan-input" style="width:280px;text-align:left"
+        placeholder="🔍 Bölüm ara… (ör. bilgisayar, hukuk)" value="${esc(bolumAramaMetni())}">
+      ${bolumAramaMetni() !== '' ? `<small style="color:#8f9ab0">${state.departments.filter((d) => bolumEslesir(deptDef(d.defId).ad)).length} açık · ${kapali.length} kapalı bölüm eşleşti</small>` : ''}
+    </div>
+    ${acikTablo}
     <h3>Yeni Bölüm Aç</h3>
     <p class="aciklama">Bölüm açmak için yeterli sayıda boş geçerli derslik (varsa laboratuvar)
-      ve bütçe gerekir. Öğrenci gelmesi için bölüme yeterli öğretim üyesi atamayı unutmayın.</p>
+      ve bütçe gerekir. Hocalar bölümlere <b>verdikleri derslere göre otomatik</b> bağlanır —
+      📅 Program panelinden ders dağıtmak yeterli. ⭐ popülerlik = YKS taban talebi.</p>
     ${yeniBolum}`;
 }
 
 // --- Kadro ---------------------------------------------------------------------
 
-function bolumSecenekleri(state: GameState, seciliDeptId: number): string {
-  const sec = state.departments
-    .map((d) => `<option value="${d.id}" ${seciliDeptId === d.id ? 'selected' : ''}>`
-      + `${esc(deptDef(d.defId).kisa)}</option>`)
-    .join('');
-  return `<option value="-1" ${seciliDeptId === -1 ? 'selected' : ''}>—</option>${sec}`;
+/** Hocanın (derslerinden türetilmiş) bölüm rozeti. */
+function bolumRozeti(state: GameState, deptId: number): string {
+  const dept = state.departments.find((d) => d.id === deptId);
+  return dept
+    ? `<span class="rozet" title="Bölüm aidiyeti verdiği derslerden OTOMATİK türetilir — ${esc(deptDef(dept.defId).ad)} müfredatına ders veriyor. Değiştirmek için 📅 Program panelinden derslerini değiştir.">${esc(deptDef(dept.defId).kisa)}</span>`
+    : '<span style="color:#8f9ab0" title="Bölümsüz: açık bir bölümün müfredatından ders vermiyor. 📅 Program panelinden ders dağıtın — aidiyet kendiliğinden oluşur.">—</span>';
 }
 
 function kadroGovde(state: GameState): string {
@@ -580,7 +662,7 @@ function kadroGovde(state: GameState): string {
       return `<tr>
         <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b> <small style="color:#8f9ab0">(${a.yas})</small> <span class="rozet" title="${ALAN_META[a.alan].tanim}">${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>${soyagaci}</td>
         <td>${memnuniyetHucre}</td>
-        <td><select data-action="bolum-sec" data-id="${a.id}">${bolumSecenekleri(state, a.deptId)}</select></td>
+        <td>${bolumRozeti(state, a.deptId)}</td>
         <td title="${dersSayisi} ders, ${asistan} asistan — ders kalitesi ve araştırma hızı çarpanı (📅 Program panelinden yönetilir)">
           <b style="color:${verimRenk}">⚡ %${verim}</b><br><small>${dersSayisi}📚 ${asistan}👥</small></td>
         <td>${Math.round(a.egitim)}</td>
@@ -605,14 +687,13 @@ function kadroGovde(state: GameState): string {
       <td>${c.egitim}</td>
       <td>${c.arastirma}</td>
       <td>${formatMoney(c.maas)}</td>
-      <td><select data-role="aday-bolum">${bolumSecenekleri(state, -1)}</select></td>
       <td><button class="eylem" data-action="ise-al-kpss" data-id="${c.id}"
         ${kadroDolu ? 'disabled title="Ofis masası yetersiz"' : ''}>İşe Al</button></td>
     </tr>`).join('');
   const kpssTablo = state.kpssPool.length === 0
     ? '<p class="aciklama">KPSS havuzu boş — yeni adaylar dönem başında gelir.</p>'
     : `<table>
-        <tr><th>Aday</th><th>Eğitim</th><th>Arş.</th><th>Maaş/gün</th><th>Bölüm</th><th></th></tr>
+        <tr><th>Aday</th><th>Eğitim</th><th>Arş.</th><th>Maaş/gün</th><th></th></tr>
         ${kpssSatir}
       </table>`;
 
@@ -628,7 +709,6 @@ function kadroGovde(state: GameState): string {
       <td>${c.arastirma}</td>
       <td>${formatMoney(c.maas)}</td>
       <td>${formatMoney(c.bonus)}</td>
-      <td><select data-role="aday-bolum">${bolumSecenekleri(state, -1)}</select></td>
       <td><button class="eylem" data-action="ise-al-transfer" data-id="${c.id}"
         ${nedenler.length > 0 ? `disabled title="${esc(nedenler.join(', '))}"` : ''}>Transfer Et</button></td>
     </tr>`;
@@ -637,7 +717,7 @@ function kadroGovde(state: GameState): string {
     ? '<p class="aciklama">Transfer havuzu boş — yeni adaylar dönem başında gelir.</p>'
     : `<table>
         <tr><th>Aday</th><th>Kurum</th><th>Eğitim</th><th>Arş.</th><th>Maaş/gün</th>
-          <th>Bonus</th><th>Bölüm</th><th></th></tr>
+          <th>Bonus</th><th></th></tr>
         ${transferSatir}
       </table>`;
 
@@ -928,6 +1008,7 @@ function arastirmaGovde(state: GameState): string {
             <span class="rozet" title="${tipMeta.aciklama}">${tipMeta.ad}</span>
             <span class="rozet" style="color:${risk >= 20 ? '#f4a09c' : '#9fd3a8'}"
               title="Başarısızlık riski — lider hocanın araştırma becerisi düşürür">⚠ %${risk} risk</span>
+            <span class="rozet" title="Günlük araştırma bütçesi — proje sürdükçe her gün kesilir (başlangıç maliyeti ${formatMoney(proje.maliyet)} ödendi)">💰 ${formatMoney(proje.gunlukButce ?? 0)}/gün</span>
             ${lider ? `<span class="rozet" title="Proje lideri: araştırırken katkısı ×1.6, riski düşürür">👩‍🔬 ${esc(lider.ad)}</span>` : '<span class="rozet" style="color:#f0c674">lidersiz</span>'}
             <button class="eylem tehlike" data-action="proje-iptal" data-id="${proje.id}"
               title="İade yok">İptal</button></div>
@@ -938,14 +1019,14 @@ function arastirmaGovde(state: GameState): string {
         const nedenler: string[] = [];
         if (def.labGerekli && !labVar) nedenler.push('Geçerli laboratuvar gerekli');
         if (!def.labGerekli && !kutOfisVar) nedenler.push('Geçerli kütüphane ya da ofis gerekli');
-        if (!akademisyenVar.has(d.id)) nedenler.push('Bölümde akademisyen yok');
+        if (!akademisyenVar.has(d.id)) nedenler.push('Bölümün derslerini veren hoca yok (📅 Program)');
         const hocalar = state.agents.filter(
           (a): a is import('../core/types').Academic => a.kind === 'akademisyen' && a.deptId === d.id,
         );
         const tipSecici = `<select class="kontenjan-input ders-ekle" data-role="proje-tip" style="width:210px">
           ${(Object.keys(PROJE_TIPLERI) as ProjeTip[]).map((tip) => {
     const m = PROJE_TIPLERI[tip];
-    return `<option value="${tip}">${m.emoji} ${m.ad} — ${formatMoney(Math.round(BALANCE.PROJE_MALIYET_TABAN * m.maliyetCarpan))} · risk %${Math.round(m.risk * 100)}</option>`;
+    return `<option value="${tip}">${m.emoji} ${m.ad} — ${formatMoney(Math.round(BALANCE.PROJE_MALIYET_TABAN * m.maliyetCarpan))} + ${formatMoney(Math.round(BALANCE.PROJE_GUNLUK_BUTCE * m.maliyetCarpan))}/gün · risk %${Math.round(m.risk * 100)}</option>`;
   }).join('')}
         </select>`;
         const liderSecici = `<select class="kontenjan-input ders-ekle" data-role="proje-lider" style="width:170px">
@@ -959,7 +1040,8 @@ function arastirmaGovde(state: GameState): string {
         </div>
         <div class="aciklama" style="margin-top:4px">🧪 güvenli/ucuz · 🔧 dengeli (buluş ×1.5) ·
           💥 kumar (buluş ×3, hibe ×1.8, risk %35) — lider hocanın araştırma becerisi riski düşürür,
-          lider araştırırken katkısı ×1.6.</div>`;
+          lider araştırırken katkısı ×1.6. Maliyet = <b>başlangıç</b> + proje sürdükçe kesilen
+          <b>günlük bütçe</b>; hızlı bitiren ucuza getirir.</div>`;
       }
       return `<h3>${esc(def.ad)}</h3>${icerik}`;
     }).join('');
@@ -1084,19 +1166,26 @@ function stratejiGovde(state: GameState): string {
       <tr><th>Vizyon</th><th>Artı / Eksi</th><th></th></tr>
       ${vizyonKartlari}
     </table>
-    <h3>💰 Mali Politikalar</h3>
-    <div class="aciklama">Harç: gelir ↔ talep/mutluluk dengesi. Burs: günlük gider karşılığı
-    mutluluk +1 ve okul bırakma yarıya. Kredi: acil nakit — %25 faizle günlük
-    ${formatMoney(BALANCE.KREDI_TAKSIT)} taksitle geri ödenir (Rektörlük gerekmez).</div>
+    <h3>💰 Mali Politikalar — Kayıt Ücreti ve Burslar</h3>
+    <div class="aciklama">YKS yerleştirmesinden <b>önce</b> ücreti ve burs kontenjanlarını belirle.
+    Tam burslu ücretsiz okur (yüksek sıralı, eğilimli öğrenci çeker), %50 burslu yarısını,
+    ücretli tamamını öder. Adayların yıllık <b>ödeme gücü ~${formatMoney(Math.round(odemeGucu(state)))}</b>
+    (prestijle artar) — ücret bunu aşarsa ücretli kontenjan boş kalır, ücretli öğrenciler huzursuzlaşır.</div>
     <div class="aciklama">
-      ${(['ucretsiz', 'dusuk', 'yuksek'] as const).map((h) => {
-    const ad = h === 'ucretsiz' ? '🆓 Ücretsiz (talep +%10)' : h === 'dusuk' ? `₺ Düşük harç (${BALANCE.HARC_GELIR.dusuk}/öğr/gün)` : `₺₺ Yüksek harç (${BALANCE.HARC_GELIR.yuksek}/öğr/gün, talep -%15)`;
-    return state.harc === h
-      ? `<span class="rozet" style="background:#6b5a1f;color:#ffe9b3">${ad} ✓</span>`
-      : `<button class="eylem" data-action="harc-sec" data-id="${h}">${ad}</button>`;
-  }).join(' ')}
-      <button class="eylem" data-action="burs-toggle">${state.burs ? '🎗️ Burs AÇIK — kapat' : `🎗️ Burs Programı Başlat (${formatMoney(BALANCE.BURS_GIDER)}/öğr/gün)`}</button>
+      🎓 Yıllık kayıt ücreti:
+      <input type="number" class="kontenjan-input" style="width:100px" data-action="ucret-ayarla"
+        value="${state.ucret}" min="0" max="${BALANCE.UCRET_MAX}" step="5000"> ₺
+      ${state.ucret === 0 ? '<span class="rozet" style="background:#2c4a33;color:#9fd3a8">🆓 devlet modeli — talep +%10</span>' : `<span class="rozet">öğrenci başına günde ${formatMoney(Math.round(state.ucret / 40))}</span>`}
+      <br>🎖 Tam burslu: <input type="number" class="kontenjan-input" style="width:56px" data-action="burs-tam"
+        value="${state.bursTam}" min="0" max="100" ${state.ucret === 0 ? 'disabled title="Ücretsiz modelde herkes burslu sayılır"' : ''}>%
+      · 🎗 %50 burslu: <input type="number" class="kontenjan-input" style="width:56px" data-action="burs-yari"
+        value="${state.bursYari}" min="0" max="100" ${state.ucret === 0 ? 'disabled title="Ücretsiz modelde herkes burslu sayılır"' : ''}>%
+      · 💳 Ücretli: <b>%${state.ucret === 0 ? 0 : Math.max(0, 100 - state.bursTam - state.bursYari)}</b>
+      <small>(kontenjan yüzdeleri — burslu öğrenci mutlu okur, zor bırakır; ücretli gelir getirir)</small>
+      <br><small>Şu anki günlük ücret geliri: <b>${formatMoney(Math.round(gunlukUcretGeliri(state)))}</b></small>
     </div>
+    <div class="aciklama">Kredi: acil nakit — %25 faizle günlük
+    ${formatMoney(BALANCE.KREDI_TAKSIT)} taksitle geri ödenir (Rektörlük gerekmez).</div>
     <div class="aciklama">
       🏦 ${state.krediBorcu > 0
     ? `Kalan kredi borcu: <b style="color:#f4a09c">${formatMoney(state.krediBorcu)}</b> (günlük ${formatMoney(BALANCE.KREDI_TAKSIT)} taksit)`
@@ -1282,8 +1371,10 @@ function raporlarGovde(state: GameState): string {
   const bakim = doseliKare * BALANCE.BAKIM_GIDERI_TILE;
   const programGider = (state.mentorluk ? BALANCE.MENTORLUK_GIDER : 0)
     + state.strategies.reduce((t2, id) => t2 + strategyDef(id).gunlukGider, 0);
+  const arastirmaButce = state.projects.reduce((t2, p) => t2 + (p.gunlukButce ?? 0), 0);
   const okulPayi = Math.round(ekosistemGelir * BALANCE.GIRISIM_OKUL_PAYI);
-  const gunlukNet = okulPayi - maasYuku - bakim - programGider;
+  const ucretGelir = Math.round(gunlukUcretGeliri(state));
+  const gunlukNet = okulPayi + ucretGelir - maasYuku - bakim - programGider - arastirmaButce;
   let uluslararasi = 0, bulus = 0;
   for (const p of state.publications) {
     if (p.uluslararasi) uluslararasi++;
@@ -1316,8 +1407,9 @@ function raporlarGovde(state: GameState): string {
       ${satir('Günlük maaş yükü (teşvik + asistanlar dahil)', formatMoney(maasYuku))}
       ${satir('Günlük bakım gideri', `${formatMoney(bakim)} (${doseliKare} kare zemin)`)}
       ${programGider > 0 ? satir('Günlük program giderleri', formatMoney(programGider)) : ''}
+      ${arastirmaButce > 0 ? satir('Günlük araştırma bütçesi', `${formatMoney(arastirmaButce)} (${state.projects.length} aktif proje)`) : ''}
       ${satir('Günlük ekosistem geliri (okul payı)', formatMoney(okulPayi))}
-      ${state.harc !== 'ucretsiz' ? satir('Günlük harç geliri', formatMoney(ogrenciSayisi * BALANCE.HARC_GELIR[state.harc])) : ''}
+      ${ucretGelir > 0 ? satir('Günlük kayıt ücreti geliri', `${formatMoney(ucretGelir)} (yıllık ücret ${formatMoney(state.ucret)}, burslar düşülmüş)`) : ''}
       ${state.krediBorcu > 0 ? satir('🏦 Kalan kredi borcu', `<b style="color:#f4a09c">${formatMoney(state.krediBorcu)}</b> (günlük ${formatMoney(BALANCE.KREDI_TAKSIT)})`) : ''}
       ${satir('Günlük net (ödenekler hariç)', `<b style="color:${gunlukNet >= 0 ? '#9fd3a8' : '#f4a09c'}">${gunlukNet >= 0 ? '+' : ''}${formatMoney(gunlukNet)}</b> <small>· YKS ödeneği ve dönem destekleri ayrıca gelir</small>`)}
     </table>
@@ -1395,7 +1487,8 @@ function yardimGovde(): string {
     <div class="aciklama">
       Akademisyen sayın geçerli ofislerdeki <b>çalışma masası</b> sayısını aşamaz.
       <b>KPSS/İlan</b>: ucuz, tecrübesiz Arş. Gör. <b>Transfer</b>: rakip üniversitelerden yıldız hoca —
-      imza bonusu ister, prestij getirir. Her akademisyeni <b>Bölüm</b> seçicisinden bir bölüme ata.
+      imza bonusu ister, prestij getirir. Bölüm ataması YOKTUR: hoca hangi bölümün müfredatından
+      ders veriyorsa (📅 Program paneli) o bölüme <b>otomatik</b> bağlanır.
       Hocalar ders verip araştırma yaparak XP toplar; makale şartlarını sağlayınca
       Arş. Gör. → Dr. Öğr. Üyesi → Doçent → Profesör yükselir. Aşçı (yemekhane servisi) ve
       temizlikçi (kir) almayı unutma. 😊 <b>Memnuniyet:</b> hocalar kıdemlerine göre maaş bekler;
@@ -1491,7 +1584,9 @@ function yardimGovde(): string {
       bonus verirler; zirvedeki mezunlar bazen <b>isimli bina bağışı</b> yapar (dev para + prestij).
       Rakipler de boş durmaz: skandallar, atılımlar, <b>hoca ayartma girişimleri</b> ve tanıtım
       savaşları dönem başında haberlere düşer. 💰 Strateji panelindeki <b>Mali Politikalar</b>dan
-      harç/burs ayarla, dara düşünce kredi çek.
+      YKS'den önce <b>yıllık kayıt ücreti</b> ve <b>burs kontenjanlarını</b> (🎖 tam / 🎗 %50 / 💳 ücretli)
+      ayarla: burslu öğrenci başarılı ve sadık olur, ücretli gelir getirir — ama ücret adayların
+      ödeme gücünü aşarsa ücretli kontenjan boş kalır. Dara düşünce kredi çek.
       Not: Oyuna <b>0 prestijle</b> başlarsın — ilk yıllarda talep düşüktür, mezun ver ve
       yayın yap ki prestij ve talep büyüsün.
       <br>🌳 <b>Akademik soyağacı:</b> doktora öğrencilerine kayıtta danışman atanır (asistan

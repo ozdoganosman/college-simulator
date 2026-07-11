@@ -77,11 +77,11 @@ const STEPS: TutorialStep[] = [
     kontrol: (s) => ({ tamam: s.departments.length >= 1 }),
   },
   {
-    baslik: 'Akademisyenleri bölüme ata',
-    detay: '<b>👩‍🏫 Kadro</b> panelinde her akademisyenin <b>Bölüm</b> seçicisinden yeni bölümü seç. Bölümde yeterli öğretim üyesi yoksa YÖK kontenjan vermez, öğrenci gelmez!',
+    baslik: 'Hocalar bölüme kendiliğinden bağlanır',
+    detay: 'Bölüm açılınca müfredatından ders veren hocalar o bölüme <b>otomatik</b> bağlanır — ayrıca atama yok. <b>👩‍🏫 Kadro</b> panelindeki Bölüm sütunundan kontrol et; "—" görünen hocaya <b>📅 Program</b> panelinden ders dağıt. Bölümde yeterli öğretim üyesi yoksa YÖK kontenjan vermez!',
     kontrol: (s) => {
       const n = s.agents.filter((a) => a.kind === 'akademisyen' && a.deptId !== -1).length;
-      return { tamam: n >= 2, ilerleme: `${Math.min(n, 2)}/2 atanmış` };
+      return { tamam: n >= 2, ilerleme: `${Math.min(n, 2)}/2 bağlandı` };
     },
   },
   {

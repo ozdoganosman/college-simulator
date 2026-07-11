@@ -121,7 +121,7 @@ function buildToolbar(getState: () => GameState, ui: UIState): void {
   btn('🎓 Bölümler', 'panel-bolumler', () => openPanel('bolumler'),
     'Açık bölümler, kontenjanlar, YL/doktora programları');
   btn('👩‍🏫 Kadro', 'panel-kadro', () => openPanel('kadro'),
-    'Akademisyen al (KPSS/transfer), bölüme ata, personel yönet');
+    'Akademisyen al (KPSS/transfer), moral ve zam yönet — bölüm ataması derslerden otomatik');
   btn('📅 Program', 'panel-program', () => openPanel('program'),
     'Hocalara yıllık ders seç → açık derslerle bölüm aç · asistan ata');
   btn('🔬 Araştırma', 'panel-arastirma', () => openPanel('arastirma'),
@@ -321,6 +321,10 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
       .map((k) => `${NITELIK_META[k].emoji} ${Math.round(a.nitelik[k])}`)
       .join(' · ');
     html += cip(nitelikler);
+    if (state.ucret > 0) {
+      html += cip(a.burs >= 100 ? '🎖 Tam burslu' : a.burs >= 50 ? '🎗 %50 burslu'
+        : `💳 Ücretli (${formatMoney(state.ucret)}/yıl)`);
+    }
     html += cip(`💰 Sermaye: ${formatMoney(Math.round(a.sermaye))}`);
     if (hoca && hoca.kind === 'akademisyen') {
       html += cip(`🧑‍🔬 Asistanlık: ${RANK_LABEL[hoca.rank]} ${hoca.ad}`);

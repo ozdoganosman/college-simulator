@@ -190,6 +190,8 @@ export interface Student extends AgentBase {
   nitelik: Record<Nitelik, number>;
   /** sermayedar özelliği: öğrencinin girişimlerinden biriktirdiği para ₺ */
   sermaye: number;
+  /** burs oranı: 100 tam burslu, 50 yarı, 0 ücretli — kayıt ücretinden düşülür */
+  burs: number;
 }
 
 export const LEVEL_LABEL: Record<StudentLevel, string> = {
@@ -290,6 +292,12 @@ export interface YerlestirmeSatir {
   doldu: boolean;
   /** öğretim üyesi yetersizliğinden kontenjan verilmedi */
   iptal: boolean;
+  /** burs dağılımı: tam burslu / %50 burslu / ücretli yerleşen */
+  tam: number;
+  yari: number;
+  ucretli: number;
+  /** derslik koltuğu yetmediği için geri çevrilen istekli aday */
+  geriCevrilen: number;
 }
 
 export interface YerlestirmeSonuc {
@@ -297,6 +305,10 @@ export interface YerlestirmeSonuc {
   toplamYerlesen: number;
   odenek: number;
   satirlar: YerlestirmeSatir[];
+  /** yıllık kayıt ücreti (tören metni için) */
+  ucret: number;
+  /** tercih anketi: öğrenciler neden bizi seçti (neden + yüzde) */
+  anket: { neden: string; oran: number }[];
 }
 
 // --- Rakip üniversiteler / sıralama ------------------------------------------
@@ -378,6 +390,8 @@ export interface ResearchProject {
   hedefPuan: number;
   birikenPuan: number;
   maliyet: number;      // başlatma maliyeti (ödendi)
+  /** aktif olduğu her gün kesilen araştırma bütçesi ₺ */
+  gunlukButce: number;
   baslamaGunu: number;
 }
 
@@ -515,10 +529,12 @@ export interface GameState {
   basarimlar: string[];
   /** üniversite vizyonu (birbirini dışlayan strateji ekseni) */
   vizyon: Vizyon | null;
-  /** harç politikası: gelir ↔ talep/mutluluk dengesi */
-  harc: 'ucretsiz' | 'dusuk' | 'yuksek';
-  /** burs programı: günlük gider, mutluluk + bırakma koruması */
-  burs: boolean;
+  /** yıllık kayıt ücreti ₺ — 0 = devlet modeli (herkes ücretsiz okur, talep +%10) */
+  ucret: number;
+  /** kontenjanın %'si tam burslu (yüksek sıralı aday çeker) */
+  bursTam: number;
+  /** kontenjanın %'si %50 burslu */
+  bursYari: number;
   /** kalan kredi borcu ₺ (günlük taksitle ödenir) */
   krediBorcu: number;
   /** mütevelli heyetindeki mezun id'leri (en çok 3) — pasif bonuslar */

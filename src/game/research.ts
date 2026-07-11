@@ -94,7 +94,7 @@ export function startProject(
 
   const akademisyenVar = state.agents.some((a) => a.kind === 'akademisyen' && a.deptId === deptId);
   if (!akademisyenVar) {
-    notify(state, `${def.ad} bölümünde akademisyen yok — önce kadro atayın.`, 'kotu');
+    notify(state, `${def.ad} bölümünde akademisyen yok — 📅 Program panelinden bu bölümün derslerine hoca atayın (aidiyet derslerden türer).`, 'kotu');
     return false;
   }
 
@@ -107,7 +107,9 @@ export function startProject(
   const maliyet = Math.round(
     BALANCE.PROJE_MALIYET_TABAN * tipMeta.maliyetCarpan * randRange(state, 0.8, 1.4),
   );
-  if (!spend(state, maliyet, 'araştırma projesi')) return false;
+  if (!spend(state, maliyet, 'araştırma projesi (başlangıç maliyeti)')) return false;
+  // günlük bütçe: proje sürdükçe her gün kesilir (ekonomide ayrı kalem)
+  const gunlukButce = Math.round(BALANCE.PROJE_GUNLUK_BUTCE * tipMeta.maliyetCarpan);
 
   // lider bölümden olmalı (değilse lidersiz başlar — risk tam işler)
   const lider = state.agents.find(
@@ -126,12 +128,13 @@ export function startProject(
     hedefPuan: Math.round(BALANCE.PROJE_HEDEF_PUAN * randRange(state, 0.7, 1.3)),
     birikenPuan: 0,
     maliyet,
+    gunlukButce,
     baslamaGunu: state.gun,
   };
   state.projects.push(proje);
   notify(
     state,
-    `${tipMeta.emoji} ${def.ad}: "${baslik}" başladı (${tipMeta.ad}${lider ? `, lider: ${lider.ad}` : ', lidersiz — risk tam'}, başarısızlık %${Math.round(projeRiski(state, proje) * 100)})`,
+    `${tipMeta.emoji} ${def.ad}: "${baslik}" başladı (${tipMeta.ad}${lider ? `, lider: ${lider.ad}` : ', lidersiz — risk tam'}, başarısızlık %${Math.round(projeRiski(state, proje) * 100)}) — başlangıç ${formatMoney(maliyet)} + bütçe ${formatMoney(gunlukButce)}/gün`,
     'bilgi',
   );
   return true;

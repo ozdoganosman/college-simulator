@@ -226,8 +226,37 @@ export function tumunuOtoSec(state: GameState): void {
   akilliOtoSec(state);
 }
 
+/**
+ * Hoca bölüm aidiyeti VERDİĞİ DERSLERDEN türetilir: müfredatı hocanın ders
+ * seçimiyle en çok çakışan açık bölüm. Oyuncu ayrıca "bölüme atamaz" — ders
+ * dağıtmak yeter. Eşitlikte mevcut bölüm korunur; hiç çakışma yoksa (ya da
+ * hoca ders vermiyorsa) eski aidiyet durur, bölüm silindiyse -1 olur.
+ */
+export function hocaBolumleriniGuncelle(state: GameState): void {
+  const acikBolumler = state.departments.map((d) => ({
+    id: d.id,
+    dersler: new Set(deptDef(d.defId).dersler),
+  }));
+  for (const a of akademisyenler(state)) {
+    const liste = a.verdigiDersler ?? [];
+    let enIyi = 0;
+    let secilen = -1;
+    for (const b of acikBolumler) {
+      let n = 0;
+      for (const dersId of liste) if (b.dersler.has(dersId)) n++;
+      if (n > enIyi || (n === enIyi && n > 0 && b.id === a.deptId)) {
+        enIyi = n;
+        secilen = b.id;
+      }
+    }
+    if (enIyi > 0) a.deptId = secilen;
+    else if (a.deptId !== -1 && !state.departments.some((d) => d.id === a.deptId)) a.deptId = -1;
+  }
+}
+
 /** Programı sıfırdan kurar — gün sonunda ve kadro/ders değişince çağrılır. */
 export function rebuildDersProgrami(state: GameState): void {
+  hocaBolumleriniGuncelle(state); // aidiyet derslerden türesin, sonra program kurulsun
   const slots: DersSlot[] = [];
   const gunlukBlok = new Map<number, number>(); // academicId -> bugün verdiği blok
   const tumHocalar = akademisyenler(state);

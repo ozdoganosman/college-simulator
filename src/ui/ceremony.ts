@@ -114,13 +114,18 @@ function open(state: GameState): void {
     let durum: string;
     if (s.iptal) {
       durum = '<span class="toren-rozet iptal">KONTENJAN VERİLMEDİ</span>';
+    } else if ((s.geriCevrilen ?? 0) > 0) {
+      durum = `<span class="toren-rozet iptal" title="İstekli aday vardı ama derslik koltuğu yetmedi — derslik/sıra ekle!">DERSLİK YETMEDİ — ${s.geriCevrilen} ADAY ÇEVRİLDİ</span>`;
     } else if (s.doldu) {
       durum = '<span class="toren-rozet doldu">KONTENJAN DOLDU! 🎉</span>';
     } else if (s.yerlesen === 0) {
       durum = '<span class="toren-rozet bos">HİÇ YERLEŞEN YOK 😢</span>';
     } else {
-      durum = `<span class="toren-rozet yari">${s.kontenjan - s.yerlesen} KONTENJAN BOŞ</span>`;
+      durum = `<span class="toren-rozet yari" title="Talep bu kadarını doldurdu — prestij, cazibe ve burs talebi büyütür">${s.kontenjan - s.yerlesen} KONTENJAN BOŞ</span>`;
     }
+    const bursKirilim = y.ucret > 0 && s.yerlesen > 0
+      ? `<small title="Burs dağılımı: tam burslu ücretsiz okur, %50 yarısını, ücretli tamamını öder">🎖 ${s.tam ?? 0} tam · 🎗 ${s.yari ?? 0} %50 · 💳 ${s.ucretli ?? 0} ücretli</small>`
+      : '';
     return `
       <div class="toren-satir" style="animation-delay:${gecikme}s">
         <span class="toren-renk" style="background:${s.renk}"></span>
@@ -128,6 +133,7 @@ function open(state: GameState): void {
         <span class="toren-veri">
           <b class="sayac" data-hedef="${s.yerlesen}" data-gecikme="${gecikme}">0</b>/${s.kontenjan} yerleşti
           <small>talep: ${s.talep.toLocaleString('tr-TR')}</small>
+          ${bursKirilim}
         </span>
         <span class="toren-veri">
           <small>En yüksek sıra</small><b>${sira(s.tavanSira)}</b>
@@ -141,6 +147,18 @@ function open(state: GameState): void {
 
   const ozetGecikme = 1.4 + y.satirlar.length * 0.55 + 0.4;
 
+  // Tercih anketi: öğrenciler neden bizi seçti (gerçek talep çarpanlarından)
+  const anket = (y.anket ?? []).length > 0 && y.toplamYerlesen > 0
+    ? `<div class="toren-ozet" style="animation-delay:${ozetGecikme}s;text-align:left;max-width:520px;margin:8px auto 0">
+        <div style="text-align:center;margin-bottom:6px"><b>🗳️ Yeni öğrenciler neden bizi seçti?</b></div>
+        ${(y.anket ?? []).map((a2) => `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:13px">
+          <span style="flex:1">${a2.neden}</span>
+          <span style="width:130px;background:#2c3140;border-radius:4px;height:8px;overflow:hidden"><span style="display:block;width:${a2.oran}%;height:100%;background:#e8c66a"></span></span>
+          <b style="width:38px;text-align:right">%${a2.oran}</b>
+        </div>`).join('')}
+      </div>`
+    : '';
+
   root.innerHTML = `
     <div class="toren-perde">
       ${konfetiHtml(y.toplamYerlesen > 0 ? 70 : 0, ozetGecikme)}
@@ -151,7 +169,9 @@ function open(state: GameState): void {
         <div class="toren-ozet" style="animation-delay:${ozetGecikme}s">
           Üniversitemize bu yıl <b class="sayac" data-hedef="${y.toplamYerlesen}" data-gecikme="${ozetGecikme}">0</b> öğrenci yerleşti
           · Devlet ödeneği: <b>${formatMoney(y.odenek)}</b>
+          ${y.ucret > 0 ? ` · Kayıt ücreti: <b>${formatMoney(y.ucret)}/yıl</b>` : ' · <b>Ücretsiz eğitim</b>'}
         </div>
+        ${anket}
         <button class="menu-btn toren-btn" id="toren-kapat" style="animation-delay:${ozetGecikme + 0.5}s">
           🎓 Dersler Başlasın!
         </button>

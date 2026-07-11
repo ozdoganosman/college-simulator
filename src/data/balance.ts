@@ -18,10 +18,15 @@ export const BALANCE = {
   PERSONEL_ALIM: { asci: 5000, temizlikci: 3000 }, // ilan maliyeti
   ASISTAN_MAAS: 500,           // asistan atanan YL/doktora öğrencisinin günlük maaşı ₺
 
-  // Mali politikalar
-  HARC_GELIR: { ucretsiz: 0, dusuk: 50, yuksek: 120 },   // öğrenci başına günlük ₺
-  HARC_TALEP: { ucretsiz: 1.1, dusuk: 1.0, yuksek: 0.85 }, // YKS talep çarpanı
-  BURS_GIDER: 25,             // öğrenci başına günlük ₺ (mutluluk +1, bırakma yarıya)
+  // Mali politikalar — kayıt ücreti + burs kontenjanları (vakıf üniversitesi modeli)
+  UCRET_VARSAYILAN: 20000,    // yeni oyunda yıllık kayıt ücreti ₺ (0 = devlet modeli)
+  UCRET_MAX: 200000,          // panel üst sınırı ₺/yıl
+  ODEME_GUCU_TABAN: 30000,    // adayların yıllık ödeme gücü tabanı ₺
+  ODEME_GUCU_PRESTIJ: 400,    // prestij puanı başına ödeme gücü artışı ₺
+  BURS_TAM_VARSAYILAN: 10,    // kontenjanın %'si tam burslu
+  BURS_YARI_VARSAYILAN: 20,   // kontenjanın %'si %50 burslu
+  BURS_EGILIM_TAM: 12,        // tam burslu öğrenci eğilim bonusu (yüksek sıradan gelir)
+  BURS_EGILIM_YARI: 6,
   KREDI_FAIZ: 1.25,           // çekilen tutarın geri ödeme çarpanı
   KREDI_TAKSIT: 6000,         // günlük geri ödeme ₺
 
@@ -31,6 +36,7 @@ export const BALANCE = {
 
   // Araştırma
   PROJE_MALIYET_TABAN: 40000,
+  PROJE_GUNLUK_BUTCE: 1500,    // aktif proje başına günlük bütçe ₺ (tip çarpanıyla)
   PROJE_HEDEF_PUAN: 1000,      // taban; rastgele ±%30
   ARASTIRMA_HIBE: 60000,       // proje tamamlanınca taban hibe
   ULUSLARARASI_HIBE_CARPAN: 2,

@@ -30,6 +30,22 @@ export function ogrenciGunlukKazanc(state: GameState, s: Student): number {
   return Math.round(kazanc);
 }
 
+/** Günlük kayıt ücreti geliri ₺ — burs oranı düşülür (raporlar için de kullanılır). */
+export function gunlukUcretGeliri(state: GameState): number {
+  if (state.ucret <= 0) return 0;
+  const gunluk = state.ucret / 40; // 1 yıl = 40 gün
+  let toplam = 0;
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci') toplam += gunluk * (1 - (a.burs ?? 100) / 100);
+  }
+  return toplam;
+}
+
+/** Adayların yıllık ödeme gücü ₺ — prestijli okula daha yüksek ücret ödenir. */
+export function odemeGucu(state: GameState): number {
+  return BALANCE.ODEME_GUCU_TABAN + state.prestij * BALANCE.ODEME_GUCU_PRESTIJ;
+}
+
 export function dailyEconomy(state: GameState): void {
   const tesvik = state.strategies.includes('tesvik');
 
@@ -75,10 +91,13 @@ export function dailyEconomy(state: GameState): void {
     }
   }
 
-  // Harç geliri (politikaya göre) ve burs gideri
-  const harcGelir = ogrenciSayisi * BALANCE.HARC_GELIR[state.harc];
-  if (harcGelir > 0) earn(state, harcGelir);
-  const bursGider = state.burs ? ogrenciSayisi * BALANCE.BURS_GIDER : 0;
+  // Kayıt ücreti geliri: burssuz/yarı burslu öğrenciler öder (yıl = 40 gün)
+  const ucretGelir = Math.round(gunlukUcretGeliri(state));
+  if (ucretGelir > 0) earn(state, ucretGelir);
+
+  // Aktif araştırma projelerinin günlük bütçesi
+  let arastirmaButce = 0;
+  for (const p of state.projects) arastirmaButce += p.gunlukButce ?? 0;
 
   // Kredi taksiti: borç bitene dek günlük kesinti
   let taksit = 0;
@@ -88,13 +107,13 @@ export function dailyEconomy(state: GameState): void {
     if (state.krediBorcu === 0) notify(state, '🏦 Kredi borcu kapandı!', 'iyi');
   }
 
-  const toplam = maas + bakim + politikaGideri + mentorlukGider + malzeme + bursGider + taksit;
+  const toplam = maas + bakim + politikaGideri + mentorlukGider + malzeme + arastirmaButce + taksit;
   if (toplam <= 0) return;
 
   state.para -= toplam; // borca girebilir — spend kullanma
 
   if (state.gun % 5 === 0) {
-    notify(state, `Günlük gider: ${formatMoney(toplam)} (maaş ${formatMoney(maas)}, bakım ${formatMoney(bakim)})`, 'bilgi');
+    notify(state, `Günlük gider: ${formatMoney(toplam)} (maaş ${formatMoney(maas)}, bakım ${formatMoney(bakim)}${arastirmaButce > 0 ? `, araştırma ${formatMoney(arastirmaButce)}` : ''})`, 'bilgi');
   }
   if (state.para < 0) {
     addPrestij(state, -1);
