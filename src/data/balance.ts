@@ -63,6 +63,11 @@ export const BALANCE = {
   KUTUPHANE_ARASTIRMA_BONUS: 0.1,  // seviye başına
   KUTUPHANE_OGRENME_BONUS: 0.05,
 
+  // Kitap koleksiyonları: alan başına seviye 0-4, raflara sığmalı
+  KITAP_MALIYET: [50_000, 100_000, 180_000, 300_000], // seviye 1-4 maliyetleri
+  KUTUPHANE_CALISMA_TABAN: 0.35,  // kitapsız alanda kütüphane çalışma hızı (yavaş)
+  KITAP_CALISMA_BONUS: 0.35,      // koleksiyon seviyesi başına ek çalışma hızı
+
   // Zaman
   DAKIKA_SANIYE: 20,           // 1x hızda saniye başına oyun dakikası (1 gün ≈ 72 sn)
 } as const;

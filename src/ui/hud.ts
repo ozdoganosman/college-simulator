@@ -94,6 +94,7 @@ function buildToolbar(getState: () => GameState, ui: UIState): void {
   btn('👩‍🏫 Kadro', 'panel-kadro', () => openPanel('kadro'));
   btn('📅 Program', 'panel-program', () => openPanel('program'));
   btn('🔬 Araştırma', 'panel-arastirma', () => openPanel('arastirma'));
+  btn('📚 Kütüphane', 'panel-kutuphane', () => openPanel('kutuphane'));
   btn('♟️ Strateji', 'panel-strateji', () => openPanel('strateji'));
   btn('📊 Raporlar', 'panel-raporlar', () => openPanel('raporlar'));
   btn('❓ Nasıl Oynanır', 'panel-yardim', () => openPanel('yardim'));

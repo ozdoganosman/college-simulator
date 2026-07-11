@@ -12,7 +12,7 @@
  */
 import {
   ALAN_META, AcademicRank, Alan, GameState, LEVEL_LABEL, NITELIK_META, Nitelik, RANK_LABEL,
-  RoomType, StrategyDef, Student, StudentLevel,
+  RoomType, StrategyDef, Student, StudentLevel, tileIndex,
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
 import {
@@ -32,14 +32,18 @@ import {
 } from '../game/academics';
 import { cancelProject, startProject } from '../game/research';
 import { ogrenciGunlukKazanc } from '../game/economy';
+import {
+  KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
+  toplamKoleksiyon,
+} from '../game/library';
 import { hireStaff, removeAgent } from '../game/agents';
 import { BALANCE } from '../data/balance';
-import { DEPT_DEFS, deptDef } from '../data/departments';
+import { DEPT_DEFS, bolumBaskinAlan, deptDef } from '../data/departments';
 import { ROOM_DEFS, ROOM_LIST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
 import { STRATEGY_DEFS, strategyDef } from '../data/strategies';
 
-export type PanelName = 'bolumler' | 'kadro' | 'program' | 'arastirma' | 'strateji' | 'raporlar' | 'yardim';
+export type PanelName = 'bolumler' | 'kadro' | 'program' | 'arastirma' | 'kutuphane' | 'strateji' | 'raporlar' | 'yardim';
 
 let getStateRef: (() => GameState) | null = null;
 let acik: { name: PanelName; el: HTMLDivElement } | null = null;
@@ -49,6 +53,7 @@ const PANEL_BASLIK: Record<PanelName, string> = {
   kadro: '👩‍🏫 Kadro',
   program: '📅 Ders Programı',
   arastirma: '🔬 Araştırma',
+  kutuphane: '📚 Kütüphane',
   strateji: '♟️ Strateji',
   raporlar: '📊 Raporlar',
   yardim: '❓ Nasıl Oynanır',
@@ -124,6 +129,7 @@ function render(state: GameState): void {
     case 'kadro': govde = kadroGovde(state); break;
     case 'program': govde = programGovde(state); break;
     case 'arastirma': govde = arastirmaGovde(state); break;
+    case 'kutuphane': govde = kutuphaneGovde(state); break;
     case 'strateji': govde = stratejiGovde(state); break;
     case 'raporlar': govde = raporlarGovde(state); break;
     case 'yardim': govde = yardimGovde(); break;
@@ -199,6 +205,9 @@ function onPanelClick(e: Event): void {
       else notify(state, `🎯 ${kalan.length} ders atanamadı: hocaların ders kotaları dolu (kadroyu büyüt ya da ders çıkar).`, 'kotu');
       break;
     }
+    case 'kitap-al':
+      kitapAl(state, id as Alan);
+      break;
     case 'proje-baslat':
       startProject(state, Number(id));
       break;
@@ -501,6 +510,82 @@ function kadroGovde(state: GameState): string {
       ${personelSatir('asci', 'Aşçı', asci)}
       ${personelSatir('temizlikci', 'Temizlikçi', temizlikci)}
     </table>`;
+}
+
+// --- Kütüphane -----------------------------------------------------------------
+
+function kutuphaneGovde(state: GameState): string {
+  const kutuphaneler = validRooms(state, 'kutuphane');
+  const raf = kitaplikSayisi(state);
+  const kapasite = koleksiyonKapasitesi(state);
+  const kullanilan = toplamKoleksiyon(state);
+
+  // şu an kütüphanede çalışan öğrenciler
+  const odaIds = new Set(kutuphaneler.map((r) => r.id));
+  let calisan = 0;
+  for (const a of state.agents) {
+    if (a.kind !== 'ogrenci' || !a.onCampus || a.activity !== 'arastiriyor') continue;
+    const rid = state.roomAt[tileIndex(Math.round(a.x), Math.round(a.y))];
+    if (rid >= 0 && odaIds.has(rid)) calisan++;
+  }
+
+  let html = `<div class="aciklama">Öğrenciler boş vakitlerinde ve sıra bulamadıklarında
+    kütüphanede çalışır — <b>çalışma hızını bölümlerinin alanındaki kitap koleksiyonu belirler</b>:
+    kitapsız alanda yavaş (%${Math.round(BALANCE.KUTUPHANE_CALISMA_TABAN * 100)}), her koleksiyon
+    seviyesi +%${Math.round(BALANCE.KITAP_CALISMA_BONUS * 100)} hız. Çalışma; mezuniyet ilerlemesi,
+    not ortalaması ve alan niteliği kazandırır. Her koleksiyon seviyesi <b>${RAF_PER_SEVIYE} kitaplık
+    rafı</b> ister.</div>`;
+
+  if (kutuphaneler.length === 0) {
+    html += `<div class="aciklama">⚠ Geçerli kütüphane yok — <b>🏗️ Hazır Bina → Kütüphane</b> ile
+      tek tıkla kurabilirsin.</div>`;
+  }
+
+  html += `<table>
+    <tr><td>Geçerli kütüphane</td><td>${kutuphaneler.length}</td></tr>
+    <tr><td>Kitaplık rafı</td><td>${raf}</td></tr>
+    <tr><td>Koleksiyon kapasitesi</td><td>${kullanilan} / ${kapasite} seviye ${kullanilan >= kapasite ? '<span class="rozet" style="background:#8f3535">raf ekle</span>' : ''}</td></tr>
+    <tr><td>Kütüphane seviyesi (genel bonus)</td><td>${libraryLevel(state)} / 3</td></tr>
+    <tr><td>Şu an çalışan öğrenci</td><td>${calisan}</td></tr>
+  </table>
+
+  <h3>📚 Kitap Koleksiyonları</h3>
+  <table>
+    <tr><th>Alan</th><th>Seviye</th><th>Çalışma hızı</th><th>Bölümler</th><th></th></tr>`;
+
+  const alanBolum = new Map<Alan, number>();
+  for (const d of state.departments) {
+    const alan = bolumBaskinAlan(d.defId);
+    alanBolum.set(alan, (alanBolum.get(alan) ?? 0) + 1);
+  }
+
+  for (const alan of Object.keys(ALAN_META) as Alan[]) {
+    const seviye = state.kitapKoleksiyon[alan] ?? 0;
+    const hiz = Math.round(kitapCarpani(state, alan) * 100);
+    const dolu = seviye >= KITAP_MAX;
+    const maliyet = dolu ? 0 : BALANCE.KITAP_MALIYET[seviye];
+    const nedenler: string[] = [];
+    if (!dolu && kullanilan + 1 > kapasite) nedenler.push(`Raf yetersiz (${RAF_PER_SEVIYE} kitaplık ekle)`);
+    if (!dolu && state.para < maliyet) nedenler.push('Bütçe yetersiz');
+    const cubuk = '📗'.repeat(seviye) + '▫️'.repeat(KITAP_MAX - seviye);
+    html += `<tr>
+      <td><b style="color:${ALAN_META[alan].renk}">${ALAN_META[alan].emoji} ${ALAN_META[alan].ad}</b><br><small>${ALAN_META[alan].tanim}</small></td>
+      <td title="${seviye}/${KITAP_MAX}">${cubuk}</td>
+      <td><b style="color:${hiz >= 100 ? '#9fd3a8' : hiz >= 70 ? '#f0c674' : '#f4a09c'}">%${hiz}</b></td>
+      <td>${alanBolum.get(alan) ?? 0} bölüm</td>
+      <td>${dolu ? '<span class="gerek">✔ tam</span>'
+    : `<button class="eylem" data-action="kitap-al" data-id="${alan}"
+        ${nedenler.length > 0 ? `disabled title="${esc(nedenler.join(', '))}"` : `title="Seviye ${seviye + 1} koleksiyon"`}>
+        Kitap Al (${formatMoney(maliyet)})</button>`}</td>
+    </tr>`;
+  }
+  html += '</table>';
+
+  html += `<div class="aciklama" style="margin-top:8px">💡 Bölümlerinin baskın alanına yatırım yap:
+    "Bölümler" sütunu hangi alanda kaç bölümün olduğunu gösterir. Kitaplık rafı eklemek genel
+    kütüphane seviyesini de (araştırma + öğrenme bonusu) yükseltir.</div>`;
+
+  return html;
 }
 
 // --- Araştırma -----------------------------------------------------------------
@@ -861,6 +946,9 @@ function yardimGovde(): string {
       <b>hibe</b> + <b>makale</b> (🌍 uluslararası olabilir) + bazen 💥 <b>çığır açan buluş</b>
       (patent geliri) ve 🏆 <b>bilim ödülü</b>. Projeler otomatik zincirlenir; istemezsen iptal et.
       Kütüphanedeki <b>kitaplık</b> sayısı kütüphane seviyesini (0-3) belirler: araştırma ve öğrenme hızı artar.
+      📚 <b>Kütüphane panelinden</b> alan bazlı <b>kitap koleksiyonları</b> satın al: kütüphanede
+      çalışan öğrenci, bölümünün alanında kitap yoksa yavaş, koleksiyon büyüdükçe hızlı gelişir
+      (ilerleme + not + nitelik). Her koleksiyon seviyesi 3 kitaplık rafı ister.
     </div>
 
     <h3>6) Strateji ve prestij</h3>

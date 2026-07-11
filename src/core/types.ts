@@ -382,6 +382,8 @@ export interface GameState {
 
   /** satın alınmış strateji id'leri */
   strategies: string[];
+  /** kütüphane kitap koleksiyonu seviyeleri (alan başına 0-4) */
+  kitapKoleksiyon: Record<Alan, number>;
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */

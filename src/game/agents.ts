@@ -48,6 +48,8 @@ import {
 import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
 import { courseDef, dersEtki } from '../data/courses';
 import { asistanSayilari, yukVerimi } from './schedule';
+import { kitapCarpani } from './library';
+import { bolumBaskinAlan } from '../data/departments';
 import { findPath } from '../core/pathfinding';
 import { libraryLevel, roomCenter, walkable } from '../core/grid';
 import { BALANCE } from '../data/balance';
@@ -145,6 +147,10 @@ interface Ctx {
   bankoOf: Map<number, PlacedObject>;
   labs: Room[];
   kutuphaneler: Room[];
+  /** geçerli kütüphane oda id'leri (çalışma hızı kontrolü) */
+  kutuphaneIds: Set<number>;
+  /** deptId -> bölümün baskın alanı (kütüphane çalışması hangi alanda gelişir) */
+  deptAlan: Map<number, import('../core/types').Alan>;
   yemekhaneler: Room[];
   kantinler: Room[];
   /** deptId -> bölüme atanmış geçerli derslik/amfiler */
@@ -283,6 +289,9 @@ function buildCtx(state: GameState, dk: number): Ctx {
     liste.forEach((a, i) => academicIndex.set(a.id, i));
   }
 
+  const deptAlan = new Map<number, import('../core/types').Alan>();
+  for (const d of state.departments) deptAlan.set(d.id, bolumBaskinAlan(d.defId));
+
   return {
     dk,
     ogrenmeCarpan: 1 + libraryLevel(state) * BALANCE.KUTUPHANE_OGRENME_BONUS,
@@ -305,6 +314,8 @@ function buildCtx(state: GameState, dk: number): Ctx {
     bankoOf,
     labs,
     kutuphaneler,
+    kutuphaneIds: new Set(kutuphaneler.map((r) => r.id)),
+    deptAlan,
     yemekhaneler,
     kantinler,
     deptClassrooms,
@@ -511,6 +522,17 @@ function tryResearch(state: GameState, s: Student, ctx: Ctx, bitis: number): boo
   return true;
 }
 
+/** Kütüphanede ders çalışmaya git (lisans dahil herkes). */
+function tryKutuphane(state: GameState, s: Student, ctx: Ctx, bitis: number): boolean {
+  if (ctx.kutuphaneler.length === 0) return false;
+  const oda = pick(state, ctx.kutuphaneler);
+  const hedef = randomRoomTile(state, oda);
+  if (!hedef || !goTo(state, s, hedef)) return false;
+  s.activity = 'arastirmaya_gidiyor';
+  s.activityUntil = bitis;
+  return true;
+}
+
 function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): void {
   const dk = ctx.dk;
   const n = s.needs;
@@ -526,9 +548,14 @@ function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
     if (s.level !== 'lisans' && chance(state, 0.5)) {
       if (tryResearch(state, s, ctx, bitis)) return;
     }
+    // kitaplı kütüphane cazibesi: alanının koleksiyonu varsa bazı öğrenciler
+    // dersi kütüphane çalışmasına tercih eder (kitap yatırımı karşılığını verir)
+    const alan = ctx.deptAlan.get(s.deptId);
+    if (alan && (state.kitapKoleksiyon[alan] ?? 0) > 0 && chance(state, 0.2)
+        && tryKutuphane(state, s, ctx, bitis)) return;
     if (tryClass(state, s, ctx, blok)) return;
     if (s.level !== 'lisans' && tryResearch(state, s, ctx, bitis)) return;
-    // sıra yok: bekle / gezin
+    if (tryKutuphane(state, s, ctx, bitis)) return; // sıra yok: kütüphanede çalış
   }
 
   // 3) öğle yemeği
@@ -536,9 +563,10 @@ function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
     if (trySatisfy(state, s, ctx, 'aclik')) return;
   }
 
-  // 5) yüksek (kritik olmayan) ihtiyaç ya da gezinme
+  // 5) yüksek (kritik olmayan) ihtiyaç, kendi kendine kütüphane çalışması ya da gezinme
   const yuksek = enBuyukIhtiyac(n, 60);
   if (yuksek && trySatisfy(state, s, ctx, yuksek)) return;
+  if (chance(state, 0.3) && tryKutuphane(state, s, ctx, dk + 90)) return;
   idleWander(state, s, dtMin);
 }
 
@@ -634,11 +662,19 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       else if (s.path.length === 0) s.activity = 'arastiriyor';
       break;
     case 'arastiriyor': {
-      // lisansüstü öğrenci için araştırma da tez ilerlemesidir
-      const tez = (s.egilim / 100) * ctx.ogrenmeCarpan;
+      // kütüphane/lab çalışması: kütüphanedeyse hız, bölüm alanının KİTAP
+      // koleksiyonuna bağlıdır — kitapsız alanda yavaş, koleksiyon büyüdükçe hızlı
+      const rid = state.roomAt[tileIndex(Math.round(s.x), Math.round(s.y))];
+      const kutuphanede = rid >= 0 && ctx.kutuphaneIds.has(rid);
+      const alan = ctx.deptAlan.get(s.deptId);
+      const kitap = kutuphanede && alan ? kitapCarpani(state, alan) : 1;
+      const tez = kitap * (s.egilim / 100) * ctx.ogrenmeCarpan;
       s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * tez, 0, 100);
       s.kaliteToplam += 1.1 * tez * dtMin;
       s.dersDakika += dtMin;
+      if (kutuphanede && alan) {
+        s.nitelik[alan] = clamp(s.nitelik[alan] + (1.4 / BLOK_SURE) * dtMin * tez, 0, 100);
+      }
       if (s.activityUntil !== -1 && dk >= s.activityUntil) finishActivity(state, s, ctx);
       break;
     }

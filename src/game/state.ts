@@ -33,6 +33,7 @@ export function createInitialState(): GameState {
     kpssPool: [],
     transferPool: [],
     strategies: [],
+    kitapKoleksiyon: { muhendis: 0, artist: 0, filozof: 0, pratik: 0 },
 
     nextId: 1,
     insaatSurumu: 0,
@@ -103,6 +104,9 @@ export function loadGame(): GameState | null {
 /** Eski kayıtlara sonradan eklenen alanları tamamlar. */
 export function eskiKayitUyumu(s: GameState): void {
   if (!Array.isArray(s.dersProgrami)) s.dersProgrami = [];
+  if (!s.kitapKoleksiyon || typeof s.kitapKoleksiyon !== 'object') {
+    s.kitapKoleksiyon = { muhendis: 0, artist: 0, filozof: 0, pratik: 0 };
+  }
   // katalogdan kalkan bölüm/dersler kayıttan da temizlenir
   const bolumVar = new Set(DEPT_DEFS.map((d) => d.id));
   const silinen = new Set(s.departments.filter((d) => !bolumVar.has(d.defId)).map((d) => d.id));

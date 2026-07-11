@@ -1,4 +1,5 @@
-import type { DeptDef } from '../core/types';
+import type { Alan, DeptDef } from '../core/types';
+import { courseDef } from './courses';
 
 /**
  * Bölüm kataloğu: 64 bölüm — 44 lisans (8'er ders) + 20 önlisans (4'er ders).
@@ -80,4 +81,15 @@ export function deptDef(defId: string): DeptDef {
   const d = DEPT_DEFS.find((d) => d.id === defId);
   if (!d) throw new Error('Bilinmeyen bölüm: ' + defId);
   return d;
+}
+
+/** Bölümün baskın alanı: müfredat derslerinin çoğunluğu hangi alandansa o. */
+export function bolumBaskinAlan(defId: string): Alan {
+  const sayi: Record<Alan, number> = { muhendis: 0, artist: 0, filozof: 0, pratik: 0 };
+  for (const dersId of deptDef(defId).dersler) sayi[courseDef(dersId).birincil]++;
+  let en: Alan = 'muhendis';
+  for (const alan of Object.keys(sayi) as Alan[]) {
+    if (sayi[alan] > sayi[en]) en = alan;
+  }
+  return en;
 }
