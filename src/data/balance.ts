@@ -90,6 +90,9 @@ export const BALANCE = {
   // Eksi bakiye günlük gecikme faizi (borcun oranı; en az ₺250)
   EKSI_BAKIYE_FAIZ: 0.004,
 
+  // İnşaat: hazır bina kare başına şantiye süresi (dk) — ustalar hızlandırır
+  INSAAT_DK_KARE: 5,
+
   // Öğrenci
   DERS_ILERLEME: 1.2,          // ders periyodu başına ilerleme puanı (öğretmenli)
   OGRETMENSIZ_CARPAN: 0.3,

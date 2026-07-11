@@ -1,5 +1,5 @@
 import {
-  GameState, GATE, MAP_H, MAP_W, TILE, WALL_DOOR, WALL_NONE, WALL_SOLID, tileIndex,
+  GameState, GATE, MAP_H, MAP_W, TILE, WALL_DOOR, WALL_NONE, WALL_SOLID, mevsim, tileIndex,
 } from '../core/types';
 import { roomCenter } from '../core/grid';
 import { AYARLAR } from '../core/settings';
@@ -18,12 +18,20 @@ import type { UIState } from './uistate';
 // ---------------------------------------------------------------------------
 
 let groundCanvas: HTMLCanvasElement | null = null;
-let groundVersion = -1;
+let groundVersion = '';
 
 /** Zemin katmanı önbelleğini geçersiz kıl (durum değişimi / ayar değişimi). */
 export function invalidateGround(): void {
-  groundVersion = -1;
+  groundVersion = '';
 }
+
+/** Mevsimlik çim paletleri: [koyu, orta, açık] — kışın kar örtüsü. */
+const CIM_PALET: [string, string, string][] = [
+  ['#9a9550', '#918c4b', '#a5a058'], // sonbahar: sararmış çim
+  ['#ccd6d2', '#c4cec9', '#d6dfdb'], // kış: kar
+  ['#79a058', '#729a52', '#7fa65e'], // ilkbahar: taze yeşil
+  ['#699347', '#628c42', '#71a04e'], // yaz: koyu yeşil
+];
 
 function hash2(x: number, y: number): number {
   let h = (x * 374761393 + y * 668265263) | 0;
@@ -92,8 +100,10 @@ function drawGround(state: GameState): HTMLCanvasElement {
     groundCanvas.height = MAP_H * TILE;
   }
   const c = groundCanvas.getContext('2d')!;
+  const m = mevsim(state.gun);
+  const [cimKoyu, cimOrta, cimAcik] = CIM_PALET[m];
 
-  // --- çim tabanı + doku ---
+  // --- çim tabanı + doku (mevsime göre) ---
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       const px = x * TILE, py = y * TILE;
@@ -101,15 +111,27 @@ function drawGround(state: GameState): HTMLCanvasElement {
       const f = state.floor[t];
       if (f === null) {
         const r = hash2(x, y);
-        c.fillStyle = r < 0.5 ? '#79a058' : r < 0.8 ? '#729a52' : '#7fa65e';
+        c.fillStyle = r < 0.5 ? cimKoyu : r < 0.8 ? cimOrta : cimAcik;
         c.fillRect(px, py, TILE, TILE);
-        // çim püskülleri
-        c.fillStyle = 'rgba(50,80,35,0.4)';
-        if (r > 0.45) {
-          const gx = px + r * TILE * 0.7 + 2;
-          const gy = py + hash2(y, x) * TILE * 0.7 + 3;
-          c.fillRect(gx, gy, 1.5, 3.5);
-          c.fillRect(gx + 3, gy + 1, 1.5, 3);
+        if (m === 1) {
+          // kar parıltısı
+          if (r > 0.6) {
+            c.fillStyle = 'rgba(255,255,255,0.8)';
+            c.fillRect(px + r * TILE * 0.7, py + hash2(y, x) * TILE * 0.7, 2, 2);
+          }
+        } else {
+          // çim püskülleri (sonbaharda kızıl, baharda çiçek benekli)
+          c.fillStyle = m === 0 ? 'rgba(120,80,30,0.45)' : 'rgba(50,80,35,0.4)';
+          if (r > 0.45) {
+            const gx = px + r * TILE * 0.7 + 2;
+            const gy = py + hash2(y, x) * TILE * 0.7 + 3;
+            c.fillRect(gx, gy, 1.5, 3.5);
+            c.fillRect(gx + 3, gy + 1, 1.5, 3);
+          }
+          if (m === 2 && r > 0.93) {
+            c.fillStyle = hash2(x + 7, y) > 0.5 ? '#e8b4c8' : '#f0e08a';
+            c.fillRect(px + TILE * 0.4, py + TILE * 0.4, 2.5, 2.5);
+          }
         }
       } else {
         const stil = FLOOR_STYLE[f];
@@ -216,9 +238,9 @@ function drawGround(state: GameState): HTMLCanvasElement {
       if (Math.abs(x - GATE.x) < 3 && Math.abs(y - GATE.y) < 3) continue;
       const r = hash2(x * 3 + 1, y * 5 + 2);
       if (r < 0.02) {
-        c.drawImage(treeSprite(x + y), x * TILE - TILE * 0.25, y * TILE - TILE * 0.45, TILE * 1.5, TILE * 1.5);
+        c.drawImage(treeSprite(x + y, m), x * TILE - TILE * 0.25, y * TILE - TILE * 0.45, TILE * 1.5, TILE * 1.5);
       } else if (r < 0.035) {
-        c.drawImage(bushSprite(), x * TILE, y * TILE, TILE, TILE);
+        c.drawImage(bushSprite(m), x * TILE, y * TILE, TILE, TILE);
       }
     }
   }
@@ -350,10 +372,11 @@ export function render(
   const x1 = Math.min(MAP_W - 1, Math.ceil((cam.x + canvas.width / cam.zoom) / TILE));
   const y1 = Math.min(MAP_H - 1, Math.ceil((cam.y + canvas.height / cam.zoom) / TILE));
 
-  // --- statik zemin katmanı ---
-  if (groundVersion !== state.insaatSurumu || !groundCanvas) {
+  // --- statik zemin katmanı (inşaat DEĞİŞİNCE ya da mevsim dönünce tazelenir) ---
+  const zeminAnahtar = `${state.insaatSurumu}:${mevsim(state.gun)}`;
+  if (groundVersion !== zeminAnahtar || !groundCanvas) {
     drawGround(state);
-    groundVersion = state.insaatSurumu;
+    groundVersion = zeminAnahtar;
   }
   ctx.drawImage(groundCanvas!, 0, 0);
 
@@ -555,18 +578,23 @@ export function render(
         const dept = state.departments.find((d) => d.id === room.deptId);
         if (dept) etiket += ` · ${DEPT_DEFS.find((dd) => dd.id === dept.defId)?.kisa ?? ''}`;
       }
-      if (!room.valid) etiket += ' ⚠';
+      const santiye = (room.insaat ?? 0) > 0;
+      if (santiye) {
+        // 🏗️ şantiye: etiket ilerleme yüzdesi gösterir, eksik listesi gizlenir
+        const toplam = room.insaatToplam ?? 1;
+        etiket = `🏗️ ${etiket} · %${Math.min(99, Math.round(100 * (1 - (room.insaat ?? 0) / toplam)))}`;
+      } else if (!room.valid) etiket += ' ⚠';
       const cx = cnt.x * TILE + TILE / 2;
       const cy = cnt.y * TILE + TILE * 0.3;
       const tw = ctx.measureText(etiket).width;
-      ctx.fillStyle = 'rgba(12,16,22,0.62)';
+      ctx.fillStyle = santiye ? 'rgba(120,80,10,0.72)' : 'rgba(12,16,22,0.62)';
       roundRectPath(ctx, cx - tw / 2 - 5, cy - fs * 0.72, tw + 10, fs * 1.44, 4);
       ctx.fill();
-      ctx.fillStyle = room.valid ? '#f2f5fa' : '#ffb3a8';
+      ctx.fillStyle = santiye ? '#ffd98a' : room.valid ? '#f2f5fa' : '#ffb3a8';
       ctx.fillText(etiket, cx, cy);
 
       // geçersiz oda: ilk eksik gereksinimi etiketin altına yaz — oyuncu ne yapacağını görsün
-      if (!room.valid && room.missing.length > 0 && cam.zoom >= 0.9) {
+      if (!santiye && !room.valid && room.missing.length > 0 && cam.zoom >= 0.9) {
         const eksikFs = fs * 0.8;
         ctx.font = `500 ${eksikFs}px system-ui, sans-serif`;
         const metin = room.missing[0];

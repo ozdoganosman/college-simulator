@@ -1,6 +1,7 @@
 import {
-  Academic, AcademicRank, Alan, GameState, GUN_DAKIKA, MAP_H, donemGunu, donemIndex, yil,
+  Academic, AcademicRank, Alan, GameState, GUN_DAKIKA, MAP_H, donemGunu, donemIndex, tileIndex, yil,
 } from '../core/types';
+import { ROOM_DEFS } from '../data/rooms';
 import { AYARLAR } from '../core/settings';
 import { validateRooms } from '../core/grid';
 import { clamp, pick, randInt } from '../core/util';
@@ -38,10 +39,35 @@ function stepSim(state: GameState, dt: number): void {
   state.dakika += dt;
   updateAgents(state, dt);
   updateResearch(state, dt);
+  insaatIlerlet(state, dt);
   if (state.dakika >= GUN_DAKIKA) {
     state.dakika -= GUN_DAKIKA;
     endOfDay(state);
   }
+}
+
+/**
+ * Şantiyeler ilerler: temel hız (dış müteahhit) + odada fiilen duran her usta
+ * (tamirci) büyük hız katar. Biten inşaat odayı hizmete açar.
+ */
+function insaatIlerlet(state: GameState, dtMin: number): void {
+  let degisti = false;
+  for (const room of state.rooms) {
+    if (!room.insaat || room.insaat <= 0) continue;
+    const karolar = new Set(room.tiles);
+    let usta = 0;
+    for (const a of state.agents) {
+      if (a.kind === 'tamirci' && a.onCampus
+          && karolar.has(tileIndex(Math.round(a.x), Math.round(a.y)))) usta++;
+    }
+    room.insaat -= dtMin * (0.5 + 1.2 * usta);
+    if (room.insaat <= 0) {
+      room.insaat = 0;
+      degisti = true;
+      notify(state, `🏗️ İnşaat tamamlandı: ${room.ozelAd ?? ROOM_DEFS[room.type].ad} hizmete açıldı!`, 'iyi');
+    }
+  }
+  if (degisti) validateRooms(state);
 }
 
 function endOfDay(state: GameState): void {
@@ -222,7 +248,9 @@ function kurHazirKampus(state: GameState): void {
   const paraOnce = state.para;
   state.para = 50_000_000; // şablon hediyedir — sonda eski bütçeye dönülür
 
-  const koy = (id: string, x: number, y: number) => placePrefab(state, prefabDef(id), x, y);
+  // başlangıç kampüsü hediyedir: şantiye beklemeden hazır gelir (aninda=true)
+  const koy = (id: string, x: number, y: number) =>
+    placePrefab(state, prefabDef(id), x, y, undefined, undefined, true);
   // üst sıra: 4 derslik
   koy('p_derslik', 12, 5);
   koy('p_derslik', 22, 5);

@@ -226,6 +226,8 @@ export function eskiKayitUyumu(s: GameState): void {
   if (!Array.isArray(s.yildizlar)) s.yildizlar = [];
   for (const r of s.rooms) {
     if (r.ozelAd === undefined) r.ozelAd = null;
+    if (typeof r.insaat !== 'number') r.insaat = 0; // şantiye sonradan eklendi
+    if (typeof r.insaatToplam !== 'number') r.insaatToplam = 0;
   }
   for (const o of s.objects) {
     if (typeof o.yipranma !== 'number') o.yipranma = 0; // eskime sonradan eklendi

@@ -46,6 +46,10 @@ export interface Room {
   deptId: number | null;
   /** bağışla verilen özel isim (harita etiketinde ⭐ ile görünür) */
   ozelAd: string | null;
+  /** kalan inşaat dakikası (>0 = şantiye: oda kullanılamaz, ustalar çalışır) */
+  insaat?: number;
+  /** toplam inşaat süresi (ilerleme yüzdesi için) */
+  insaatToplam?: number;
 }
 
 export type ObjectTypeId =
@@ -672,6 +676,33 @@ export function yil(gun: number): number {
 /** 'Güz' | 'Bahar' */
 export function donemAdi(gun: number): string {
   return donemIndex(gun) % 2 === 0 ? 'Güz' : 'Bahar';
+}
+
+/** Mevsim (görsel + ambiyans): yıl 40 gün = 4 × 10 gün. 0 sonbahar … 3 yaz. */
+export function mevsim(gun: number): 0 | 1 | 2 | 3 {
+  return Math.floor(((gun - 1) % 40) / 10) as 0 | 1 | 2 | 3;
+}
+
+export const MEVSIM_META = [
+  { ad: 'Sonbahar', emoji: '🍂' },
+  { ad: 'Kış', emoji: '❄️' },
+  { ad: 'İlkbahar', emoji: '🌸' },
+  { ad: 'Yaz', emoji: '☀️' },
+] as const;
+
+/** Haftanın günü: 0 Pzt … 6 Paz. */
+export function haftaGunu(gun: number): number {
+  return (gun - 1) % 7;
+}
+
+export const HAFTA_KISA = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'] as const;
+
+/**
+ * Pazar günleri ders yapılmaz (kampüs sosyalleşir) — SINAV HAFTASI hariç:
+ * dönemin son 3 günü tatil tanımaz.
+ */
+export function tatilMi(gun: number): boolean {
+  return haftaGunu(gun) === 6 && donemGunu(gun) <= DONEM_GUN - 3;
 }
 
 // Ders saatleri (dakika cinsinden gün içi zaman)

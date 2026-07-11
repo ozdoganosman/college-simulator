@@ -10,6 +10,7 @@ import {
 } from '../core/types';
 import { validateRooms } from '../core/grid';
 import { OBJECT_DEFS } from '../data/objects';
+import { BALANCE } from '../data/balance';
 import { ROOM_DEFS, WALL_COST, DOOR_COST, FLOOR_DEFS } from '../data/rooms';
 import { notify } from './state';
 import { buildDoor, buildFloor, buildWallRect, designateRoom, placeObject } from './build';
@@ -216,6 +217,7 @@ export function canPlacePrefab(
 
 export function placePrefab(
   state: GameState, def: PrefabDef, x0: number, y0: number, w = def.w, h = def.h,
+  aninda = false,
 ): boolean {
   if (!canPlacePrefab(state, def, x0, y0, w, h)) {
     notify(state, 'Buraya yerleştirilemez: alan dolu ya da harita dışında.', 'kotu');
@@ -236,8 +238,21 @@ export function placePrefab(
   const plan = furnishPlan(def.room, icTiles(x0, y0, w, h), new Set());
   for (const p of plan) placeObject(state, p.type, p.x, p.y);
 
+  // ŞANTİYE: hazır bina anında bitmez — boyutuyla orantılı inşaat süresi işler,
+  // ustalar (tamirciler) başında çalışırsa hızlanır. Oda bitene dek kullanılamaz.
+  if (!aninda) {
+    const yeniOda = state.rooms[state.rooms.length - 1];
+    if (yeniOda) {
+      const sure = Math.round(w * h * BALANCE.INSAAT_DK_KARE);
+      yeniOda.insaat = sure;
+      yeniOda.insaatToplam = sure;
+    }
+  }
+
   validateRooms(state);
-  notify(state, `🏗️ ${def.ad} kuruldu (${ROOM_DEFS[def.room].ad}, ${w}×${h}).`, 'iyi');
+  notify(state, aninda
+    ? `🏗️ ${def.ad} kuruldu (${ROOM_DEFS[def.room].ad}, ${w}×${h}).`
+    : `🏗️ ${def.ad} şantiyesi kuruldu (${w}×${h}) — ustalar çalışıyor, bina yaklaşık ${Math.round((w * h * BALANCE.INSAAT_DK_KARE) / 60)} saatte hazır.`, 'iyi');
   return true;
 }
 

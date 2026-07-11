@@ -90,6 +90,9 @@ export function validateRooms(state: GameState): void {
       }
     }
 
+    // şantiye: inşaat bitene dek oda kullanılamaz (eşyalar/dersler çalışmaz)
+    if ((room.insaat ?? 0) > 0) missing.unshift('🏗️ İnşaat sürüyor');
+
     room.missing = missing;
     room.valid = missing.length === 0;
   }

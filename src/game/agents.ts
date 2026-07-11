@@ -43,7 +43,7 @@
 import {
   Academic, AcademicRank, Agent, AgentActivity, AgentKind, GameState, GATE, MAP_H, MAP_W,
   Needs, PlacedObject, Point, Room, StaffAgent, Student, StudentLevel, T,
-  DONEM_GUN, donemGunu, donemIndex, inBounds, tileIndex,
+  DONEM_GUN, donemGunu, donemIndex, inBounds, tatilMi, tileIndex,
 } from '../core/types';
 import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
 import { courseDef, dersEtki } from '../data/courses';
@@ -169,6 +169,8 @@ interface Ctx {
   copYakini: Set<number>;
   /** toplam öğrenci sayısı (mutfak üretim tavanı için) */
   ogrenciSayisi: number;
+  /** Pazar tatili: ders yok, kampüs sosyalleşir (sınav haftası hariç) */
+  tatil: boolean;
 }
 
 function buildCtx(state: GameState, dk: number): Ctx {
@@ -360,6 +362,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     academicIndex,
     copYakini: copYakiniSet(state),
     ogrenciSayisi,
+    tatil: tatilMi(state.gun),
   };
 }
 
@@ -480,8 +483,9 @@ function finishActivity(state: GameState, a: Agent, ctx: Ctx): void {
 function maybeArrive(state: GameState, a: Agent, dk: number, dtMin: number, ulasim: number): void {
   if (dk < T.KAMPUS_ACILIS || dk >= T.CIKIS) return;
   // kademeli varış: açılış penceresinde seyrek, sonrasında hızla tamamlanır;
-  // servis durakları gelişi hızlandırır (durak başına +%35)
-  const p = (dk < T.DERS1 ? dtMin / 30 : dtMin / 4) * (1 + 0.35 * ulasim);
+  // servis durakları gelişi hızlandırır (durak başına +%35); Pazar kampüs tenha
+  const p = (dk < T.DERS1 ? dtMin / 30 : dtMin / 4) * (1 + 0.35 * ulasim)
+    * (tatilMi(state.gun) ? 0.45 : 1);
   if (!chance(state, p)) return;
   a.onCampus = true;
   a.x = GATE.x;
@@ -522,19 +526,35 @@ function enBuyukIhtiyac(n: Needs, esik: number): keyof Needs | null {
   return sec;
 }
 
+/**
+ * Listeden ajana EN YAKIN eşyayı alır (listeden çıkarır). Eskiden "son inşa
+ * edilen" (LIFO) seçiliyordu — öğrenci kampüsün öbür ucundaki tuvalete koşuyordu.
+ */
+function enYakinNesne(liste: PlacedObject[], a: Agent): PlacedObject | undefined {
+  if (liste.length === 0) return undefined;
+  let sec = 0;
+  let enKisa = Infinity;
+  for (let i = 0; i < liste.length; i++) {
+    const d = Math.abs(liste[i].x - a.x) + Math.abs(liste[i].y - a.y);
+    if (d < enKisa) { enKisa = d; sec = i; }
+  }
+  return liste.splice(sec, 1)[0];
+}
+
 function trySatisfy(state: GameState, s: Student, ctx: Ctx, need: keyof Needs): boolean {
   let obj: PlacedObject | undefined;
   let git: AgentActivity = 'ihtiyaca_gidiyor';
   if (need === 'tuvalet') {
-    obj = ctx.freeKlozet.pop();
+    obj = enYakinNesne(ctx.freeKlozet, s);
   } else if (need === 'aclik') {
     git = 'yemege_gidiyor';
     // yemekhane ancak servis açıksa VE yemek stoğu varsa doyurur
-    if (ctx.mutfak && state.yemekStok >= 1) obj = ctx.freeYemekSandalye.pop();
-    if (!obj) obj = ctx.freeOtomat.pop();
+    if (ctx.mutfak && state.yemekStok >= 1) obj = enYakinNesne(ctx.freeYemekSandalye, s);
+    if (!obj) obj = enYakinNesne(ctx.freeOtomat, s);
   } else {
     // sosyal aktiviteler öncelikli: basket/satranç/sahne kampüs yaşamını canlandırır
-    obj = ctx.freeAktivite.pop() ?? ctx.freeKantinSandalye.pop() ?? ctx.freeBank.pop();
+    obj = enYakinNesne(ctx.freeAktivite, s) ?? enYakinNesne(ctx.freeKantinSandalye, s)
+      ?? enYakinNesne(ctx.freeBank, s);
   }
   if (!obj) return false;
   obj.reservedBy = s.id;
@@ -596,7 +616,8 @@ function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
   if (kritik && trySatisfy(state, s, ctx, kritik)) return;
 
   // 2/4) ders bloğu — YL/doktora blokların yarısında araştırmayı seçer
-  const blok = dersBlogu(dk);
+  // (Pazar tatili: ders yok, gün sosyalleşmeye kalır)
+  const blok = ctx.tatil ? -1 : dersBlogu(dk);
   if (blok !== -1) {
     const bitis = blok + BLOK_SURE;
     if (s.level !== 'lisans' && chance(state, 0.5)) {
@@ -786,10 +807,10 @@ function teachTarget(state: GameState, oda: Room, ctx: Ctx): Point | null {
 }
 
 function startAcademicResearch(state: GameState, a: Academic, ctx: Ctx): void {
-  // kendi masası duruyorsa oraya, yoksa boş ofis masası rezerve et
+  // kendi masası duruyorsa oraya, yoksa EN YAKIN boş ofis masasını rezerve et
   let masa = ctx.deskOf.get(a.id);
   if (!masa) {
-    masa = ctx.freeMasa.pop();
+    masa = enYakinNesne(ctx.freeMasa, a);
     if (masa) {
       masa.reservedBy = a.id;
       ctx.deskOf.set(a.id, masa);
@@ -815,7 +836,7 @@ function startAcademicResearch(state: GameState, a: Academic, ctx: Ctx): void {
 
 function updateAcademic(state: GameState, a: Academic, dtMin: number, ctx: Ctx): void {
   const dk = ctx.dk;
-  const blok = dersBlogu(dk);
+  const blok = ctx.tatil ? -1 : dersBlogu(dk); // Pazar: ders yok, araştırma günü
 
   if (a.activity === 'ders_veriyor') {
     a.xp += (BALANCE.XP_DERS / BLOK_SURE) * dtMin;
@@ -906,6 +927,32 @@ function beceriGelis(a: StaffAgent, dtMin: number): void {
   a.beceri = Math.min(100, (a.beceri ?? 40) + 0.0012 * dtMin);
 }
 
+/**
+ * Personel molası: pencere içinde işi bırakıp kantin/yemekhanede soluklanır —
+ * personel de insandır, robot gibi kesintisiz çalışmaz. true = mola sürüyor.
+ */
+function personelMola(state: GameState, a: StaffAgent, ctx: Ctx, bas: number, bit: number): boolean {
+  const dk = ctx.dk;
+  if (a.activity === 'yemekte') {
+    if (dk >= bit || dk < bas) { a.activity = 'bosta'; return false; }
+    return true;
+  }
+  if (dk < bas || dk >= bit) return false;
+  if (a.activity === 'yemege_gidiyor') {
+    if (a.path.length === 0) a.activity = 'yemekte';
+    return true;
+  }
+  const odalar = ctx.kantinler.length > 0 ? ctx.kantinler : ctx.yemekhaneler;
+  if (odalar.length === 0) return false;
+  const hedef = randomRoomTile(state, odalar[a.id % odalar.length]);
+  if (hedef && goTo(state, a, hedef)) {
+    if (a.usingObject !== -1) finishActivity(state, a, ctx);
+    a.activity = 'yemege_gidiyor';
+    return true;
+  }
+  return false;
+}
+
 function updateCook(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
   const mesai = ctx.dk >= ASCI_BASLA && ctx.dk < ASCI_BITIS;
   if (a.activity === 'calisiyor' && mesai) {
@@ -922,12 +969,16 @@ function updateCook(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): v
     }
   }
   if (!mesai) {
-    if (a.activity === 'calisiyor' || a.usingObject !== -1) finishActivity(state, a, ctx);
+    if (a.activity === 'calisiyor' || (a.usingObject !== -1 && a.activity !== 'yemekte')) {
+      finishActivity(state, a, ctx);
+    }
     const banko = ctx.bankoOf.get(a.id);
     if (banko && banko.reservedBy === a.id) {
       banko.reservedBy = -1;
       ctx.bankoOf.delete(a.id);
     }
+    // mesai bitti: aşçı da yemeğini yer (servisi bitirenin molası)
+    if (personelMola(state, a, ctx, ASCI_BITIS, ASCI_BITIS + 45)) return;
     idleWander(state, a, dtMin);
     return;
   }
@@ -968,7 +1019,8 @@ function dirtiestTile(state: GameState): number {
   return idx;
 }
 
-function updateJanitor(state: GameState, a: StaffAgent, dtMin: number): void {
+function updateJanitor(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
+  if (personelMola(state, a, ctx, T.OGLE + 20, T.DERS3)) return;
   if (a.activity === 'calisiyor') {
     const idx = tileIndex(Math.round(a.x), Math.round(a.y));
     state.dirt[idx] = Math.max(0, state.dirt[idx] - 8 * beceriCarpani(a) * dtMin);
@@ -990,9 +1042,21 @@ function updateJanitor(state: GameState, a: StaffAgent, dtMin: number): void {
   idleWander(state, a, dtMin);
 }
 
-/** Tamirci: en yakın bozuk eşyaya gidip başında onarır (yıpranma 0'a inene dek). */
-function updateRepairman(state: GameState, a: StaffAgent, dtMin: number): void {
+/**
+ * Tamirci/usta: en yakın bozuk eşyayı onarır; bozuk eşya yoksa ŞANTİYEDE
+ * çalışır (inşaatı büyük hızlandırır — ilerleme insaatIlerlet'te işlenir).
+ */
+function updateRepairman(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
+  if (personelMola(state, a, ctx, T.OGLE + 20, T.DERS3)) return;
   if (a.activity === 'calisiyor') {
+    if (a.usingObject === -1) {
+      // şantiye ustalığı: durduğu oda hâlâ inşaattaysa çalışmaya devam
+      const rid = state.roomAt[tileIndex(Math.round(a.x), Math.round(a.y))];
+      const oda = rid >= 0 ? state.rooms.find((r) => r.id === rid) : undefined;
+      if (!oda || (oda.insaat ?? 0) <= 0) a.activity = 'bosta';
+      else beceriGelis(a, dtMin);
+      return;
+    }
     const o = state.objects.find((x) => x.id === a.usingObject);
     if (!o) {
       a.usingObject = -1;
@@ -1030,6 +1094,17 @@ function updateRepairman(state: GameState, a: StaffAgent, dtMin: number): void {
     if (goTo(state, a, yan)) {
       hedef.reservedBy = a.id;
       a.usingObject = hedef.id;
+      a.activity = a.path.length > 0 ? 'geliyor' : 'calisiyor';
+      return;
+    }
+  }
+
+  // bozuk eşya yok: şantiye varsa oraya koş — usta başında inşaat 2 kat hızlanır
+  const santiye = state.rooms.find((r) => (r.insaat ?? 0) > 0);
+  if (santiye) {
+    const hedefKaro = randomRoomTile(state, santiye);
+    if (hedefKaro && goTo(state, a, hedefKaro)) {
+      a.usingObject = -1;
       a.activity = a.path.length > 0 ? 'geliyor' : 'calisiyor';
       return;
     }
@@ -1125,10 +1200,10 @@ export function updateAgents(state: GameState, dtMin: number): void {
         updateCook(state, a, dtMin, ctx);
         break;
       case 'temizlikci':
-        updateJanitor(state, a, dtMin);
+        updateJanitor(state, a, dtMin, ctx);
         break;
       case 'tamirci':
-        updateRepairman(state, a, dtMin);
+        updateRepairman(state, a, dtMin, ctx);
         break;
     }
   }

@@ -1,6 +1,6 @@
 import {
   GameState, KISILIK_META, LEVEL_LABEL, NITELIK_META, Nitelik, RANK_LABEL, ALAN_META, WALL_NONE, donemAdi,
-  donemGunu, DONEM_GUN, yil,
+  donemGunu, DONEM_GUN, HAFTA_KISA, MEVSIM_META, haftaGunu, mevsim, tatilMi, yil,
 } from '../core/types';
 import { formatClock, formatMoney } from '../core/util';
 import { FLOOR_DEFS, ROOM_DEFS, ROOM_LIST, WALL_COST, DOOR_COST } from '../data/rooms';
@@ -426,7 +426,7 @@ export function refreshHud(state: GameState, ui: UIState): void {
   setStat('cazibe', `✨ ${cazibePuani(state)}`);
   setStat('sira', `🏆 ${oyuncuSirasi(state)}/${state.rakipler.length + 1}`);
   const sinavHaftasi = donemGunu(state.gun) > DONEM_GUN - 3;
-  setStat('tarih-metin', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}${sinavHaftasi ? ' · 📝 SINAV' : ''}${state.yksBekliyor ? ' · 🎓 YKS' : ''}`);
+  setStat('tarih-metin', `${MEVSIM_META[mevsim(state.gun)].emoji} Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · ${HAFTA_KISA[haftaGunu(state.gun)]} ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}${tatilMi(state.gun) ? ' · 🏖 TATİL' : ''}${sinavHaftasi ? ' · 📝 SINAV' : ''}${state.yksBekliyor ? ' · 🎓 YKS' : ''}`);
   const donemOran = ((donemGunu(state.gun) - 1) * 1440 + state.dakika) / (DONEM_GUN * 1440);
   const bar = topEl.querySelector<HTMLElement>('[data-st="donem-bar"]');
   if (bar) bar.style.width = `${Math.round(donemOran * 100)}%`;

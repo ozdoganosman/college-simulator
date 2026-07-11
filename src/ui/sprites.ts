@@ -425,9 +425,17 @@ export function objectSprite(tip: ObjectTypeId): HTMLCanvasElement {
   return cv;
 }
 
-/** Ağaç dekoru (2 varyant). */
-export function treeSprite(varyant: number): HTMLCanvasElement {
-  const anahtar = 'agac' + (varyant % 2);
+/** Mevsimlik yaprak paletleri: 0 sonbahar, 1 kış, 2 ilkbahar, 3 yaz. */
+const YAPRAK: [string, string, string][][] = [
+  [['#8a5a26', '#a86d2c', '#c2853a'], ['#96551f', '#b56f28', '#d08a35']], // sonbahar
+  [['#5c6b62', '#6e7d74', '#e8eef0'], ['#566158', '#68746a', '#e2eaec']], // kış (kar başlıklı)
+  [['#4d7c3e', '#5f9450', '#d090b0'], ['#528344', '#679a55', '#e0a0c0']], // ilkbahar (tomurcuk)
+  [['#3f6f38', '#4d8443', '#5e9a51'], ['#4a7a35', '#5c9040', '#6fa64d']], // yaz (mevcut yeşil)
+];
+
+/** Ağaç dekoru (2 varyant × 4 mevsim). */
+export function treeSprite(varyant: number, mevsimIdx = 3): HTMLCanvasElement {
+  const anahtar = 'agac' + (varyant % 2) + ':' + mevsimIdx;
   let cv = cache.get(anahtar);
   if (!cv) {
     cv = makeCanvas((c, s) => {
@@ -436,34 +444,57 @@ export function treeSprite(varyant: number): HTMLCanvasElement {
       c.ellipse(s * 0.52, s * 0.78, s * 0.3, s * 0.12, 0, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#6b4a2b';
       c.fillRect(s * 0.46, s * 0.5, s * 0.08, s * 0.28);
-      const yesil = varyant % 2 === 0 ? ['#3f6f38', '#4d8443', '#5e9a51'] : ['#4a7a35', '#5c9040', '#6fa64d'];
-      c.fillStyle = yesil[0];
-      c.beginPath(); c.arc(s * 0.5, s * 0.38, s * 0.3, 0, Math.PI * 2); c.fill();
-      c.fillStyle = yesil[1];
-      c.beginPath(); c.arc(s * 0.42, s * 0.32, s * 0.2, 0, Math.PI * 2); c.fill();
-      c.fillStyle = yesil[2];
-      c.beginPath(); c.arc(s * 0.58, s * 0.28, s * 0.16, 0, Math.PI * 2); c.fill();
+      const [a, b, ust] = YAPRAK[mevsimIdx][varyant % 2];
+      if (mevsimIdx === 1) {
+        // kış: seyrek dallar + kar örtüsü
+        c.strokeStyle = '#6b4a2b'; c.lineWidth = s * 0.035;
+        c.beginPath();
+        c.moveTo(s * 0.5, s * 0.52); c.lineTo(s * 0.34, s * 0.3);
+        c.moveTo(s * 0.5, s * 0.52); c.lineTo(s * 0.66, s * 0.28);
+        c.moveTo(s * 0.5, s * 0.46); c.lineTo(s * 0.5, s * 0.22);
+        c.stroke();
+        c.fillStyle = a;
+        c.beginPath(); c.arc(s * 0.5, s * 0.34, s * 0.22, 0, Math.PI * 2); c.fill();
+        c.fillStyle = ust; // kar başlığı
+        c.beginPath(); c.ellipse(s * 0.5, s * 0.24, s * 0.2, s * 0.09, 0, 0, Math.PI * 2); c.fill();
+      } else {
+        c.fillStyle = a;
+        c.beginPath(); c.arc(s * 0.5, s * 0.38, s * 0.3, 0, Math.PI * 2); c.fill();
+        c.fillStyle = b;
+        c.beginPath(); c.arc(s * 0.42, s * 0.32, s * 0.2, 0, Math.PI * 2); c.fill();
+        c.fillStyle = ust;
+        c.beginPath(); c.arc(s * 0.58, s * 0.28, s * 0.16, 0, Math.PI * 2); c.fill();
+      }
     });
     cache.set(anahtar, cv);
   }
   return cv;
 }
 
-export function bushSprite(): HTMLCanvasElement {
-  let cv = cache.get('cali');
+const CALI_RENK: [string, string, string][] = [
+  ['#8a6a2e', '#a07a34', '#b58a3c'], // sonbahar
+  ['#6a7a70', '#7c8c82', '#dfe8ea'], // kış
+  ['#4d7c3a', '#5b8c44', '#c88aa8'], // ilkbahar
+  ['#4d7c3a', '#5b8c44', '#69a04f'], // yaz
+];
+
+export function bushSprite(mevsimIdx = 3): HTMLCanvasElement {
+  const anahtar = 'cali:' + mevsimIdx;
+  let cv = cache.get(anahtar);
   if (!cv) {
     cv = makeCanvas((c, s) => {
       c.fillStyle = 'rgba(0,0,0,0.15)';
       c.beginPath();
       c.ellipse(s * 0.5, s * 0.66, s * 0.26, s * 0.1, 0, 0, Math.PI * 2); c.fill();
+      const [r1, r2, r3] = CALI_RENK[mevsimIdx];
       for (const [x, y, r, renk] of [
-        [0.4, 0.55, 0.18, '#4d7c3a'], [0.6, 0.55, 0.17, '#5b8c44'], [0.5, 0.45, 0.18, '#69a04f'],
+        [0.4, 0.55, 0.18, r1], [0.6, 0.55, 0.17, r2], [0.5, 0.45, 0.18, r3],
       ] as const) {
         c.fillStyle = renk;
         c.beginPath(); c.arc(s * x, s * y, s * r, 0, Math.PI * 2); c.fill();
       }
     });
-    cache.set('cali', cv);
+    cache.set(anahtar, cv);
   }
   return cv;
 }
