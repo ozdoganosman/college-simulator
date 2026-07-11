@@ -32,7 +32,7 @@ import { clamp, formatMoney, newId, pick, randInt, randRange } from '../core/uti
 import { BALANCE } from '../data/balance';
 import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
 import { removeAgent, spawnAcademic } from './agents';
-import { rebuildDersProgrami } from './schedule';
+import { otoDersSec, rebuildDersProgrami } from './schedule';
 
 const ALANLAR = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
 import { addPrestij, notify, spend } from './state';
@@ -128,7 +128,8 @@ export function hireFromPool(
     if (!spend(state, aday.bonus, 'transfer imza bonusu')) return false;
   }
 
-  spawnAcademic(state, aday.ad, deptId, aday.rank, aday.alan, aday.egitim, aday.arastirma, aday.maas);
+  const yeni = spawnAcademic(state, aday.ad, deptId, aday.rank, aday.alan, aday.egitim, aday.arastirma, aday.maas);
+  otoDersSec(state, yeni.id); // yıllık ders seçimi otomatik başlar — panelden değiştirilebilir
   rebuildDersProgrami(state);
   havuz.splice(idx, 1);
 

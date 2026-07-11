@@ -73,7 +73,7 @@ const STEPS: TutorialStep[] = [
   },
   {
     baslik: 'İlk bölümünü aç',
-    detay: '<b>🎓 Bölümler</b> panelinde "Yeni Bölüm Aç" listesinden birini seç — başlangıç için <b>İşletme</b> (₺150.000, laboratuvar istemez) idealdir. Kontenjanı da buradan ayarlarsın.',
+    detay: 'Bu oyunda <b>derslerden bölümlere</b> gidilir: <b>📅 Program</b> panelinde her hocaya yıllık dersleri seçilir; bir bölüm ancak müfredatı <b>açık derslerle</b> karşılanıyorsa açılır. Başlangıç seçimleriyle <b>Bilgisayar Programcılığı</b> ve <b>Muhasebe-Vergi (Önlisans)</b> hazır — <b>🎓 Bölümler</b> panelinden birini aç. Başka bölüm istersen önce Program panelinden dersleri ayarla.',
     kontrol: (s) => ({ tamam: s.departments.length >= 1 }),
   },
   {

@@ -4,6 +4,7 @@ import {
 import { BALANCE } from '../data/balance';
 import { DEPT_DEFS } from '../data/departments';
 import { courseExists } from '../data/courses';
+import { tumunuOtoSec } from './schedule';
 
 export function createInitialState(): GameState {
   const size = MAP_W * MAP_H;
@@ -116,11 +117,17 @@ export function eskiKayitUyumu(s: GameState): void {
   }
   s.dersProgrami = s.dersProgrami.filter((p) => courseExists(p.courseId) && !silinen.has(p.deptId));
   const alanlar = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
+  let dersSecimiEksik = false;
   for (const a of s.agents) {
-    if (a.kind === 'akademisyen' && !(a as { alan?: string }).alan) {
-      a.alan = alanlar[a.id % alanlar.length];
+    if (a.kind === 'akademisyen') {
+      if (!(a as { alan?: string }).alan) a.alan = alanlar[a.id % alanlar.length];
+      if (!Array.isArray(a.verdigiDersler)) {
+        a.verdigiDersler = [];
+        dersSecimiEksik = true;
+      }
     }
   }
+  if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç
   for (const c of [...s.kpssPool, ...s.transferPool]) {
     if (!(c as { alan?: string }).alan) c.alan = alanlar[c.id % alanlar.length];
   }

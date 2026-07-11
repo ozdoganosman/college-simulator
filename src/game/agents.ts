@@ -933,6 +933,7 @@ export function spawnAcademic(
     deptId,
     rank,
     alan,
+    verdigiDersler: [],
     egitim,
     arastirma,
     maas,

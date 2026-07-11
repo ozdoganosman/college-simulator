@@ -14,7 +14,11 @@ import {
   ALAN_META, AcademicRank, Alan, GameState, RANK_LABEL, RoomType, StrategyDef, StudentLevel,
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
-import { blokDersi, verilemeyenDersler } from '../game/schedule';
+import {
+  DERS_LIMIT, acikDersler, blokDersi, otoDersSec, setHocaDersi, tumunuOtoSec,
+  verilemeyenDersler,
+} from '../game/schedule';
+import { COURSES } from '../data/courses';
 import { formatMoney } from '../core/util';
 import { libraryLevel, validRooms } from '../core/grid';
 import { clearSave, notify, spend } from '../game/state';
@@ -171,6 +175,12 @@ function onPanelClick(e: Event): void {
       }
       break;
     }
+    case 'oto-ders':
+      otoDersSec(state, Number(id));
+      break;
+    case 'oto-ders-tum':
+      tumunuOtoSec(state);
+      break;
     case 'proje-baslat':
       startProject(state, Number(id));
       break;
@@ -223,6 +233,10 @@ function onPanelChange(e: Event): void {
     }
   } else if (action === 'bolum-sec') {
     assignAcademicDept(state, id, Number((hedef as HTMLSelectElement).value));
+  } else if (action === 'ders-sec') {
+    const sec = hedef as HTMLSelectElement;
+    setHocaDersi(state, id, Number(sec.dataset.slot ?? '0'), sec.value);
+    render(state);
   }
 }
 
@@ -765,70 +779,123 @@ function yardimGovde(): string {
 
 const BLOK_SAAT = ['08:00-10:00', '10:00-12:00', '13:00-15:00', '15:00-17:00'];
 
+function dersSecenekleri(secili: string, alan: Alan): string {
+  let html = '<option value="">— boş —</option>';
+  for (const a of Object.keys(ALAN_META) as Alan[]) {
+    html += `<optgroup label="${ALAN_META[a].emoji} ${ALAN_META[a].ad}">`;
+    for (const c of COURSES) {
+      if (c.birincil !== a) continue;
+      const uyum = Math.round((dersEtki(c.id, alan) / 1.25) * 100);
+      html += `<option value="${c.id}" ${c.id === secili ? 'selected' : ''}>${c.kod} ${c.ad} (%${uyum})</option>`;
+    }
+    html += '</optgroup>';
+  }
+  return html;
+}
+
 function programGovde(state: GameState): string {
-  if (state.departments.length === 0) {
-    return '<div class="aciklama">Henüz bölüm açılmadı — program, bölüm açılınca oluşur.</div>';
-  }
+  const hocalar = state.agents.filter(
+    (a): a is import('../core/types').Academic => a.kind === 'akademisyen',
+  );
 
-  const akademisyenAd = new Map<number, string>();
-  const akademisyenAlan = new Map<number, Alan>();
-  for (const a of state.agents) {
-    if (a.kind === 'akademisyen') {
-      akademisyenAd.set(a.id, a.ad);
-      akademisyenAlan.set(a.id, a.alan);
-    }
-  }
+  let html = `<div class="aciklama"><b>Akış: derslerden bölümlere.</b> Önce her hocaya bu yıl
+    vereceği dersleri seç (hoca başına en çok ${DERS_LIMIT} ders) — üniversitenin
+    <b>açık dersleri</b> bu seçimlerden oluşur. Bir bölüm ancak müfredatındaki TÜM dersler
+    açıksa açılabilir (önlisans 4, lisans 8 ders). Alan uyumu öğrenme hızını etkiler:
+    birincil %100, ikincil %76, alan dışı %44.</div>`;
 
-  let html = `<div class="aciklama">Her blokta bölümün müfredatından bir ders işlenir; derse
-    <b>en uygun alandaki</b> hoca otomatik atanır (hoca başına günde en çok 2 blok, yılda en çok
-    <b>4 farklı ders</b>). Alan uyumu öğrenme hızını doğrudan etkiler: birincil alan %100,
-    ikincil %76, alan dışı %44. Müfredat: <b>önlisans 4 ders</b> (2 yıl), <b>lisans 8 ders</b> (4 yıl).</div>`;
-
-  // bugünün takvimi
-  html += '<table><tr><th>Bölüm</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';
-  for (const dept of state.departments) {
-    const def = deptDef(dept.defId);
-    html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`;
-    for (let blok = 0; blok < 4; blok++) {
-      const slot = blokDersi(state, dept.id, blok);
-      if (!slot) {
-        html += '<td>—</td>';
-        continue;
+  // --- 1) Hoca ders seçimi ---
+  html += `<h3>1) Hoca Ders Seçimi
+    <button class="eylem" data-action="oto-ders-tum" style="margin-left:10px">🪄 Tümüne Otomatik Seç</button></h3>`;
+  if (hocalar.length === 0) {
+    html += '<div class="aciklama">Kadroda akademisyen yok — önce 👩‍🏫 Kadro panelinden alım yap.</div>';
+  } else {
+    html += '<table><tr><th>Hoca</th><th>Alan</th>'
+      + Array.from({ length: DERS_LIMIT }, (_, i) => `<th>Ders ${i + 1}</th>`).join('')
+      + '<th></th></tr>';
+    for (const h of hocalar) {
+      const dersler = h.verdigiDersler ?? [];
+      html += `<tr><td><b>${RANK_LABEL[h.rank]} ${esc(h.ad)}</b></td>`
+        + `<td>${ALAN_META[h.alan].emoji} ${ALAN_META[h.alan].ad}</td>`;
+      for (let i = 0; i < DERS_LIMIT; i++) {
+        html += `<td><select class="kontenjan-input" style="width:150px" data-action="ders-sec" data-id="${h.id}" data-slot="${i}">${dersSecenekleri(dersler[i] ?? '', h.alan)}</select></td>`;
       }
-      const ders = courseDef(slot.courseId);
-      let hoca = '<span class="hata" style="color:#f4a09c">hoca yok!</span>';
-      if (slot.academicId !== -1 && akademisyenAd.has(slot.academicId)) {
-        const alan = akademisyenAlan.get(slot.academicId)!;
-        const uyum = Math.round((dersEtki(slot.courseId, alan) / 1.25) * 100);
-        hoca = `${ALAN_META[alan].emoji} ${esc(akademisyenAd.get(slot.academicId)!)} <small>(%${uyum} uyum)</small>`;
-      }
-      html += `<td><b>${ders.kod}</b> ${ders.ad}<br><small>${hoca}</small></td>`;
+      html += `<td><button class="eylem" data-action="oto-ders" data-id="${h.id}" title="Alanına en uygun dersleri seç">Oto</button></td></tr>`;
     }
-    html += '</tr>';
+    html += '</table>';
   }
-  html += '</table>';
 
-  // bölüm müfredatları + verilebilirlik
-  html += '<h3>Müfredatlar</h3><table><tr><th>Bölüm</th><th>Dersler</th></tr>';
-  for (const dept of state.departments) {
-    const def = deptDef(dept.defId);
-    const eksikler = new Set(verilemeyenDersler(state, def.id));
-    const liste = def.dersler.map((id) => {
-      const d = courseDef(id);
-      const alan = ALAN_META[d.birincil];
-      const durum = eksikler.has(id) ? ' style="color:#f4a09c"' : '';
-      return `<span class="rozet"${durum} title="${d.ad} — ${alan.ad}">${alan.emoji} ${d.kod}${eksikler.has(id) ? ' ✖' : ''}</span>`;
+  // --- 2) Açık dersler ---
+  const acik = acikDersler(state);
+  html += `<h3>2) Açık Dersler (${acik.size})</h3><div class="aciklama">`;
+  if (acik.size === 0) html += 'Henüz ders seçilmedi.';
+  else {
+    html += [...acik].map((id) => {
+      const c = courseDef(id);
+      return `<span class="rozet" title="${c.ad}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
     }).join(' ');
-    html += `<tr><td><b>${def.ad}</b></td><td>${liste}</td></tr>`;
   }
-  html += '</table>';
+  html += '</div>';
 
-  // alan lejantı
-  html += '<h3>Akademisyen Alanları</h3><div class="aciklama">'
-    + (Object.keys(ALAN_META) as Alan[])
-      .map((a) => `<b>${ALAN_META[a].emoji} ${ALAN_META[a].ad}</b>: ${ALAN_META[a].tanim}`)
-      .join(' · ')
-    + '</div>';
+  // --- 3) Bu derslerle açılabilecek bölümler ---
+  const acikDefIds = new Set(state.departments.map((d) => d.defId));
+  const adaylar = DEPT_DEFS
+    .filter((d) => !acikDefIds.has(d.id))
+    .map((d) => ({ def: d, eksik: d.dersler.filter((x) => !acik.has(x)) }))
+    .sort((a, b) => a.eksik.length - b.eksik.length);
+  const hazir = adaylar.filter((a) => a.eksik.length === 0);
+  const yakin = adaylar.filter((a) => a.eksik.length > 0 && a.eksik.length <= 2);
+
+  html += `<h3>3) Bu Derslerle Açılabilecek Bölümler (${hazir.length})</h3><div class="aciklama">`;
+  html += hazir.length === 0
+    ? 'Seçili derslerle müfredatı tamamlanan bölüm yok — ders seçimlerini genişlet.'
+    : hazir.map((a) => `<span class="rozet" style="border:1px solid #46b45e;color:#9fe8a8">✔ ${a.def.ad}</span>`).join(' ')
+      + ' <small>(🎓 Bölümler panelinden aç)</small>';
+  html += '</div>';
+  if (yakin.length > 0) {
+    html += '<h3>Az Ders Eksik Olanlar</h3><table><tr><th>Bölüm</th><th>Eksik dersler</th></tr>';
+    for (const a of yakin.slice(0, 12)) {
+      const chips = a.eksik.map((id) => {
+        const c = courseDef(id);
+        return `<span class="rozet" style="color:#f4a09c">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
+      }).join(' ');
+      html += `<tr><td><b>${a.def.ad}</b></td><td>${chips}</td></tr>`;
+    }
+    html += '</table>';
+  }
+
+  // --- 4) Bugünün takvimi ---
+  if (state.departments.length > 0) {
+    const akademisyenAd = new Map<number, string>();
+    const akademisyenAlan = new Map<number, Alan>();
+    for (const h of hocalar) {
+      akademisyenAd.set(h.id, h.ad);
+      akademisyenAlan.set(h.id, h.alan);
+    }
+    html += '<h3>4) Bugünün Ders Programı</h3>';
+    html += '<table><tr><th>Bölüm</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';
+    for (const dept of state.departments) {
+      const def = deptDef(dept.defId);
+      html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`;
+      for (let blok = 0; blok < 4; blok++) {
+        const slot = blokDersi(state, dept.id, blok);
+        if (!slot) {
+          html += '<td>—</td>';
+          continue;
+        }
+        const ders = courseDef(slot.courseId);
+        let hoca = '<span style="color:#f4a09c">hoca yok!</span>';
+        if (slot.academicId !== -1 && akademisyenAd.has(slot.academicId)) {
+          const alan = akademisyenAlan.get(slot.academicId)!;
+          const uyum = Math.round((dersEtki(slot.courseId, alan) / 1.25) * 100);
+          hoca = `${ALAN_META[alan].emoji} ${esc(akademisyenAd.get(slot.academicId)!)} <small>(%${uyum})</small>`;
+        }
+        html += `<td><b>${ders.kod}</b> ${ders.ad}<br><small>${hoca}</small></td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+  }
 
   return html;
 }

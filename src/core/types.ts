@@ -168,6 +168,8 @@ export interface Academic extends AgentBase {
   rank: AcademicRank;
   /** uzmanlık alanı — hangi dersleri iyi verebildiğini belirler */
   alan: Alan;
+  /** hocanın bu yıl vermeyi seçtiği dersler (en fazla 4) — açık dersleri belirler */
+  verdigiDersler: string[];
   /** 0-100 eğitim becerisi */
   egitim: number;
   /** 0-100 araştırma becerisi */

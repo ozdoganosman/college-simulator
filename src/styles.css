@@ -402,8 +402,12 @@ html, body, #app {
   font-size: 19px;
   padding: 14px 34px;
   opacity: 0;
-  animation: rozetPat 0.6s cubic-bezier(0.2, 1.8, 0.4, 1) forwards;
+  animation: torenBtnGel 0.6s cubic-bezier(0.2, 1.8, 0.4, 1) forwards;
   box-shadow: 0 6px 30px rgba(74, 123, 212, 0.45);
+}
+@keyframes torenBtnGel {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 .konfeti {
   position: absolute;

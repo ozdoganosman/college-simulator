@@ -97,13 +97,19 @@ function open(state: GameState): void {
     }, gecikme + 200);
   }
 
-  document.getElementById('toren-kapat')?.addEventListener('click', () => {
+  const kapat = () => {
     state.yerlestirme = null;
     acikMi = false;
     root!.classList.remove('acik');
     root!.innerHTML = '';
+    document.removeEventListener('keydown', escKapat);
     if (state.hiz === 0) state.hiz = 1; // dersler başlasın!
-  });
+  };
+  const escKapat = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' || e.key === 'Enter') kapat();
+  };
+  document.getElementById('toren-kapat')?.addEventListener('click', kapat);
+  document.addEventListener('keydown', escKapat); // güvence: buton görünmese bile geçilebilsin
 }
 
 /** Basit CSS konfetisi: rastgele renk/konum/gecikmeli düşen parçalar. */

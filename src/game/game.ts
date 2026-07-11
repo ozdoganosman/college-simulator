@@ -1,5 +1,5 @@
 import {
-  AcademicRank, Alan, GameState, GUN_DAKIKA, MAP_H, donemGunu, donemIndex,
+  Academic, AcademicRank, Alan, GameState, GUN_DAKIKA, MAP_H, donemGunu, donemIndex,
 } from '../core/types';
 import { AYARLAR } from '../core/settings';
 import { validateRooms } from '../core/grid';
@@ -12,7 +12,7 @@ import { hireStaff, spawnAcademic, updateAgents } from './agents';
 import { updateResearch } from './research';
 import { dailyAcademicUpdate, refreshCandidatePools } from './academics';
 import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } from './departments';
-import { rebuildDersProgrami } from './schedule';
+import { rebuildDersProgrami, tumunuOtoSec } from './schedule';
 import { dailyEconomy } from './economy';
 import { notify, saveGame } from './state';
 
@@ -116,6 +116,16 @@ function kurHazirKampus(state: GameState): void {
       BALANCE.MAAS[rank],
     );
   }
+  tumunuOtoSec(state); // başlangıç hocalarının yıllık ders seçimleri hazır gelsin
+
+  // Onboarding: seçimleri iki bölümün müfredatını tam karşılayacak şekilde tohumla —
+  // Bilgisayar Programcılığı (BP) ve Muhasebe-Vergi (MV) ilk günden açılabilir olsun.
+  const hocalarim = state.agents.filter((a): a is Academic => a.kind === 'akademisyen');
+  const muhendisler = hocalarim.filter((h) => h.alan === 'muhendis');
+  if (muhendisler[1]) muhendisler[1].verdigiDersler = ['blg102', 'blg231', 'stat201', 'fiz102'];
+  const pratikci = hocalarim.find((h) => h.alan === 'pratik');
+  if (pratikci) pratikci.verdigiDersler = ['isl201', 'muh101', 'mly205', 'bro101'];
+  rebuildDersProgrami(state);
 
   state.para = paraOnce;
 }

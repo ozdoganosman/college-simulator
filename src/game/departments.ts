@@ -79,37 +79,12 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   if (def.labGerekli && !state.rooms.some((r) => r.type === 'laboratuvar' && r.valid)) {
     eksik.push('Geçerli laboratuvar yok');
   }
-  // Müfredat şartı: bölümün dersleri uygun alanda akademisyenle verilebilmeli
-  const verilemeyen = verilemeyenDersler(state, defId);
-  for (const dersId of verilemeyen) {
+  // Müfredat şartı: bölümün TÜM dersleri "açık derslerde" olmalı — yani her ders
+  // en az bir hocanın yıllık ders seçiminde bulunmalı (derslerden bölümlere).
+  for (const dersId of verilemeyenDersler(state, defId)) {
     const ders = courseDef(dersId);
     const alan = ALAN_META[ders.birincil];
-    eksik.push(`${ders.kod} ${ders.ad} verilemiyor — ${alan.emoji} ${alan.ad} alanında akademisyen gerekli`);
-  }
-
-  // Yıllık ders yükü: her hoca en fazla 4 farklı ders verebilir. Açık bölümlerin
-  // TÜM dersleri + bu bölümün dersleri kadroya sığmalı.
-  if (verilemeyen.length === 0) {
-    const gerekli = new Set<string>(def.dersler);
-    for (const d of state.departments) {
-      for (const c of deptDef(d.defId).dersler) gerekli.add(c);
-    }
-    const hocalar = state.agents.filter((a): a is Academic => a.kind === 'akademisyen');
-    const yuk = new Map<number, number>();
-    let acikta = 0;
-    for (const dersId of gerekli) {
-      let secilen = -1, enIyi = 0;
-      for (const h of hocalar) {
-        if ((yuk.get(h.id) ?? 0) >= 4) continue;
-        const e = dersEtki(dersId, h.alan);
-        if (e >= 0.9 && e > enIyi) { enIyi = e; secilen = h.id; }
-      }
-      if (secilen === -1) acikta++;
-      else yuk.set(secilen, (yuk.get(secilen) ?? 0) + 1);
-    }
-    if (acikta > 0) {
-      eksik.push(`Ders yükü kapasitesi yetersiz: ${acikta} ders açıkta kalır (her hoca yılda en çok 4 ders verebilir — kadroyu büyüt)`);
-    }
+    eksik.push(`${ders.kod} ${ders.ad} açık derslerde değil — 📅 Program panelinden ${alan.emoji} ${alan.ad} bir hocaya seçtir`);
   }
   if (state.para < def.acilisMaliyeti) {
     eksik.push(`Bütçe yetersiz (${formatMoney(def.acilisMaliyeti)} gerekli)`);
