@@ -17,7 +17,8 @@ import {
 import { courseDef, dersEtki } from '../data/courses';
 import {
   ASISTAN_LIMIT, DERS_LIMIT, acikDersler, akilliOtoSec, asistanlari, blokDersi, bolumuHedefle,
-  dersYukuVerimi, hocaDersCikar, hocaDersEkle, otoDersSec, verilemeyenDersler, yukVerimi,
+  dersYukuVerimi, hocaDersCikar, hocaDersEkle, otoDersSec, slotaHocaAta, verilemeyenDersler,
+  yukVerimi,
 } from '../game/schedule';
 import { COURSES } from '../data/courses';
 import { formatMoney } from '../core/util';
@@ -459,6 +460,12 @@ function onPanelChange(e: Event): void {
     } else {
       state.bursYari = Math.max(0, Math.min(100 - state.bursTam, Math.round(deger)));
     }
+    render(state);
+  } else if (action === 'slot-hoca') {
+    const sec = hedef as HTMLSelectElement;
+    const hocaId = Number(sec.value);
+    const blok = Number(hedef.dataset.blok ?? '-1');
+    if (hocaId >= 0 && blok >= 0) slotaHocaAta(state, id, blok, hocaId);
     render(state);
   } else if (action === 'ders-ekle') {
     const sec = hedef as HTMLSelectElement;
@@ -1827,7 +1834,12 @@ function programGovde(state: GameState): string {
       hocaAlan.set(h.id, h.alan);
     }
     html += '<h3>4) Bugünün Ders Programı</h3>';
+    html += `<p class="aciklama">Hücredeki seçiciden derse <b>sonradan hoca atayabilirsin</b> —
+      ders hocanın yıllık programında yoksa (kota izin veriyorsa) otomatik eklenir.
+      Program hocasız kalan dersleri her gün kendini onararak doldurmayı dener;
+      yine de boş kalıyorsa kadro yetmiyordur.</p>`;
     html += '<table><tr><th>Bölüm</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';
+    const programSlots = state.dersProgrami ?? [];
     for (const dept of state.departments) {
       const def = deptDef(dept.defId);
       html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`;
@@ -1838,14 +1850,33 @@ function programGovde(state: GameState): string {
           continue;
         }
         const ders = courseDef(slot.courseId);
-        let hoca = '<span style="color:#f4a09c">hoca yok!</span>';
+        let hoca = '<span style="color:#f4a09c"><b>hoca yok!</b> aşağıdan ata ↓</span>';
         if (slot.academicId !== -1 && hocaAd.has(slot.academicId)) {
           const alan = hocaAlan.get(slot.academicId)!;
           const hocaObj = hocalar.find((x) => x.id === slot.academicId);
           const verim = hocaObj ? Math.round(dersYukuVerimi(state, hocaObj) * 100) : 100;
           hoca = `${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!)} <small>(%${uyumYuzde(slot.courseId, alan)}${verim < 100 ? ` · ⚡%${verim}` : ''})</small>`;
         }
-        html += `<td><b>${ders.kod}</b> ${ders.ad}<br><small>${hoca}</small></td>`;
+        // slot hoca seçici: aynı saatte başka sınıfta olanlar ve kotası dolu
+        // (dersi olmayan) hocalar devre dışı gösterilir
+        const secenekler = hocalar.map((h) => {
+          const cakisma = programSlots.some(
+            (s2) => s2.blok === blok && s2.academicId === h.id && s2.deptId !== dept.id,
+          );
+          const dersiVar = (h.verdigiDersler ?? []).includes(slot.courseId);
+          const kotaDolu = !dersiVar && (h.verdigiDersler ?? []).length >= DERS_LIMIT;
+          const neden = cakisma ? ' — aynı saatte başka derste' : kotaDolu ? ` — yıllık kota dolu (${DERS_LIMIT})` : '';
+          return `<option value="${h.id}" ${slot.academicId === h.id ? 'selected' : ''}
+            ${cakisma || kotaDolu ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${dersiVar ? '' : ' (+ders)'}${neden}</option>`;
+        }).join('');
+        const seciciStil = slot.academicId === -1 ? 'border-color:#c25450;background:#3a2426' : '';
+        html += `<td><b>${ders.kod}</b> ${ders.ad}<br><small>${hoca}</small><br>
+          <select class="kontenjan-input ders-ekle" style="width:150px;font-size:11px;${seciciStil}"
+            data-action="slot-hoca" data-id="${dept.id}" data-blok="${blok}"
+            title="Bu derse hoca ata — %uyum: alan-ders uygunluğu; (+ders) hocanın yıllık programına eklenir">
+            <option value="-1" ${slot.academicId === -1 ? 'selected' : ''}>— hoca ata —</option>
+            ${secenekler}
+          </select></td>`;
       }
       html += '</tr>';
     }

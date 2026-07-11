@@ -92,6 +92,12 @@ function onerileriHesapla(state: GameState): Oneri[] {
     if (state.yksBekliyor) {
       ekle('yks', '🎓 YKS dönemi açık — hazırsan başlat!', 'Üstteki altın butona basınca yerleştirme yapılır, öğrenciler ve devlet ödeneği gelir. Önce derslik/kadro hazırlığını bitir; ♟️ Strateji > Mali Politikalar\'dan kayıt ücreti ve burs kontenjanlarını ayarla.', 'strateji');
     }
+    // hocasız ders: program kendini onaramadıysa kadro fiziken yetmiyordur
+    const hocasizDers = (state.dersProgrami ?? []).filter((s) => s.academicId === -1).length;
+    if (hocasizDers > 0) {
+      ekle('ders-hocasiz', `📅 ${hocasizDers} derste hoca yok!`, 'Program kendini onarmayı denedi ama o saatte müsait hoca kalmadı: kadro yetersiz ya da yıllık ders kotaları dolu. Yeni hoca al (👩‍🏫 Kadro) ya da 📅 Program > Bugünün Ders Programı hücresinden elle ata.', 'program');
+    }
+
     // koltuk planı: geçen YKS'de aday geri çevrildiyse ya da kontenjan koltuğu aşıyorsa
     const geriCevrilen = state.departments.reduce((t, d) => t + (d.sonGeriCevrilen ?? 0), 0);
     const koltukEksik = state.departments.filter((d) => seatCapacity(state, d.id) < d.kontenjan);
