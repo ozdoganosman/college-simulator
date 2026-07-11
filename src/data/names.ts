@@ -18,6 +18,17 @@ export const RAKIP_UNILER = [
   'Ege Fen Üniversitesi', 'Başkent Politeknik', 'Marmara Teknoloji Enstitüsü',
   'Akdeniz İleri Araştırmalar Üniversitesi', 'İç Anadolu Üniversitesi',
   'Doğu Anadolu Teknik Üniversitesi', 'Trakya Bilimler Üniversitesi',
+  'Kapadokya Sosyal Bilimler Üniversitesi', 'GAP Teknoloji Üniversitesi',
+  'Kuzey Ege Sanat Akademisi', 'Toros İşletme Enstitüsü',
+  'Sakarya Havzası Üniversitesi', 'Erciyes Yüksek Teknoloji Enstitüsü',
+  'Batı Karadeniz Üniversitesi', 'Mezopotamya Tarih Üniversitesi',
+];
+
+/** Rakip üniversitelerin bulunduğu şehirler (isimle aynı sırada değil, rastgele eşlenir). */
+export const UNI_SEHIRLER = [
+  'İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Trabzon', 'Eskişehir',
+  'Konya', 'Gaziantep', 'Kayseri', 'Edirne', 'Samsun', 'Adana', 'Denizli',
+  'Erzurum', 'Diyarbakır', 'Mersin', 'Nevşehir',
 ];
 
 /** Araştırma projesi başlık üreteci parçaları */

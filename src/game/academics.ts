@@ -86,16 +86,17 @@ export function refreshCandidatePools(state: GameState): void {
     const [bonusMin, bonusMax] = BONUS_ARALIK[rank];
     // aday sıralamadaki bir rakipten gelir: zirvedeki üniden ayartmak pahalı,
     // dibe düşenden ucuz — becerileri de kurumunun gücünü yansıtır
-    const kurum = state.rakipler.length > 0
-      ? pick(state, state.rakipler).ad
-      : pick(state, RAKIP_UNILER);
+    const rakip = state.rakipler.length > 0 ? pick(state, state.rakipler) : null;
+    const kurum = rakip ? rakip.ad : pick(state, RAKIP_UNILER);
     const carpan = transferBonusCarpani(state, kurum);
     const beceriTaban = Math.round(clamp(40 + (carpan - 0.7) * 45, 40, 78)); // iyi üni = iyi hoca
+    // aday çoğunlukla kurumunun uzmanlık alanından çıkar
+    const alan = rakip && randInt(state, 0, 99) < 60 ? rakip.uzmanlik : pick(state, ALANLAR);
     transfer.push({
       id: newId(state),
       ad: rastgeleAd(state),
       rank,
-      alan: pick(state, ALANLAR),
+      alan,
       egitim: randInt(state, beceriTaban, 95),
       arastirma: randInt(state, beceriTaban, 95),
       maas: Math.round(BALANCE.MAAS[rank] * randRange(state, 1.1, 1.5)),

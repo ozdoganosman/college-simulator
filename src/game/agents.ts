@@ -613,7 +613,9 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       const dersId = ctx.blokDersleri.get(s.deptId);
       if (dersId) {
         const alan = courseDef(dersId).birincil;
-        const artis = (2.0 / BLOK_SURE) * dtMin * efektif;
+        // mentorluk programı: mezun mentorlar nitelik gelişimini hızlandırır
+        const mentor = state.mentorluk ? 1.15 : 1;
+        const artis = (2.0 / BLOK_SURE) * dtMin * efektif * mentor;
         s.nitelik[alan] = clamp(s.nitelik[alan] + artis, 0, 100);
         if (alan === 'artist' || alan === 'pratik') {
           s.nitelik.influencer = clamp(s.nitelik.influencer + artis * 0.35, 0, 100);

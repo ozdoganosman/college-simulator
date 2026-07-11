@@ -55,7 +55,8 @@ import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { deptDef } from '../data/departments';
 import { addPrestij, earn, notify, spend } from './state';
-import { removeAgent, spawnStudent } from './agents';
+import { gnoHesapla, removeAgent, spawnStudent } from './agents';
+import { mezunEkle } from './alumni';
 
 function sinifMi(r: Room): boolean {
   return r.type === 'derslik' || r.type === 'amfi';
@@ -304,7 +305,9 @@ export function runYerlestirme(state: GameState): boolean {
       continue;
     }
 
-    let talep = def.tabanTalep * Math.pow(state.prestij / 100, 0.7);
+    // prestij 0'ken bile %12 taban talep vardır (yeni kurulan üniversiteye
+    // yine de öğrenci gelir) — prestij yükseldikçe tam talebe yaklaşılır
+    let talep = def.tabanTalep * (0.12 + 0.88 * Math.pow(state.prestij / 100, 0.7));
     if (state.strategies.includes('tanitim')) talep *= 1.25;
     if (state.strategies.includes('uluslararasi_ofis')) talep *= 1.15;
     talep *= randRange(state, 0.8, 1.2);
@@ -409,6 +412,9 @@ export function semesterEnd(state: GameState): void {
     const bagis = Math.round(s.sermaye * BALANCE.MEZUN_BAGIS_ORANI);
     toplamBagis += bagis;
     if (s.sermaye >= BALANCE.ZENGIN_MEZUN_ESIK) zenginMezun++;
+    // mezunlar derneğine kayıt: puanına göre işe yerleşir, kariyeri yıllık ilerler
+    const mezunDept = deptMap.get(s.deptId);
+    mezunEkle(state, s, mezunDept ? deptDef(mezunDept.defId).ad : 'Kapanan Bölüm', gnoHesapla(s));
     removeAgent(state, s.id);
     state.toplamMezun++;
     const dept = deptMap.get(s.deptId);

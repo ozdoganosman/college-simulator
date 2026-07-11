@@ -277,6 +277,48 @@ html, body, #app {
 .cip-cikar:hover { color: #f4a09c; }
 .panel .ders-ekle { width: 190px; }
 
+/* ---- ders bilgi penceresi (hover) ---- */
+.ders-tip {
+  display: none;
+  position: fixed;
+  z-index: 60;
+  width: 340px;
+  background: #161a24;
+  border: 1px solid #4a5570;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #c8d1e0;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  pointer-events: none;
+  line-height: 1.5;
+}
+.ders-tip > div { margin: 4px 0; }
+.ders-tip .tip-baslik {
+  font-size: 14px;
+  color: #f2f5fa;
+  border-left: 4px solid #4a7bd4;
+  padding-left: 8px;
+  margin-bottom: 6px;
+}
+.ders-tip .rozet {
+  display: inline-block; padding: 1px 7px; border-radius: 9px;
+  font-size: 11px; background: #2c3140; margin-left: 6px;
+}
+[data-tip-ders] { cursor: help; }
+
+/* ---- mezunlar paneli grafikleri ---- */
+.grafik-satir { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 12px; }
+.grafik-etiket { flex: 0 0 190px; color: #a9b4c8; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grafik-cubuk-kap { flex: 1; background: #232838; border-radius: 4px; height: 14px; overflow: hidden; }
+.grafik-cubuk { display: block; height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+.grafik-deger { flex: 0 0 92px; font-weight: 700; color: #e8ecf5; }
+.haber-liste { display: flex; flex-direction: column; gap: 4px; }
+.haber {
+  font-size: 12px; color: #c8d1e0; background: #212636;
+  border-left: 3px solid #4a7bd4; border-radius: 5px; padding: 6px 10px;
+}
+
 /* ---- menü ---- */
 #menu-root { display: none; }
 #menu-root.acik {

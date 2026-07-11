@@ -290,6 +290,12 @@ export interface RakipUni {
   mezun: number;     // toplam mezun
   /** yıllık gelişim karakteri (0.6 durgun – 1.5 yükselen), zamanla oynar */
   guc: number;
+  /** okul hakkında ufak bilgiler */
+  sehir: string;
+  kurulus: number;      // kuruluş yılı
+  uzmanlik: Alan;       // güçlü olduğu alan — transfer adaylarına yansır
+  /** mezun istihdam oranı % (yıllık günceller) */
+  istihdam: number;
 }
 
 export interface SiralamaSatir {
@@ -299,6 +305,25 @@ export interface SiralamaSatir {
   mezun: number;
   skor: number;
   oyuncu: boolean;
+}
+
+// --- Mezunlar derneği ---------------------------------------------------------
+
+export type Sektor = Alan | 'girisim' | 'medya';
+
+/** Mezun kaydı: iş/kariyer sistemi yıllık olarak günceller. */
+export interface Mezun {
+  id: number;
+  ad: string;
+  bolumAd: string;
+  yil: number;          // mezuniyet yılı
+  gno: number;          // 0-4
+  puan: number;         // işe yerleşme puanı (GNO + nitelik + eğilim bileşimi)
+  sektor: Sektor;
+  meslek: string;
+  kademe: number;       // kariyer basamağı 0-4
+  gelir: number;        // yıllık gelir ₺ (işsizse 0)
+  issiz: boolean;
 }
 
 /** Yıl sonu "Akademik Yıl Ödülleri" töreni verisi (kapanınca null). */
@@ -428,6 +453,15 @@ export interface GameState {
   yilBasi: { mezun: number; yayin: number };
   /** bekleyen yıl sonu ödül töreni (tören kapanınca null) */
   yilSonu: YilSonuSonuc | null;
+  /** mezunlar derneği: mezun kayıtları (en fazla ~400 tutulur) */
+  mezunlar: Mezun[];
+  /** dernek haberleri (son ~12, en yenisi başta) */
+  mezunHaber: string[];
+  /** mezun-öğrenci etkileşim uygulamaları */
+  mentorluk: boolean;
+  sonKariyerGunu: number;   // son Kariyer Günü'nün yapıldığı gün (0 = hiç)
+  /** yıl sonlarındaki sıralama geçmişi (trend grafiği) */
+  siraGecmisi: number[];
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */

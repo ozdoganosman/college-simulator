@@ -15,6 +15,7 @@ import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } fr
 import { rebuildDersProgrami, tumunuOtoSec } from './schedule';
 import { dailyEconomy } from './economy';
 import { kurRakipler, rakipleriGelistir, yilSonuHesapla } from './rivals';
+import { yillikMezunGuncelle } from './alumni';
 import { addPrestij, notify, saveGame } from './state';
 
 /** Simülasyonu dtMin oyun-dakikası ilerletir (büyük adımları böler). */
@@ -66,8 +67,11 @@ function endOfDay(state: GameState): void {
           notify(state, `🏆 Sıralamada yükseliş: ${sonuc.oncekiSira}. → ${sonuc.sira}. (+${sonuc.siraPrestij} prestij)`, 'odul');
         }
         state.sonSira = sonuc.sira;
+        state.siraGecmisi.push(sonuc.sira);
+        if (state.siraGecmisi.length > 12) state.siraGecmisi.shift();
         state.yilBasi = { mezun: state.toplamMezun, yayin: state.publications.length };
         rakipleriGelistir(state); // rakipler de boş durmuyor
+        yillikMezunGuncelle(state); // mezun kariyerleri + dernek bağışı + haberler
       }
       if (!state.yksBekliyor) {
         state.yksBekliyor = true;

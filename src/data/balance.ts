@@ -3,7 +3,7 @@
  */
 export const BALANCE = {
   BASLANGIC_PARA: 2_500_000,
-  BASLANGIC_PRESTIJ: 100,
+  BASLANGIC_PRESTIJ: 0,     // sıfırdan başla: prestiji mezun/yayın/buluşla kazan
 
   // Ekonomi
   OGRENCI_ODENEK: 9000,        // yerleştirmede yeni öğrenci başı devlet ödeneği ₺
@@ -33,6 +33,14 @@ export const BALANCE = {
     makale: 2, uluslararasiMakale: 6, bulus: 30, odul: 50,
     mezun: 0.5, birakan: -1.5, terfi: 3,
   },
+
+  // Mezunlar derneği
+  MEZUN_LIMIT: 400,            // kayıt tutulan azami mezun (eskiler düşer)
+  DERNEK_BAGIS_ORANI: 0.005,   // çalışan mezunların yıllık gelirinden dernek bağışı
+  MENTORLUK_GIDER: 2000,       // günlük ₺ (aktifken); nitelik gelişimi +%15
+  MENTORLUK_MIN_MEZUN: 8,      // mentorluk için gereken çalışan mezun
+  KARIYER_GUNU_MALIYET: 75_000,
+  KARIYER_GUNU_BEKLEME: 20,    // gün (dönemde 1 kez)
 
   // Öğrenci girişim ekosistemi
   GIRISIM_OKUL_PAYI: 0.10,     // öğrenci günlük girişim gelirinden okulun kuluçka payı

@@ -10,10 +10,12 @@
  * state.ts buradan import edebilsin diye (döngüsel import yok).
  */
 import {
-  DONEM_GUN, GameState, RANK_LABEL, SiralamaSatir, Student, YilSonuSonuc, yil,
+  Alan, DONEM_GUN, GameState, RANK_LABEL, SiralamaSatir, Student, YilSonuSonuc, yil,
 } from '../core/types';
-import { clamp, randInt, randRange } from '../core/util';
-import { RAKIP_UNILER } from '../data/names';
+import { clamp, pick, randInt, randRange } from '../core/util';
+import { RAKIP_UNILER, UNI_SEHIRLER } from '../data/names';
+
+const ALANLAR: Alan[] = ['muhendis', 'artist', 'filozof', 'pratik'];
 
 /** Sıralama skoru: prestij ağırlıklı, yayın ve mezun destekli. */
 export function uniSkor(prestij: number, yayin: number, mezun: number): number {
@@ -24,16 +26,35 @@ export function uniSkor(prestij: number, yayin: number, mezun: number): number {
 export function kurRakipler(state: GameState): void {
   state.rakipler = RAKIP_UNILER.map((ad, i) => {
     // yayılım: köklü devler + orta sınıf + yeni kurulanlar
-    const taban = 90 + ((i * 137) % 360);
+    const taban = 70 + ((i * 137) % 380);
     const prestij = taban + randInt(state, -25, 45);
+    // isimden ipucu: "Sanat/Sosyal/Tarih" artist-filozof, "Teknoloji/Teknik/Fen" mühendis, "İşletme" pratik
+    let uzmanlik: Alan = pick(state, ALANLAR);
+    if (/Teknik|Teknoloji|Fen|Politeknik|Bilim/.test(ad)) uzmanlik = 'muhendis';
+    else if (/Sanat/.test(ad)) uzmanlik = 'artist';
+    else if (/Sosyal|Tarih/.test(ad)) uzmanlik = 'filozof';
+    else if (/İşletme/.test(ad)) uzmanlik = 'pratik';
     return {
       ad,
       prestij,
       yayin: Math.round(prestij * randRange(state, 0.25, 0.7)),
       mezun: Math.round(prestij * randRange(state, 0.6, 1.8)),
       guc: randRange(state, 0.7, 1.4),
+      sehir: UNI_SEHIRLER[i % UNI_SEHIRLER.length],
+      kurulus: 1955 + randInt(state, 0, 60),
+      uzmanlik,
+      istihdam: clamp(Math.round(50 + prestij / 12 + randInt(state, -6, 8)), 42, 96),
     };
   });
+}
+
+/** Rakip hakkında ufak bilgi cümlesi (tooltip/panel). */
+export function rakipBilgi(r: import('../core/types').RakipUni): string {
+  const alanAd: Record<Alan, string> = {
+    muhendis: 'mühendislik', artist: 'sanat', filozof: 'sosyal bilimler', pratik: 'işletme',
+  };
+  const karakter = r.guc >= 1.2 ? 'hızla yükseliyor 📈' : r.guc <= 0.85 ? 'durgun dönemde 📉' : 'istikrarlı';
+  return `${r.sehir} · ${r.kurulus}'te kuruldu · ${alanAd[r.uzmanlik]} alanında güçlü · mezun istihdamı %${r.istihdam} · ${karakter}`;
 }
 
 /** Yıl dönümünde rakipleri geliştirir (güç karakteri de yavaşça sürüklenir). */
@@ -43,6 +64,7 @@ export function rakipleriGelistir(state: GameState): void {
     r.yayin += Math.max(0, Math.round(randRange(state, 2, 14) * r.guc));
     r.mezun += Math.max(0, Math.round(randRange(state, 25, 130) * r.guc));
     r.guc = clamp(r.guc + randRange(state, -0.08, 0.08), 0.6, 1.5);
+    r.istihdam = clamp(Math.round(r.istihdam + randRange(state, -3, 3) + (r.guc - 1) * 4), 42, 96);
   }
 }
 

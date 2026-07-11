@@ -11,8 +11,8 @@
  *   (styles.css'te hazır).
  */
 import {
-  ALAN_META, AcademicRank, Alan, GameState, LEVEL_LABEL, NITELIK_META, Nitelik, RANK_LABEL,
-  RoomType, StrategyDef, Student, StudentLevel, tileIndex,
+  ALAN_META, AcademicRank, Alan, GameState, LEVEL_LABEL, Mezun, NITELIK_META, Nitelik,
+  RANK_LABEL, RoomType, Sektor, StrategyDef, Student, StudentLevel, tileIndex,
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
 import {
@@ -32,19 +32,20 @@ import {
 } from '../game/academics';
 import { cancelProject, startProject } from '../game/research';
 import { ogrenciGunlukKazanc } from '../game/economy';
-import { siralama } from '../game/rivals';
+import { rakipBilgi, siralama } from '../game/rivals';
+import { MESLEKLER, SEKTOR_META, istihdamOrani, kariyerGunu, mentorlukAyarla } from '../game/alumni';
 import {
   KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
   toplamKoleksiyon,
 } from '../game/library';
-import { hireStaff, removeAgent } from '../game/agents';
+import { gnoHesapla as gnoHesaplaUI, hireStaff, removeAgent } from '../game/agents';
 import { BALANCE } from '../data/balance';
 import { DEPT_DEFS, bolumBaskinAlan, deptDef } from '../data/departments';
 import { ROOM_DEFS, ROOM_LIST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
 import { STRATEGY_DEFS, strategyDef } from '../data/strategies';
 
-export type PanelName = 'bolumler' | 'kadro' | 'program' | 'arastirma' | 'kutuphane' | 'strateji' | 'raporlar' | 'yardim';
+export type PanelName = 'bolumler' | 'kadro' | 'program' | 'arastirma' | 'kutuphane' | 'mezunlar' | 'strateji' | 'raporlar' | 'yardim';
 
 let getStateRef: (() => GameState) | null = null;
 let acik: { name: PanelName; el: HTMLDivElement } | null = null;
@@ -55,6 +56,7 @@ const PANEL_BASLIK: Record<PanelName, string> = {
   program: '📅 Ders Programı',
   arastirma: '🔬 Araştırma',
   kutuphane: '📚 Kütüphane',
+  mezunlar: '🤝 Mezunlar Derneği',
   strateji: '♟️ Strateji',
   raporlar: '📊 Raporlar',
   yardim: '❓ Nasıl Oynanır',
@@ -81,6 +83,8 @@ export function openPanel(name: PanelName): void {
   // Olay delegasyonu: panel açıkken BİR kez bağlanır, innerHTML yenilense de yaşar.
   el.addEventListener('click', onPanelClick);
   el.addEventListener('change', onPanelChange);
+  el.addEventListener('mouseover', onPanelHover);
+  el.addEventListener('mouseout', dersTipGizle);
   // fare basılıyken yeniden çizme — mousedown/mouseup arası DOM değişirse tık yutulur
   el.addEventListener('pointerdown', () => { isaretciBasili = true; });
   window.addEventListener('pointerup', () => { isaretciBasili = false; });
@@ -91,6 +95,7 @@ export function openPanel(name: PanelName): void {
 
 export function closePanel(): void {
   if (!acik) return;
+  dersTipGizle();
   acik.el.remove();
   acik = null;
 }
@@ -131,11 +136,109 @@ function render(state: GameState): void {
     case 'program': govde = programGovde(state); break;
     case 'arastirma': govde = arastirmaGovde(state); break;
     case 'kutuphane': govde = kutuphaneGovde(state); break;
+    case 'mezunlar': govde = mezunlarGovde(state); break;
     case 'strateji': govde = stratejiGovde(state); break;
     case 'raporlar': govde = raporlarGovde(state); break;
     case 'yardim': govde = yardimGovde(); break;
   }
   acik.el.innerHTML = baslik(PANEL_BASLIK[acik.name]) + govde;
+}
+
+// --- Ders bilgi penceresi (hover tooltip) ----------------------------------------
+
+let dersTipEl: HTMLDivElement | null = null;
+let dersBolumleriCache: Map<string, string[]> | null = null;
+
+/** courseId -> müfredatında bulunduğu bölüm adları (bir kez kurulur). */
+function dersBolumleri(courseId: string): string[] {
+  if (!dersBolumleriCache) {
+    dersBolumleriCache = new Map();
+    for (const d of DEPT_DEFS) {
+      for (const ders of d.dersler) {
+        const liste = dersBolumleriCache.get(ders);
+        if (liste) liste.push(d.ad);
+        else dersBolumleriCache.set(ders, [d.ad]);
+      }
+    }
+  }
+  return dersBolumleriCache.get(courseId) ?? [];
+}
+
+/** Dersin getirisini anlatan zengin bilgi penceresi içeriği. */
+function dersTipHtml(state: GameState, courseId: string, hocaAlan: Alan | null): string {
+  const c = courseDef(courseId);
+  const alan = ALAN_META[c.birincil];
+
+  // dersi şu an seçmiş hocalar
+  const verenler: string[] = [];
+  for (const a of state.agents) {
+    if (a.kind === 'akademisyen' && (a.verdigiDersler ?? []).includes(courseId)) {
+      verenler.push(`${RANK_LABEL[a.rank]} ${a.ad} (%${Math.round((dersEtki(courseId, a.alan) / 1.25) * 100)})`);
+    }
+  }
+
+  const acikDeptIds = new Set(state.departments.map((d) => deptDef(d.defId).ad));
+  const bolumler = dersBolumleri(courseId);
+  const bolumHtml = bolumler.slice(0, 5)
+    .map((b) => `<span style="color:${acikDeptIds.has(b) ? '#9fd3a8' : '#8f9ab0'}">${esc(b)}${acikDeptIds.has(b) ? ' ✔' : ''}</span>`)
+    .join(' · ') + (bolumler.length > 5 ? ` <small>+${bolumler.length - 5}</small>` : '');
+
+  const koleksiyon = state.kitapKoleksiyon[c.birincil] ?? 0;
+
+  let uyumSatiri = '';
+  if (hocaAlan) {
+    const yuzde = Math.round((dersEtki(courseId, hocaAlan) / 1.25) * 100);
+    const renk = yuzde >= 95 ? '#9fd3a8' : yuzde >= 70 ? '#f0c674' : '#f4a09c';
+    uyumSatiri = `<div>👩‍🏫 Bu hocayla verim: <b style="color:${renk}">%${yuzde}</b>
+      <small>(birincil alan %100 · ikincil %76 · alan dışı %44)</small></div>`;
+  }
+
+  return `
+    <div class="tip-baslik" style="border-color:${alan.renk}">
+      <b>${c.kod}</b> ${esc(c.ad)}
+      <span class="rozet">${alan.emoji} ${alan.ad}</span>
+    </div>
+    ${uyumSatiri}
+    <div>🎓 <b>Öğrenci getirisi:</b> ${NITELIK_META[c.birincil].emoji} ${NITELIK_META[c.birincil].ad}
+      niteliği gelişir${c.birincil === 'artist' || c.birincil === 'pratik' ? ' + 📣 Influencer' : ''}
+      — nitelikler girişim gelirine (💰 sermaye) dönüşür.</div>
+    <div>🏛️ <b>Müfredatında olduğu bölümler:</b> ${bolumHtml || '<small>yok</small>'}</div>
+    <div>📚 Kütüphane ${alan.ad} koleksiyonu: <b>${'📗'.repeat(koleksiyon) || 'yok'}</b>
+      <small>(kütüphane çalışma hızı %${Math.round((0.35 + 0.35 * koleksiyon) * 100)})</small></div>
+    <div>${verenler.length > 0
+    ? `✅ <b>Şu an veren:</b> ${verenler.slice(0, 3).map(esc).join(', ')}${verenler.length > 3 ? ` +${verenler.length - 3}` : ''}`
+    : '❌ Şu an hiçbir hoca bu dersi vermiyor'}</div>`;
+}
+
+function onPanelHover(e: Event): void {
+  if (!(e.target instanceof Element) || !getStateRef) return;
+  const hedef = e.target.closest<HTMLElement>('[data-tip-ders]');
+  if (!hedef) return;
+  const courseId = hedef.dataset.tipDers ?? '';
+  if (!courseId) return;
+  const alan = (hedef.dataset.tipAlan ?? '') as Alan | '';
+
+  if (!dersTipEl) {
+    dersTipEl = document.createElement('div');
+    dersTipEl.className = 'ders-tip';
+    document.body.appendChild(dersTipEl);
+  }
+  dersTipEl.innerHTML = dersTipHtml(getStateRef(), courseId, alan === '' ? null : alan);
+  dersTipEl.style.display = 'block';
+
+  const r = hedef.getBoundingClientRect();
+  const w = 340;
+  const x = Math.max(8, Math.min(r.left, window.innerWidth - w - 12));
+  dersTipEl.style.left = `${x}px`;
+  // altta yer yoksa üstte göster
+  const yUst = r.top - dersTipEl.offsetHeight - 8;
+  dersTipEl.style.top = r.bottom + 8 + dersTipEl.offsetHeight < window.innerHeight || yUst < 8
+    ? `${r.bottom + 8}px`
+    : `${yUst}px`;
+}
+
+function dersTipGizle(): void {
+  if (dersTipEl) dersTipEl.style.display = 'none';
 }
 
 // --- Olay işleyiciler ----------------------------------------------------------
@@ -208,6 +311,12 @@ function onPanelClick(e: Event): void {
     }
     case 'kitap-al':
       kitapAl(state, id as Alan);
+      break;
+    case 'mentorluk':
+      mentorlukAyarla(state, !state.mentorluk);
+      break;
+    case 'kariyer-gunu':
+      kariyerGunu(state);
       break;
     case 'proje-baslat':
       startProject(state, Number(id));
@@ -513,6 +622,125 @@ function kadroGovde(state: GameState): string {
     </table>`;
 }
 
+// --- Mezunlar Derneği ------------------------------------------------------------
+
+/** CSS bar grafiği satırı. */
+function grafikBar(etiket: string, deger: number, max: number, renk: string, gosterim?: string): string {
+  const oran = max > 0 ? Math.max(2, Math.round((100 * deger) / max)) : 0;
+  return `<div class="grafik-satir">
+    <span class="grafik-etiket">${etiket}</span>
+    <span class="grafik-cubuk-kap"><span class="grafik-cubuk" style="width:${oran}%;background:${renk}"></span></span>
+    <span class="grafik-deger">${gosterim ?? String(deger)}</span>
+  </div>`;
+}
+
+function mezunlarGovde(state: GameState): string {
+  const mezunlar = state.mezunlar;
+  const bekleme = BALANCE.KARIYER_GUNU_BEKLEME - (state.gun - state.sonKariyerGunu);
+  const kariyerHazir = state.sonKariyerGunu === 0 || bekleme <= 0;
+
+  if (mezunlar.length === 0) {
+    return `<div class="aciklama">Henüz mezunun yok. Öğrencilerin mezun olunca <b>puanlarına göre</b>
+      (GNO + nitelikler + eğilim) işe yerleşir; kariyerleri her yıl ilerler, gelirlerinin bir kısmını
+      derneğe bağışlar, haberleri buraya düşer. İstihdam oranını rakip üniversitelerle
+      kıyaslayabilirsin. İlk mezunlarını bekliyoruz, Rektörüm! 🎓</div>`;
+  }
+
+  const calisan = mezunlar.filter((m) => !m.issiz);
+  const oran = istihdamOrani(state) ?? 0;
+  const ortGelir = calisan.length > 0
+    ? Math.round(calisan.reduce((t2, m) => t2 + m.gelir, 0) / calisan.length)
+    : 0;
+  const ortGno = Math.round((mezunlar.reduce((t2, m) => t2 + m.gno, 0) / mezunlar.length) * 100) / 100;
+  const yillikBagis = Math.round(calisan.reduce((t2, m) => t2 + m.gelir, 0) * BALANCE.DERNEK_BAGIS_ORANI);
+
+  let html = `<div class="aciklama">Mezunlar <b>puanlarına göre</b> işe yerleşir, kariyerleri her yıl
+    ilerler. Çalışan mezunlar yıllık gelirlerinin %${(BALANCE.DERNEK_BAGIS_ORANI * 100).toFixed(1)}'ini
+    derneğe bağışlar.</div>
+  <table>
+    <tr><td>Kayıtlı mezun</td><td><b>${mezunlar.length}</b></td>
+        <td>İstihdam oranı</td><td><b>%${oran}</b></td></tr>
+    <tr><td>Ortalama yıllık gelir</td><td><b>${formatMoney(ortGelir)}</b></td>
+        <td>Mezun GNO ortalaması</td><td><b>${ortGno.toFixed(2)}</b></td></tr>
+    <tr><td>Yıllık dernek bağışı (tahmini)</td><td><b>${formatMoney(yillikBagis)}</b></td>
+        <td>İş arayan</td><td><b>${mezunlar.length - calisan.length}</b></td></tr>
+  </table>`;
+
+  // --- etkileşim uygulamaları ---
+  html += `<h3>🤝 Mezun-Öğrenci Etkileşimi</h3>
+  <div class="aciklama">
+    <button class="eylem" data-action="mentorluk" title="Çalışan mezunlar öğrencilere mentorluk eder: nitelik gelişimi +%15. Günlük ${formatMoney(BALANCE.MENTORLUK_GIDER)} (en az ${BALANCE.MENTORLUK_MIN_MEZUN} çalışan mezun gerekir)">
+      ${state.mentorluk ? '✅ Mentorluk Programı AÇIK — kapat' : '▶ Mentorluk Programını Başlat'}</button>
+    <button class="eylem" data-action="kariyer-gunu" ${kariyerHazir ? '' : 'disabled'}
+      title="Başarılı bir mezun sahne alır: tüm öğrencilere 💼+📣 nitelik ve +10 mutluluk. ${formatMoney(BALANCE.KARIYER_GUNU_MALIYET)}, dönemde 1 kez">
+      🎤 Kariyer Günü Düzenle (${formatMoney(BALANCE.KARIYER_GUNU_MALIYET)})${kariyerHazir ? '' : ` — ${bekleme} gün sonra`}</button>
+    ${state.mentorluk ? `<span class="rozet">günlük ${formatMoney(BALANCE.MENTORLUK_GIDER)}</span>` : ''}
+  </div>`;
+
+  // --- dernek haberleri ---
+  html += '<h3>📰 Dernek Haberleri</h3>';
+  html += state.mezunHaber.length === 0
+    ? '<div class="aciklama">Henüz haber yok — kariyerler yıl dönümünde ilerler.</div>'
+    : `<div class="haber-liste">${state.mezunHaber.slice(0, 8).map((h) => `<div class="haber">${esc(h)}</div>`).join('')}</div>`;
+
+  // --- grafik: sektör dağılımı ---
+  const sektorSayi = new Map<Sektor, number>();
+  const kademeSayi = [0, 0, 0, 0, 0];
+  for (const m of mezunlar) {
+    sektorSayi.set(m.sektor, (sektorSayi.get(m.sektor) ?? 0) + 1);
+    if (!m.issiz) kademeSayi[m.kademe]++;
+  }
+  const enCokSektor = Math.max(1, ...sektorSayi.values());
+  html += '<h3>📊 Sektör Dağılımı</h3>';
+  const sektorRenk: Record<Sektor, string> = {
+    muhendis: '#4e79a7', artist: '#e15759', filozof: '#b07aa1',
+    pratik: '#59a14f', girisim: '#f28e2b', medya: '#c77dff',
+  };
+  for (const [sektor, n] of [...sektorSayi.entries()].sort((a, b) => b[1] - a[1])) {
+    html += grafikBar(`${SEKTOR_META[sektor].emoji} ${SEKTOR_META[sektor].ad}`, n, enCokSektor, sektorRenk[sektor], `${n} mezun`);
+  }
+
+  // --- grafik: kariyer basamakları ---
+  html += '<h3>📈 Kariyer Basamakları (çalışanlar)</h3>';
+  const enCokKademe = Math.max(1, ...kademeSayi);
+  const kademeAd = ['Yeni başlayan', 'Uzmanlaşan', 'Kıdemli', 'Yönetici', 'Zirve 🌟'];
+  kademeSayi.forEach((n, i) => {
+    html += grafikBar(kademeAd[i], n, enCokKademe, '#4a7bd4', `${n} kişi`);
+  });
+
+  // --- grafik: istihdam kıyası ---
+  html += `<h3>🏆 Mezun İstihdamı: Rakiplerle Kıyas</h3>
+    <div class="aciklama">Rakiplerin istihdam oranları yıllık değişir — okulunun ekosistemi
+    (nitelik gelişimi, kütüphane, kariyer günleri) mezunlarını daha kolay işe yerleştirir.</div>`;
+  const kiyas: { ad: string; oran: number; oyuncu: boolean }[] = state.rakipler
+    .map((r) => ({ ad: r.ad, oran: r.istihdam, oyuncu: false }));
+  kiyas.push({ ad: '🎓 ÜNİVERSİTEN', oran, oyuncu: true });
+  kiyas.sort((a, b) => b.oran - a.oran);
+  for (const k of kiyas.slice(0, 8)) {
+    html += grafikBar(k.oyuncu ? '<b style="color:#ffd166">🎓 ÜNİVERSİTEN</b>' : esc(k.ad), k.oran, 100,
+      k.oyuncu ? '#ffd166' : '#5b6b8f', `%${k.oran}`);
+  }
+  if (!kiyas.slice(0, 8).some((k) => k.oyuncu)) {
+    html += grafikBar('<b style="color:#ffd166">🎓 ÜNİVERSİTEN</b>', oran, 100, '#ffd166', `%${oran}`);
+  }
+
+  // --- en başarılı mezunlar ---
+  const yildizlar = [...mezunlar].sort((a, b) => b.gelir - a.gelir).slice(0, 8);
+  html += `<h3>🌟 En Başarılı Mezunlar</h3>
+    <table><tr><th>Mezun</th><th>Bölüm</th><th>Meslek</th><th>Yıllık gelir</th><th>GNO</th></tr>`;
+  for (const m of yildizlar) {
+    html += `<tr>
+      <td><b>${esc(m.ad)}</b></td>
+      <td><small>${esc(m.bolumAd)} '${m.yil}</small></td>
+      <td>${SEKTOR_META[m.sektor].emoji} ${m.issiz ? '<span style="color:#f4a09c">iş arıyor</span>' : esc(m.meslek)}</td>
+      <td>${m.issiz ? '—' : formatMoney(m.gelir)}</td>
+      <td>${m.gno.toFixed(2)}</td>
+    </tr>`;
+  }
+  html += '</table>';
+  return html;
+}
+
 // --- Kütüphane -----------------------------------------------------------------
 
 function kutuphaneGovde(state: GameState): string {
@@ -788,22 +1016,31 @@ function ekosistemBolumu(state: GameState): string {
 function siralamaBolumu(state: GameState): string {
   const liste = siralama(state);
   const oyuncuSira = liste.findIndex((s) => s.oyuncu) + 1;
+  const rakipMap = new Map(state.rakipler.map((r) => [r.ad, r]));
   const satirlar = liste.map((s, i) => {
     const madalya = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-    return `<tr${s.oyuncu ? ' style="background:rgba(255,209,102,0.12)"' : ''}>
+    const r = rakipMap.get(s.ad);
+    const bilgi = r ? rakipBilgi(r) : '';
+    const adHucre = s.oyuncu
+      ? '<b style="color:#ffd166">🎓 ÜNİVERSİTEN</b>'
+      : `${esc(s.ad)}<br><small style="color:#7f8ba2">${esc(bilgi)}</small>`;
+    return `<tr${s.oyuncu ? ' style="background:rgba(255,209,102,0.12)"' : ''} title="${esc(bilgi)}">
       <td><b>${madalya}</b></td>
-      <td>${s.oyuncu ? '<b style="color:#ffd166">🎓 ÜNİVERSİTEN</b>' : esc(s.ad)}</td>
+      <td>${adHucre}</td>
       <td>${s.prestij}</td>
       <td>${s.yayin}</td>
       <td>${s.mezun}</td>
       <td><b>${s.skor}</b></td>
     </tr>`;
   }).join('');
+  const trend = state.siraGecmisi.length > 0
+    ? `<br>📈 Sıra geçmişi: <b>${state.siraGecmisi.join(' → ')} → ${oyuncuSira}</b>`
+    : '';
   return `<h3>🏆 Türkiye Üniversite Sıralaması</h3>
     <div class="aciklama">Skor = prestij + yayın×0.5 + mezun×0.1. Rakipler her yıl gelişir;
     sıralamada yükselmek yıl sonunda prestij ödülü getirir — hedef: <b>1 numara olmak!</b>
     Sıran: <b>${oyuncuSira}/${liste.length}</b>${state.sonSira > 0 ? ` (geçen yıl ${state.sonSira}.)` : ''}
-    · 💡 Transfer bonusları adayın kurumunun sırasına göre değişir: zirvedekiler pahalı, dibe düşenler ucuz.</div>
+    · 💡 Transfer bonusları adayın kurumunun sırasına göre değişir: zirvedekiler pahalı, dibe düşenler ucuz.${trend}</div>
     <table>
       <tr><th></th><th>Üniversite</th><th>Prestij</th><th>Yayın</th><th>Mezun</th><th>Skor</th></tr>
       ${satirlar}
@@ -811,23 +1048,42 @@ function siralamaBolumu(state: GameState): string {
 }
 
 function raporlarGovde(state: GameState): string {
-  // Tek geçişte tüm ajan istatistikleri
+  // Tek geçişte tüm ajan istatistikleri — gider hesabı economy.ts ile AYNI kurallarla
+  // (teşvik çarpanı, asistan maaşları, mentorluk) yapılır ki rapor gerçeği yansıtsın
+  const tesvik = state.strategies.includes('tesvik');
   const seviye: Record<StudentLevel, number> = { lisans: 0, yl: 0, doktora: 0 };
   const unvan: Record<AcademicRank, number> = { arsgor: 0, dr: 0, docent: 0, prof: 0 };
   let asci = 0, temizlikci = 0, maasYuku = 0, mutlulukToplam = 0, ogrenciSayisi = 0;
+  let gnoToplam = 0, gnoSayi = 0, egilimToplam = 0, ekosistemGelir = 0;
+  let yukToplam = 0, hocaSayisi = 0;
   for (const a of state.agents) {
     if (a.kind === 'ogrenci') {
       seviye[a.level]++;
       mutlulukToplam += a.mutluluk;
+      egilimToplam += a.egilim;
       ogrenciSayisi++;
+      const gno = gnoHesaplaUI(a);
+      if (gno !== null) { gnoToplam += gno; gnoSayi++; }
+      ekosistemGelir += ogrenciGunlukKazanc(state, a);
+      if (a.asistani !== -1) maasYuku += BALANCE.ASISTAN_MAAS;
     } else if (a.kind === 'akademisyen') {
       unvan[a.rank]++;
-      maasYuku += a.maas;
+      maasYuku += a.maas * (tesvik ? 1.10 : 1);
+      yukToplam += dersYukuVerimi(state, a);
+      hocaSayisi++;
     } else {
       if (a.kind === 'asci') asci++; else temizlikci++;
       maasYuku += a.maas;
     }
   }
+  maasYuku = Math.round(maasYuku);
+  let doseliKare = 0;
+  for (const f of state.floor) if (f !== null) doseliKare++;
+  const bakim = doseliKare * BALANCE.BAKIM_GIDERI_TILE;
+  const programGider = (state.mentorluk ? BALANCE.MENTORLUK_GIDER : 0)
+    + (state.strategies.includes('yemek_subvansiyon') ? 2000 : 0);
+  const okulPayi = Math.round(ekosistemGelir * BALANCE.GIRISIM_OKUL_PAYI);
+  const gunlukNet = okulPayi - maasYuku - bakim - programGider;
   let uluslararasi = 0, bulus = 0;
   for (const p of state.publications) {
     if (p.uluslararasi) uluslararasi++;
@@ -853,24 +1109,30 @@ function raporlarGovde(state: GameState): string {
   const satir = (ad: string, deger: string): string =>
     `<tr><td>${ad}</td><td>${deger}</td></tr>`;
 
-  return `<h3>Genel</h3>
+  return `<h3>💰 Bütçe ve Günlük Denge</h3>
     <table>
       ${satir('Bütçe', formatMoney(state.para))}
       ${satir('Prestij', `⭐ ${Math.round(state.prestij)} / 1000`)}
-      ${satir('Günlük maaş yükü', formatMoney(maasYuku))}
-      ${satir('Kütüphane seviyesi', `${libraryLevel(state)} / 3`)}
+      ${satir('Günlük maaş yükü (teşvik + asistanlar dahil)', formatMoney(maasYuku))}
+      ${satir('Günlük bakım gideri', `${formatMoney(bakim)} (${doseliKare} kare zemin)`)}
+      ${programGider > 0 ? satir('Günlük program giderleri', formatMoney(programGider)) : ''}
+      ${satir('Günlük ekosistem geliri (okul payı)', formatMoney(okulPayi))}
+      ${satir('Günlük net (ödenekler hariç)', `<b style="color:${gunlukNet >= 0 ? '#9fd3a8' : '#f4a09c'}">${gunlukNet >= 0 ? '+' : ''}${formatMoney(gunlukNet)}</b> <small>· YKS ödeneği ve dönem destekleri ayrıca gelir</small>`)}
     </table>
     ${siralamaBolumu(state)}
-    <h3>Öğrenciler</h3>
+    <h3>🎓 Öğrenciler</h3>
     <table>
       ${satir('Lisans / YL / Doktora', `${seviye.lisans} / ${seviye.yl} / ${seviye.doktora}`)}
       ${satir('Ortalama mutluluk', ortMutluluk === null ? '—' : `${ortMutluluk} / 100`)}
-      ${satir('Toplam mezun', String(state.toplamMezun))}
-      ${satir('Toplam bırakan', String(state.toplamBirakan))}
+      ${satir('Ortalama GNO', gnoSayi > 0 ? `${(gnoToplam / gnoSayi).toFixed(2)} / 4.00` : '—')}
+      ${satir('Ortalama öğrenme eğilimi', ogrenciSayisi > 0 ? `%${Math.round(egilimToplam / ogrenciSayisi)}` : '—')}
+      ${satir('Toplam mezun / bırakan', `${state.toplamMezun} / ${state.toplamBirakan}`)}
+      ${satir('Mezun istihdamı', istihdamOrani(state) === null ? '— (🤝 Mezunlar paneli)' : `%${istihdamOrani(state)} (🤝 Mezunlar panelinde kıyas)`)}
     </table>
     ${ekosistemBolumu(state)}
-    <h3>Kadro</h3>
+    <h3>👩‍🏫 Kadro</h3>
     <table>
+      ${satir('Ortalama ders yükü verimi', hocaSayisi > 0 ? `⚡ %${Math.round((100 * yukToplam) / hocaSayisi)} (asistanla yükselir)` : '—')}
       ${satir(RANK_LABEL.arsgor, String(unvan.arsgor))}
       ${satir(RANK_LABEL.dr, String(unvan.dr))}
       ${satir(RANK_LABEL.docent, String(unvan.docent))}
@@ -989,6 +1251,17 @@ function yardimGovde(): string {
       düşenden ucuzdur</b> — iyi üninin adayı daha becerikli olur.
     </div>
 
+    <h3>5c) 🤝 Mezunlar Derneği</h3>
+    <div class="aciklama">
+      Mezunlar <b>puanlarına göre</b> (GNO + nitelik + eğilim) işe yerleşir; kariyerleri her yıl
+      ilerler ve gelirlerinin bir kısmını derneğe bağışlarlar. 🤝 Mezunlar panelinde: dernek
+      haberleri, sektör/kariyer grafikleri, rakiplerle <b>istihdam kıyası</b> ve en başarılı
+      mezunlar. <b>Mentorluk programı</b> öğrenci gelişimini +%15 hızlandırır;
+      <b>Kariyer Günü</b> etkinliği tüm öğrencilere nitelik ve mutluluk kazandırır.
+      Not: Oyuna <b>0 prestijle</b> başlarsın — ilk yıllarda talep düşüktür, mezun ver ve
+      yayın yap ki prestij ve talep büyüsün.
+    </div>
+
     <h3>6) Strateji ve prestij</h3>
     <div class="aciklama">
       Geçerli bir <b>Rektörlük</b> kurunca ♟️ Strateji paneli açılır: Tanıtım Kampanyası (talep+),
@@ -1040,7 +1313,7 @@ function dersCipi(courseId: string, alan: Alan, hocaId?: number): string {
   const cikar = hocaId !== undefined
     ? `<button class="cip-cikar" data-action="ders-cikar" data-id="${hocaId}" data-ders="${courseId}" title="Dersi bırak">×</button>`
     : '';
-  return `<span class="ders-cip${dusuk}" style="border-color:${ALAN_META[c.birincil].renk}" title="${c.ad} · ${ALAN_META[c.birincil].ad} dersi · bu hocayla %${uyum} verim · öğrencide ${NITELIK_META[c.birincil].emoji} ${NITELIK_META[c.birincil].ad} niteliğini geliştirir">`
+  return `<span class="ders-cip${dusuk}" style="border-color:${ALAN_META[c.birincil].renk}" data-tip-ders="${courseId}" ${alan ? `data-tip-alan="${alan}"` : ''}>`
     + `${ALAN_META[c.birincil].emoji} <b>${c.kod}</b> <small>%${uyum}</small>${cikar}</span>`;
 }
 
@@ -1111,7 +1384,7 @@ function programGovde(state: GameState): string {
     ? 'Henüz ders seçilmedi.'
     : [...acik].map((id) => {
       const c = courseDef(id);
-      return `<span class="rozet" title="${c.ad}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
+      return `<span class="rozet" data-tip-ders="${id}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
     }).join(' ');
   html += '</div>';
 
@@ -1147,7 +1420,7 @@ function programGovde(state: GameState): string {
     for (const a of yakin.slice(0, 14)) {
       const chips = a.eksik.map((id) => {
         const c = courseDef(id);
-        return `<span class="rozet" style="color:#f4a09c" title="${c.ad} — ${ALAN_META[c.birincil].ad} alanı uygun">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
+        return `<span class="rozet" style="color:#f4a09c" data-tip-ders="${id}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
       }).join(' ');
       html += `<tr><td><b>${a.def.ad}</b> <small>(${a.def.tur === 'onlisans' ? '2 yıl' : '4 yıl'})</small></td><td>${chips}</td>`
         + `<td><button class="eylem" data-action="hedefle" data-id="${a.def.id}" title="Eksik dersleri uygun hocaların boş kotalarına dağıt">🎯 Dersleri Ata</button></td></tr>`;

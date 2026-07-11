@@ -39,6 +39,11 @@ export function createInitialState(): GameState {
     sonSira: 0,
     yilBasi: { mezun: 0, yayin: 0 },
     yilSonu: null,
+    mezunlar: [],
+    mezunHaber: [],
+    mentorluk: false,
+    sonKariyerGunu: 0,
+    siraGecmisi: [],
 
     nextId: 1,
     insaatSurumu: 0,
@@ -118,6 +123,17 @@ export function eskiKayitUyumu(s: GameState): void {
     s.yilBasi = { mezun: s.toplamMezun ?? 0, yayin: s.publications?.length ?? 0 };
   }
   if (s.yilSonu === undefined) s.yilSonu = null;
+  if (!Array.isArray(s.mezunlar)) s.mezunlar = [];
+  if (!Array.isArray(s.mezunHaber)) s.mezunHaber = [];
+  if (typeof s.mentorluk !== 'boolean') s.mentorluk = false;
+  if (typeof s.sonKariyerGunu !== 'number') s.sonKariyerGunu = 0;
+  if (!Array.isArray(s.siraGecmisi)) s.siraGecmisi = [];
+  for (const r of s.rakipler) {
+    if (typeof r.istihdam !== 'number') r.istihdam = 60 + (r.ad.length % 20);
+    if (!r.sehir) r.sehir = 'Ankara';
+    if (typeof r.kurulus !== 'number') r.kurulus = 1975;
+    if (!r.uzmanlik) r.uzmanlik = (['muhendis', 'artist', 'filozof', 'pratik'] as const)[r.ad.length % 4];
+  }
   // katalogdan kalkan bölüm/dersler kayıttan da temizlenir
   const bolumVar = new Set(DEPT_DEFS.map((d) => d.id));
   const silinen = new Set(s.departments.filter((d) => !bolumVar.has(d.defId)).map((d) => d.id));
