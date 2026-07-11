@@ -25,11 +25,11 @@ import { formatMoney } from '../core/util';
 import { libraryLevel, validRooms } from '../core/grid';
 import { clearSave, notify, spend } from '../game/state';
 import {
-  canOpenDepartment, openDepartment, seatCapacity, setDoktoraQuota, setQuota, setYlQuota,
-  toggleGradProgram,
+  bolumKapatToggle, canOpenDepartment, openDepartment, seatCapacity, setDoktoraQuota, setQuota,
+  setYlQuota, toggleGradProgram,
 } from '../game/departments';
 import {
-  asistanAta, asistanBirak, beklenenMaas, fireAcademic, hireFromPool,
+  asistanAta, asistanBirak, beklenenMaas, fireAcademic, hedefliAyartma, hireFromPool,
   officeCapacity, zamVer,
 } from '../game/academics';
 import { BASARIMLAR } from '../game/goals';
@@ -37,13 +37,14 @@ import { PROJE_TIPLERI, cancelProject, projeRiski, startProject } from '../game/
 import { gunlukUcretGeliri, odemeGucu, ogrenciGunlukKazanc } from '../game/economy';
 import { rakipBilgi, siralama } from '../game/rivals';
 import {
-  MESLEKLER, SEKTOR_META, istihdamOrani, kariyerGunu, mentorlukAyarla, mutevelliAta,
-  mutevelliBonusu, mutevelliCikar,
+  MESLEKLER, SEKTOR_META, istihdamOrani, kariyerGunu, mentorlukAyarla, mezunBulusmasi,
+  mutevelliAta, mutevelliBonusu, mutevelliCikar,
 } from '../game/alumni';
 import { krediCek } from '../game/economy';
-import { cazibePuani, faaliyetPuani, ulasimSeviyesi, yurtKapasitesi } from '../game/campus';
+import { cazibePuani, estetikPuani, faaliyetPuani, ulasimSeviyesi, yurtKapasitesi } from '../game/campus';
 import { denetimKarnesi, sonrakiDenetimGunu } from '../game/accreditation';
 import { bozukSayisi } from '../game/maintenance';
+import { KULUPLER, kulupKapat, kulupKur, kulupKurulabilir } from '../game/clubs';
 import {
   KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
   toplamKoleksiyon,
@@ -284,6 +285,12 @@ function bolumEslesir(ad: string): boolean {
 
 function onPanelClick(e: Event): void {
   if (!(e.target instanceof Element) || !getStateRef || !acik) return;
+  // denetim karnesi kısayolu: kriter satırı → düzeltileceği panel
+  const karneSatir = e.target.closest<HTMLElement>('[data-karne-panel]');
+  if (karneSatir && acik.el.contains(karneSatir)) {
+    openPanel(karneSatir.dataset.karnePanel as PanelName);
+    return;
+  }
   const hedef = e.target.closest<HTMLElement>('[data-action]');
   if (!hedef || !acik.el.contains(hedef)) return;
   const state = getStateRef();
@@ -308,6 +315,11 @@ function onPanelClick(e: Event): void {
       // bölüm seçilmez — aidiyet, hocaya ders dağıtılınca derslerden türer
       hireFromPool(state, action === 'ise-al-kpss' ? 'kpss' : 'transfer', Number(id), -1);
       break;
+    case 'ayartma': {
+      const sec = acik?.el.querySelector<HTMLSelectElement>('select[data-role="ayartma-rakip"]');
+      if (sec && sec.value) hedefliAyartma(state, sec.value);
+      break;
+    }
     case 'akademisyen-cikar':
       fireAcademic(state, Number(id));
       break;
@@ -370,6 +382,15 @@ function onPanelClick(e: Event): void {
     case 'kariyer-gunu':
       kariyerGunu(state);
       break;
+    case 'mezun-bulusmasi':
+      mezunBulusmasi(state);
+      break;
+    case 'kulup-kur':
+      kulupKur(state, id);
+      break;
+    case 'kulup-kapat':
+      kulupKapat(state, id);
+      break;
     case 'proje-baslat': {
       const kap = hedef.closest('div[data-proje-kap]');
       const tip = (kap?.querySelector<HTMLSelectElement>('select[data-role="proje-tip"]')?.value ?? 'temel') as ProjeTip;
@@ -397,6 +418,24 @@ function onPanelClick(e: Event): void {
       notify(state, `♟️ Strateji devrede: ${def.ad}`, 'iyi');
       break;
     }
+    case 'rapor-sekme':
+      raporSekme = id;
+      break;
+    case 'bolum-kapat':
+      bolumKapatToggle(state, Number(id));
+      break;
+    case 'destek-etut':
+      if (spend(state, BALANCE.ETUT_MALIYET, 'etüt programı')) {
+        state.sinavDestek.etut = true;
+        notify(state, '📖 Etüt programı açıldı — bu dönemin sınav notlarına +5.', 'iyi');
+      }
+      break;
+    case 'destek-gece':
+      if (spend(state, BALANCE.GECE_KUTUPHANE_MALIYET, 'gece kütüphanesi')) {
+        state.sinavDestek.gece = true;
+        notify(state, '🌙 Kütüphane bu dönem gece de açık — sınav notlarına +3.', 'iyi');
+      }
+      break;
     case 'yeni-oyun':
       if (confirm('Kayıt silinecek, emin misiniz?')) {
         clearSave();
@@ -580,8 +619,13 @@ function bolumlerGovde(state: GameState): string {
         ? `<span title="${mz.n} mezun · ${mz.calisan} çalışıyor (%${Math.round((100 * mz.calisan) / mz.n)})&#10;Ortalama yıllık gelir: ${mz.calisan > 0 ? formatMoney(Math.round(mz.gelir / mz.calisan)) : '—'}&#10;Ortalama mezuniyet puanı: ${Math.round(mz.puan / mz.n)} — bölümün mezun karnesi">🎓 ${mz.n} · %${Math.round((100 * mz.calisan) / mz.n)} işte</span>`
         : '<span style="color:#8f9ab0" title="Henüz mezun vermedi">🎓 —</span>';
 
+      const kapatBtn = d.kapaniyor
+        ? `<span class="rozet" style="background:#8f3535" title="Yeni kayıt alınmıyor; son öğrenci mezun olunca bölüm silinir (-3 prestij)">KAPANIYOR</span>
+           <button class="eylem" data-action="bolum-kapat" data-id="${d.id}" title="Kapanışı geri al">↩️ Geri Al</button>`
+        : `<button class="eylem tehlike" data-action="bolum-kapat" data-id="${d.id}"
+            title="Kademeli kapanış: yeni kayıt durur, mevcut öğrenciler mezun olunca bölüm kapanır (-3 prestij). Geri alınabilir.">Kapat</button>`;
       return `<tr>
-        <td><b>${esc(def.ad)}</b><br>${populerlikYildiz(def.tabanTalep, maxTaban)}</td>
+        <td><b>${esc(def.ad)}</b><br>${populerlikYildiz(def.tabanTalep, maxTaban)} ${kapatBtn}</td>
         <td>${o.lisans} / ${o.yl} / ${o.dok}</td>
         <td><input type="number" class="kontenjan-input" data-action="kontenjan" data-id="${d.id}"
           value="${d.kontenjan}" min="0" max="300"></td>
@@ -751,16 +795,17 @@ function kadroGovde(state: GameState): string {
 
   // Destek personeli
   let asci = 0, temizlikci = 0, tamirci = 0;
+  const beceriToplam: Record<string, number> = { asci: 0, temizlikci: 0, tamirci: 0 };
   for (const a of state.agents) {
-    if (a.kind === 'asci') asci++;
-    else if (a.kind === 'temizlikci') temizlikci++;
-    else if (a.kind === 'tamirci') tamirci++;
+    if (a.kind === 'asci') { asci++; beceriToplam.asci += a.beceri ?? 40; }
+    else if (a.kind === 'temizlikci') { temizlikci++; beceriToplam.temizlikci += a.beceri ?? 40; }
+    else if (a.kind === 'tamirci') { tamirci++; beceriToplam.tamirci += a.beceri ?? 40; }
   }
   const personelSatir = (kind: 'asci' | 'temizlikci' | 'tamirci', ad: string, adet: number): string => {
     const alim = BALANCE.PERSONEL_ALIM[kind];
     return `<tr>
       <td><b>${ad}</b></td>
-      <td>${adet}</td>
+      <td>${adet}${adet > 0 ? ` <small title="Ortalama beceri — çalıştıkça artar, iş hızını belirler (×${(0.7 + Math.round(beceriToplam[kind] / adet) / 125).toFixed(2)})">🛠${Math.round(beceriToplam[kind] / adet)}</small>` : ''}</td>
       <td>${formatMoney(BALANCE.MAAS[kind])}</td>
       <td>
         <button class="eylem" data-action="personel-al" data-id="${kind}"
@@ -780,6 +825,16 @@ function kadroGovde(state: GameState): string {
     <h3>Transfer Havuzu</h3>
     <p class="aciklama">Deneyimli akademisyenler imza bonusu ister; transfer prestij kazandırır.</p>
     ${transferTablo}
+    <p class="aciklama">🎣 <b>Hedefli Ayartma:</b> bir rakibin yıldız hocasına doğrudan teklif götür
+      (${formatMoney(BALANCE.AYARTMA_MALIYET)} görüşme masrafı, dönemde 1 kez).
+      Şans prestij farkına bağlıdır; ret yersen haber duyulur (-2 prestij).
+      <br><select class="kontenjan-input ders-ekle" data-role="ayartma-rakip" style="width:230px">
+        ${[...state.rakipler].sort((a, b) => b.prestij - a.prestij).slice(0, 10)
+    .map((r) => `<option value="${esc(r.ad)}">${esc(r.ad)} (prestij ${Math.round(r.prestij)})</option>`).join('')}
+      </select>
+      <button class="eylem" data-action="ayartma"
+        ${state.gun - state.sonAyartmaGunu < 20 && state.sonAyartmaGunu > 0 ? 'disabled title="Bu dönem denendi — dönemde 1 girişim"' : state.para < BALANCE.AYARTMA_MALIYET ? 'disabled title="Bütçe yetersiz"' : ''}>Teklif Götür</button>
+      <small>şans: düşük prestijli rakipte yüksek, devlere karşı düşük</small></p>
     <h3>Destek Personeli</h3>
     <p class="aciklama">Aşçı olmadan yemekhane servis yapamaz; temizlikçiler kampüs kirini temizler;
       tamirciler bozulan eşyaları onarır (bozuk eşya işlev görmez!).
@@ -844,6 +899,10 @@ function mezunlarGovde(state: GameState): string {
     <button class="eylem" data-action="kariyer-gunu" ${kariyerHazir ? '' : 'disabled'}
       title="Başarılı bir mezun sahne alır: tüm öğrencilere 💼+📣 nitelik ve +10 mutluluk. ${formatMoney(BALANCE.KARIYER_GUNU_MALIYET)}, dönemde 1 kez">
       🎤 Kariyer Günü Düzenle (${formatMoney(BALANCE.KARIYER_GUNU_MALIYET)})${kariyerHazir ? '' : ` — ${bekleme} gün sonra`}</button>
+    <button class="eylem" data-action="mezun-bulusmasi"
+      ${state.gun - state.sonBulusmaGunu < 40 && state.sonBulusmaGunu > 0 ? `disabled title="Yılda 1 kez — ${40 - (state.gun - state.sonBulusmaGunu)} gün sonra"` : calisan.length < 5 ? 'disabled title="En az 5 çalışan mezun gerekir"' : ''}
+      title="Mezunlar kampüse döner: çalışan başına ${formatMoney(BALANCE.BULUSMA_BAGIS)} bağış, işsiz mezunların ~%30'u network sayesinde iş bulur, öğrenciler ilham alır. ${formatMoney(BALANCE.BULUSMA_MALIYET)}, yılda 1 kez">
+      🎓 Mezun Buluşması (${formatMoney(BALANCE.BULUSMA_MALIYET)})</button>
     ${state.mentorluk ? `<span class="rozet">günlük ${formatMoney(BALANCE.MENTORLUK_GIDER)}</span>` : ''}
   </div>`;
 
@@ -1219,6 +1278,16 @@ function stratejiGovde(state: GameState): string {
       🎗 <b>Başarı şartı:</b> dönem sonunda GNO &lt; ${BALANCE.BURS_GNO_SART.toFixed(1)} olan burslunun
       bursu bir kademe düşer; onur listesine giren (not ≥ ${BALANCE.SINAV_ONUR}) başarı bursu kazanır.</small>
     </div>
+    <h3>📝 Sınav Haftası Destekleri <small style="color:#8f9ab0">(dönemlik — sınavdan önce al)</small></h3>
+    <div class="aciklama">Dönemin son 3 günü sınav haftasıdır; bu destekler o dönemin sınav notlarına
+    doğrudan eklenir ve dönem sonunda sona erer.
+      <br>${state.sinavDestek.etut
+    ? '<span class="rozet" style="background:#2c4a33;color:#9fd3a8">📖 Etüt Programı AKTİF (+5 not)</span>'
+    : `<button class="eylem" data-action="destek-etut" ${state.para < BALANCE.ETUT_MALIYET ? 'disabled title="Bütçe yetersiz"' : ''}>📖 Etüt Programı Aç (${formatMoney(BALANCE.ETUT_MALIYET)} · not +5)</button>`}
+      ${state.sinavDestek.gece
+    ? '<span class="rozet" style="background:#2c4a33;color:#9fd3a8">🌙 Gece Kütüphanesi AKTİF (+3 not)</span>'
+    : `<button class="eylem" data-action="destek-gece" ${validRooms(state, 'kutuphane').length === 0 ? 'disabled title="Geçerli kütüphane gerekir"' : state.para < BALANCE.GECE_KUTUPHANE_MALIYET ? 'disabled title="Bütçe yetersiz"' : ''}>🌙 Gece Kütüphanesi (${formatMoney(BALANCE.GECE_KUTUPHANE_MALIYET)} · not +3)</button>`}
+    </div>
     <div class="aciklama">Kredi: acil nakit — %25 faizle günlük
     ${formatMoney(BALANCE.KREDI_TAKSIT)} taksitle geri ödenir (Rektörlük gerekmez).</div>
     <div class="aciklama">
@@ -1228,6 +1297,21 @@ function stratejiGovde(state: GameState): string {
        <button class="eylem" data-action="kredi-cek" data-id="2000000">Kredi Çek ₺2M</button>
        <small>geri ödeme ×${BALANCE.KREDI_FAIZ}</small>`}
     </div>
+
+    <h3>🎭 Öğrenci Kulüpleri</h3>
+    <div class="aciklama">Kulüpler kampüsü topluluğa çevirir: ilgili niteliği en yüksek <b>12 öğrenci
+    üye</b> sayılır — her gün nitelik +0.4 ve moral kazanırlar, dönem sonunda 🎪 şenlik yapılır.
+    Kurulum ${formatMoney(BALANCE.KULUP_KURULUM)} + günlük ${formatMoney(BALANCE.KULUP_GIDER)}.
+    <br>${KULUPLER.map((k) => {
+    const aktif = state.kulupler.includes(k.id);
+    if (aktif) {
+      return `<span class="rozet" style="background:#2c4a33;color:#9fd3a8" title="${k.aciklama}">${k.emoji} ${k.ad} AKTİF</span>
+        <button class="cip-cikar" data-action="kulup-kapat" data-id="${k.id}" title="Kapat — gider kesilir">×</button>`;
+    }
+    const kontrol = kulupKurulabilir(state, k);
+    return `<button class="eylem" data-action="kulup-kur" data-id="${k.id}"
+      ${kontrol.ok ? `title="${k.aciklama}"` : `disabled title="${esc(kontrol.neden)}"`}>${k.emoji} ${k.ad} Kur</button>`;
+  }).join(' ')}</div>
 
     <h3>♟️ Politikalar</h3>
     <div class="aciklama">Politikalar artık <b>günlük bakım gideri</b> ister ve istediğin an
@@ -1349,6 +1433,7 @@ function cazibeBolumu(state: GameState): string {
     (🚌 servis durağı: sabah kampüse geliş hızlanır, durak başına +%35).</div>
     ${grafikBar('🎪 Faaliyet çeşitliliği', faaliyet, 100, '#c77dff', `${faaliyet}/100`)}
     ${grafikBar('🛏️ Barınma', yurtta, Math.max(1, Math.ceil(ogrenci * 0.5)), '#59a14f', `${yurtta} yatak dolu / ${kapasite} kapasite`)}
+    ${grafikBar('🌸 Estetik', estetikPuani(state), 100, '#ff9da7', `${estetikPuani(state)}/100 (çiçek, fidan, heykel, havuz)`)}
     ${grafikBar('🚌 Ulaşım', ulasim, 5, '#4a7bd4', `${ulasim}/5 durak`)}
     <div class="aciklama">💡 Aktivite alanları öğrencilerin boş vaktinde nitelik de geliştirir:
     🏀 → 📣 Influencer · ♟️ → 📜 Filozof · 🎸 → 🎨 Artist. Yurtta kalanlar akşam kütüphanede
@@ -1377,8 +1462,8 @@ function denetimBolumu(state: GameState): string {
   const puan = karne.reduce((t, k) => t + k.puan, 0);
   const kalanGun = sonrakiDenetimGunu(state) - state.gun;
   const renk = puan >= BALANCE.DENETIM_GECME ? '#7ee08a' : puan >= BALANCE.DENETIM_KOSULLU ? '#f0c674' : '#f4a09c';
-  const satirlar = karne.map((k) => `<tr>
-      <td>${k.ad}</td>
+  const satirlar = karne.map((k) => `<tr ${k.panel ? `data-karne-panel="${k.panel}" style="cursor:pointer" title="Tıkla: bu kriteri düzeltebileceğin panel açılır"` : ''}>
+      <td>${k.ad}${k.panel ? ' <span style="opacity:0.5">↗</span>' : ''}</td>
       <td><b style="color:${k.puan >= k.max ? '#7ee08a' : k.puan > 0 ? '#f0c674' : '#f4a09c'}">${k.puan}</b> / ${k.max}</td>
       <td class="aciklama">${esc(k.detay)}</td>
     </tr>`).join('');
@@ -1398,13 +1483,53 @@ function denetimBolumu(state: GameState): string {
     </table>`;
 }
 
+/** Raporlar sekmesi (panel yeniden çizimlerinde korunur). */
+let raporSekme = 'genel';
+
+/** Mini SVG çizgi grafiği — son 24 dönemin trendi. */
+function cizgiGrafik(veri: number[], renk: string, format: (v: number) => string): string {
+  if (veri.length < 2) return '<div class="aciklama" style="height:56px">📈 veri birikiyor — her dönem bir nokta…</div>';
+  const w = 230, h = 54;
+  const min = Math.min(...veri);
+  const max = Math.max(...veri);
+  const aralik = max - min || 1;
+  const nokta = veri.map((v, i) =>
+    `${((i / (veri.length - 1)) * w).toFixed(1)},${(h - 4 - ((v - min) / aralik) * (h - 10)).toFixed(1)}`);
+  const son = veri[veri.length - 1];
+  const egilim = veri.length >= 2 ? son - veri[veri.length - 2] : 0;
+  return `<svg width="${w}" height="${h}" style="display:block">
+      <polyline points="${nokta.join(' ')}" fill="none" stroke="${renk}" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="${nokta[nokta.length - 1].split(',')[0]}" cy="${nokta[nokta.length - 1].split(',')[1]}" r="3" fill="${renk}"/>
+    </svg>
+    <small style="color:#8f9ab0">son: <b style="color:${renk}">${format(son)}</b>
+    ${egilim !== 0 ? `<span style="color:${egilim > 0 ? '#9fd3a8' : '#f4a09c'}">(${egilim > 0 ? '▲' : '▼'} ${format(Math.abs(egilim))})</span>` : ''}
+    · aralık ${format(min)}–${format(max)}</small>`;
+}
+
+/** Raporlar: trend grafikleri — "iyi gidiyor muyum?" tek bakışta. */
+function trendBolumu(state: GameState): string {
+  const t = state.trend ?? [];
+  const kart = (baslik: string, veri: number[], renk: string, format: (v: number) => string) =>
+    `<div style="background:#242938;border-radius:8px;padding:8px 10px;min-width:250px">
+      <div style="font-size:12px;color:#aab4c6;margin-bottom:4px"><b>${baslik}</b></div>
+      ${cizgiGrafik(veri, renk, format)}
+    </div>`;
+  return `<h3>📈 Trendler <small style="color:#8f9ab0">(dönemlik, son ${Math.min(24, Math.max(t.length, 1))} nokta)</small></h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${kart('💰 Bütçe', t.map((x) => x.para), '#e8c66a', (v) => formatMoney(v))}
+      ${kart('⭐ Prestij', t.map((x) => x.prestij), '#c9b8f0', (v) => String(v))}
+      ${kart('🎓 Öğrenci', t.map((x) => x.ogrenci), '#4a7bd4', (v) => String(v))}
+      ${kart('😊 Ort. Mutluluk', t.map((x) => x.mutluluk), '#46b45e', (v) => `%${v}`)}
+    </div>`;
+}
+
 function raporlarGovde(state: GameState): string {
   // Tek geçişte tüm ajan istatistikleri — gider hesabı economy.ts ile AYNI kurallarla
   // (teşvik çarpanı, asistan maaşları, mentorluk) yapılır ki rapor gerçeği yansıtsın
   const tesvik = state.strategies.includes('tesvik');
   const seviye: Record<StudentLevel, number> = { lisans: 0, yl: 0, doktora: 0 };
   const unvan: Record<AcademicRank, number> = { arsgor: 0, dr: 0, docent: 0, prof: 0 };
-  let asci = 0, temizlikci = 0, maasYuku = 0, mutlulukToplam = 0, ogrenciSayisi = 0;
+  let asci = 0, temizlikci = 0, tamirciSayisi = 0, maasYuku = 0, mutlulukToplam = 0, ogrenciSayisi = 0;
   let gnoToplam = 0, gnoSayi = 0, egilimToplam = 0, ekosistemGelir = 0;
   let yukToplam = 0, hocaSayisi = 0;
   for (const a of state.agents) {
@@ -1423,7 +1548,9 @@ function raporlarGovde(state: GameState): string {
       yukToplam += dersYukuVerimi(state, a);
       hocaSayisi++;
     } else {
-      if (a.kind === 'asci') asci++; else temizlikci++;
+      if (a.kind === 'asci') asci++;
+      else if (a.kind === 'tamirci') tamirciSayisi++;
+      else temizlikci++;
       maasYuku += a.maas;
     }
   }
@@ -1462,7 +1589,24 @@ function raporlarGovde(state: GameState): string {
   const satir = (ad: string, deger: string): string =>
     `<tr><td>${ad}</td><td>${deger}</td></tr>`;
 
-  return `<h3>💰 Bütçe ve Günlük Denge</h3>
+  // --- SEKMELER: tek dev sayfa yerine konu başlıkları ---
+  const sekmeler: { id: string; ad: string }[] = [
+    { id: 'genel', ad: '💰 Genel & Mali' },
+    { id: 'ogrenci', ad: '🎓 Öğrenci' },
+    { id: 'kadro', ad: '👩‍🏫 Kadro & Kampüs' },
+    { id: 'siralama', ad: '🏆 Sıralama & Başarım' },
+    { id: 'olaylar', ad: '⚡ Olay Günlüğü' },
+  ];
+  if (!sekmeler.some((s) => s.id === raporSekme)) raporSekme = 'genel';
+  const sekmeBar = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    ${sekmeler.map((s) => (s.id === raporSekme
+    ? `<span class="rozet" style="background:#4a7bd4;color:#fff;padding:6px 12px;font-size:12px">${s.ad}</span>`
+    : `<button class="eylem" data-action="rapor-sekme" data-id="${s.id}">${s.ad}</button>`)).join('')}
+  </div>`;
+
+  let icerik = '';
+  if (raporSekme === 'genel') {
+    icerik = `<h3>💰 Bütçe ve Günlük Denge</h3>
     <table>
       ${satir('Bütçe', formatMoney(state.para))}
       ${satir('Prestij', `⭐ ${Math.round(state.prestij)} / 1000`)}
@@ -1475,9 +1619,12 @@ function raporlarGovde(state: GameState): string {
       ${state.krediBorcu > 0 ? satir('🏦 Kalan kredi borcu', `<b style="color:#f4a09c">${formatMoney(state.krediBorcu)}</b> (günlük ${formatMoney(BALANCE.KREDI_TAKSIT)})`) : ''}
       ${satir('Günlük net (ödenekler hariç)', `<b style="color:${gunlukNet >= 0 ? '#9fd3a8' : '#f4a09c'}">${gunlukNet >= 0 ? '+' : ''}${formatMoney(gunlukNet)}</b> <small>· YKS ödeneği ve dönem destekleri ayrıca gelir</small>`)}
     </table>
+    ${trendBolumu(state)}
     ${denetimBolumu(state)}
-    ${siralamaBolumu(state)}
-    <h3>🎓 Öğrenciler</h3>
+    <h3>Tehlikeli Bölge</h3>
+    <button class="eylem tehlike" data-action="yeni-oyun">Yeni Oyun (kayıt silinir)</button>`;
+  } else if (raporSekme === 'ogrenci') {
+    icerik = `<h3>🎓 Öğrenciler</h3>
     <table>
       ${satir('Lisans / YL / Doktora', `${seviye.lisans} / ${seviye.yl} / ${seviye.doktora}`)}
       ${satir('Ortalama mutluluk', ortMutluluk === null ? '—' : `${ortMutluluk} / 100`)}
@@ -1487,16 +1634,16 @@ function raporlarGovde(state: GameState): string {
       ${satir('Mezun istihdamı', istihdamOrani(state) === null ? '— (🤝 Mezunlar paneli)' : `%${istihdamOrani(state)} (🤝 Mezunlar panelinde kıyas)`)}
     </table>
     ${cazibeBolumu(state)}
-    ${basarimBolumu(state)}
-    ${ekosistemBolumu(state)}
-    <h3>👩‍🏫 Kadro</h3>
+    ${ekosistemBolumu(state)}`;
+  } else if (raporSekme === 'kadro') {
+    icerik = `<h3>👩‍🏫 Kadro</h3>
     <table>
       ${satir('Ortalama ders yükü verimi', hocaSayisi > 0 ? `⚡ %${Math.round((100 * yukToplam) / hocaSayisi)} (asistanla yükselir)` : '—')}
       ${satir(RANK_LABEL.arsgor, String(unvan.arsgor))}
       ${satir(RANK_LABEL.dr, String(unvan.dr))}
       ${satir(RANK_LABEL.docent, String(unvan.docent))}
       ${satir(RANK_LABEL.prof, String(unvan.prof))}
-      ${satir('Aşçı / Temizlikçi', `${asci} / ${temizlikci}`)}
+      ${satir('Aşçı / Temizlikçi / Tamirci', `${asci} / ${temizlikci} / ${tamirciSayisi}`)}
     </table>
     <h3>Araştırma</h3>
     <table>
@@ -1509,9 +1656,38 @@ function raporlarGovde(state: GameState): string {
     <table>
       <tr><th>Oda</th><th>Geçerli</th><th>Geçersiz</th></tr>
       ${odaSatirlari}
-    </table>
-    <h3>Tehlikeli Bölge</h3>
-    <button class="eylem tehlike" data-action="yeni-oyun">Yeni Oyun (kayıt silinir)</button>`;
+    </table>`;
+  } else if (raporSekme === 'siralama') {
+    icerik = `${siralamaBolumu(state)}
+    ${basarimBolumu(state)}`;
+  } else {
+    icerik = olayGunluguBolumu(state);
+  }
+
+  return sekmeBar + icerik;
+}
+
+/** Raporlar: olay günlüğü — verdiğin kararların kaydı. */
+function olayGunluguBolumu(state: GameState): string {
+  const gecmis = state.olayGecmisi ?? [];
+  if (gecmis.length === 0) {
+    return `<h3>⚡ Olay Günlüğü</h3>
+      <div class="aciklama">Henüz karar verilmedi. Kampüs olayları belirdiğinde verdiğin
+      (ya da vermediğin) kararlar buraya işlenir — bazı kararların sonuçları
+      dönemler sonra kapına geri gelir…</div>`;
+  }
+  const satirlar = [...gecmis].reverse().map((g) => `<tr>
+      <td><small>Gün ${g.gun}</small></td>
+      <td><b>${esc(g.baslik)}</b></td>
+      <td>${esc(g.secim)}</td>
+      <td class="aciklama">${esc(g.sonuc)}</td>
+    </tr>`).join('');
+  return `<h3>⚡ Olay Günlüğü <small style="color:#8f9ab0">(${gecmis.length} karar)</small></h3>
+    <div class="aciklama">Rektörlüğün karar geçmişi — bazı kararların devamı dönemler sonra gelir.</div>
+    <table>
+      <tr><th>Gün</th><th>Olay</th><th>Kararın</th><th>Sonuç</th></tr>
+      ${satirlar}
+    </table>`;
 }
 
 // --- Nasıl Oynanır -----------------------------------------------------------

@@ -30,6 +30,10 @@ export const OBJECT_DEFS: Record<ObjectTypeId, ObjectDef> = {
   basket_potasi: { id: 'basket_potasi', ad: 'Basket Potası', maliyet: 6000, glyph: '🏀', odalar: null },
   satranc_masasi: { id: 'satranc_masasi', ad: 'Satranç Masası', maliyet: 2500, glyph: '♟️', odalar: null },
   muzik_sahnesi: { id: 'muzik_sahnesi', ad: 'Müzik Sahnesi', maliyet: 15000, glyph: '🎸', odalar: null },
+  cicek_tarhi: { id: 'cicek_tarhi', ad: 'Çiçek Tarhı', maliyet: 900, glyph: '🌸', odalar: null },
+  fidan: { id: 'fidan', ad: 'Fidan', maliyet: 600, glyph: '🌳', odalar: null },
+  heykel: { id: 'heykel', ad: 'Heykel', maliyet: 14000, glyph: '🗿', odalar: null },
+  sus_havuzu: { id: 'sus_havuzu', ad: 'Süs Havuzu', maliyet: 20000, glyph: '⛲', odalar: null },
 };
 
 export const OBJECT_LIST: ObjectDef[] = Object.values(OBJECT_DEFS);

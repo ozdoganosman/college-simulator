@@ -54,7 +54,28 @@ export function faaliyetPuani(state: GameState): number {
 }
 
 /**
- * Kampüs cazibesi (0-100): faaliyet %50 + barınma %30 + ulaşım %20.
+ * Kampüs estetiği (0-100): dekor objeleri (çiçek tarhı, fidan, heykel, süs
+ * havuzu) — tür çeşitliliği 15 puan + adet bonusu. Bozuk dekor sayılmaz.
+ */
+export function estetikPuani(state: GameState): number {
+  const dekorTurler = ['cicek_tarhi', 'fidan', 'heykel', 'sus_havuzu'] as const;
+  const adet = new Map<string, number>();
+  for (const o of state.objects) {
+    if ((o.yipranma ?? 0) >= 100) continue;
+    if ((dekorTurler as readonly string[]).includes(o.type)) {
+      adet.set(o.type, (adet.get(o.type) ?? 0) + 1);
+    }
+  }
+  let puan = 0;
+  for (const tur of dekorTurler) {
+    const n = adet.get(tur) ?? 0;
+    if (n > 0) puan += 15 + Math.min(10, n * 2);
+  }
+  return Math.min(100, puan);
+}
+
+/**
+ * Kampüs cazibesi (0-100): faaliyet %40 + barınma %25 + estetik %20 + ulaşım %15.
  * Barınma puanı öğrenci sayısına göre doluluk hedefiyle ölçülür
  * (öğrenci yoksa kapasitenin kendisi küçük puan verir).
  */
@@ -66,5 +87,5 @@ export function cazibePuani(state: GameState): number {
     ? Math.min(100, (100 * kapasite) / Math.max(1, ogrenci * 0.5)) // yarısını barındır = tam puan
     : Math.min(100, kapasite * 3);
   const ulasim = ulasimSeviyesi(state) * 20;
-  return Math.round(faaliyet * 0.5 + barinma * 0.3 + ulasim * 0.2);
+  return Math.round(faaliyet * 0.4 + barinma * 0.25 + estetikPuani(state) * 0.2 + ulasim * 0.15);
 }

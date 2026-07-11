@@ -48,8 +48,8 @@
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
 import {
-  ALAN_META, Academic, Department, GameState, RANK_LABEL, Room, Student, YerlestirmeSatir,
-  donemIndex, yil,
+  ALAN_META, Academic, Department, GameState, MezuniyetSonuc, RANK_LABEL, Room, Student,
+  YerlestirmeSatir, donemIndex, yil,
 } from '../core/types';
 import { courseDef, dersEtki, rebuildDersProgrami, verilemeyenDersler } from './schedule';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
@@ -129,6 +129,7 @@ export function openDepartment(state: GameState, defId: string): boolean {
     mezunSayisi: 0,
     ucret: null,
     sonGeriCevrilen: 0,
+    kapaniyor: false,
   };
   state.departments.push(dept);
   addPrestij(state, 5);
@@ -307,6 +308,14 @@ export function runYerlestirme(state: GameState): boolean {
 
   for (const dept of state.departments) {
     const def = deptDef(dept.defId);
+
+    // kademeli kapanış: yeni kayıt alınmaz, tören satırında da görünmez
+    if (dept.kapaniyor) {
+      dept.sonTalep = 0;
+      dept.sonKayit = 0;
+      dept.sonGeriCevrilen = 0;
+      continue;
+    }
 
     if ((akademisyen.get(dept.id) ?? 0) < def.minAkademisyen) {
       dept.sonTalep = 0;
@@ -507,12 +516,14 @@ export function semesterEnd(state: GameState): void {
   let gecen = 0, kalanlar = 0, onur = 0;
   let bursDusen = 0, bursKazanan = 0;
   const bursluModel = state.ucret > 0;
+  // dönemlik sınav destekleri: etüt +5, gece kütüphanesi +3 (satın alındıysa)
+  const destekBonus = (state.sinavDestek?.etut ? 5 : 0) + (state.sinavDestek?.gece ? 3 : 0);
   for (const a of state.agents) {
     if (a.kind !== 'ogrenci') continue;
     const gercekGno = gnoHesapla(a); // null = henüz yeterli ders verisi yok
     const gno = gercekGno ?? 1.2;
     const sinavNotu = clamp(
-      25 + gno * 20 + (a.egilim - 100) * 0.1 + randRange(state, -8, 8), 0, 100,
+      25 + gno * 20 + (a.egilim - 100) * 0.1 + destekBonus + randRange(state, -8, 8), 0, 100,
     );
     if (sinavNotu < BALANCE.SINAV_GECME) {
       kalanlar++;
@@ -541,10 +552,15 @@ export function semesterEnd(state: GameState): void {
   if (gecen + kalanlar > 0) {
     notify(
       state,
-      `📝 Dönem sınavları: ${gecen} geçti · ${kalanlar} KALDI (bütünleme: ilerleme -15) · ${onur} onur listesinde 🌟`,
+      `📝 Dönem sınavları: ${gecen} geçti · ${kalanlar} KALDI (bütünleme: ilerleme -15) · ${onur} onur listesinde 🌟${destekBonus > 0 ? ` (destekler +${destekBonus} not verdi)` : ''}`,
       kalanlar > gecen ? 'kotu' : 'bilgi',
     );
   }
+  state.sinavDestek = { etut: false, gece: false }; // destekler dönemliktir
+
+  // Kademeli kapanış: öğrencisi kalmayan "kapanıyor" bölümleri sil —
+  // bu dönem hiç mezun olmasa bile kontrol edilmeli
+  kapananBolumleriTemizle(state);
   if (bursDusen + bursKazanan > 0) {
     notify(
       state,
@@ -569,6 +585,9 @@ export function semesterEnd(state: GameState): void {
   const bolumMezun = new Map<number, number>();
   let toplamBagis = 0;
   let zenginMezun = 0;
+  // mezuniyet töreni verisi: dereceler (GNO), onur, bölüm kırılımı
+  const torenDereceler: MezuniyetSonuc['dereceler'] = [];
+  let torenOnur = 0;
   for (const s of mezunlar) {
     // girişim ekosistemi: mezun, sermayesinin bir kısmını okula bağışlar
     const bagis = Math.round(s.sermaye * BALANCE.MEZUN_BAGIS_ORANI);
@@ -576,7 +595,17 @@ export function semesterEnd(state: GameState): void {
     if (s.sermaye >= BALANCE.ZENGIN_MEZUN_ESIK) zenginMezun++;
     // mezunlar derneğine kayıt: puanına göre işe yerleşir, kariyeri yıllık ilerler
     const mezunDept = deptMap.get(s.deptId);
-    mezunEkle(state, s, mezunDept ? deptDef(mezunDept.defId).ad : 'Kapanan Bölüm', gnoHesapla(s));
+    const gnoDegeri = gnoHesapla(s);
+    const dernekKaydi = mezunEkle(state, s, mezunDept ? deptDef(mezunDept.defId).ad : 'Kapanan Bölüm', gnoDegeri);
+    if ((gnoDegeri ?? 0) >= 3.2) torenOnur++;
+    torenDereceler.push({
+      ad: s.ad,
+      bolumAd: mezunDept ? deptDef(mezunDept.defId).kisa : '—',
+      gno: gnoDegeri ?? 0,
+      meslek: dernekKaydi.issiz ? 'iş arıyor' : dernekKaydi.meslek,
+      issiz: dernekKaydi.issiz,
+      doktora: s.level === 'doktora',
+    });
     // Doktora → Arş. Gör. döngüsü: kendi doktora mezunumuz KPSS havuzuna düşer —
     // indirimli maaş ister, becerisi kendi çalışmasına VE danışmanına bağlıdır
     if (s.level === 'doktora') {
@@ -628,6 +657,58 @@ export function semesterEnd(state: GameState): void {
     addPrestij(state, Math.min(10, zenginMezun * 2));
     notify(state, `💰 ${zenginMezun} zengin girişimci mezun verdik — prestij +${Math.min(10, zenginMezun * 2)}!`, 'odul');
   }
+
+  // 🎓 MEZUNİYET TÖRENİ — kep atma ekranı (törenle açıklanır)
+  torenDereceler.sort((a, b) => b.gno - a.gno);
+  state.mezuniyet = {
+    yil: yil(state.gun),
+    toplam: mezunlar.length,
+    onur: torenOnur,
+    bagis: toplamBagis,
+    bolumler: [...bolumMezun.entries()].map(([deptId, n]) => {
+      const dept = deptMap.get(deptId);
+      const def = dept ? deptDef(dept.defId) : null;
+      return { ad: def ? def.ad : 'Bölüm', renk: def ? def.renk : '#888', n };
+    }).sort((a, b) => b.n - a.n),
+    dereceler: torenDereceler.slice(0, 5),
+  };
+}
+
+/** Kademeli kapanışı başlat/geri al (🎓 Bölümler panelinden). */
+export function bolumKapatToggle(state: GameState, deptId: number): void {
+  const dept = state.departments.find((d) => d.id === deptId);
+  if (!dept) return;
+  const def = deptDef(dept.defId);
+  dept.kapaniyor = !dept.kapaniyor;
+  if (dept.kapaniyor) {
+    dept.ylAcik = false;
+    dept.doktoraAcik = false;
+    notify(state, `🚪 ${def.ad} KADEMELİ KAPANIŞA alındı: yeni kayıt yok; mevcut öğrenciler mezun olunca bölüm kapanacak. (Panelden geri alınabilir)`, 'kotu');
+  } else {
+    notify(state, `↩️ ${def.ad} kapanıştan çıkarıldı — bir sonraki YKS'de yeniden kayıt alır.`, 'iyi');
+  }
+}
+
+/** Öğrencisi kalmayan "kapanıyor" bölümleri kaldırır (dönem sonunda çağrılır). */
+function kapananBolumleriTemizle(state: GameState): void {
+  const kapanacak = state.departments.filter((d) => d.kapaniyor
+    && !state.agents.some((a) => a.kind === 'ogrenci' && a.deptId === d.id));
+  for (const dept of kapanacak) {
+    const def = deptDef(dept.defId);
+    state.departments = state.departments.filter((d) => d.id !== dept.id);
+    for (const r of state.rooms) if (r.deptId === dept.id) r.deptId = null;
+    state.projects = state.projects.filter((p) => p.deptId !== dept.id);
+    state.dersProgrami = state.dersProgrami.filter((s) => s.deptId !== dept.id);
+    for (const a of state.agents) {
+      if (a.kind === 'akademisyen' && a.deptId === dept.id) a.deptId = -1;
+    }
+    addPrestij(state, -3);
+    notify(state, `🚪 ${def.ad} bölümü resmen KAPANDI — son öğrencisi mezun oldu. Derslikler havuza döndü, hocalar programa göre yeniden bağlanacak (-3 prestij).`, 'kotu');
+  }
+  if (kapanacak.length > 0) {
+    assignClassrooms(state);
+    rebuildDersProgrami(state);
+  }
 }
 
 export function dailyDepartmentUpdate(state: GameState): void {
@@ -666,7 +747,8 @@ export function dailyDepartmentUpdate(state: GameState): void {
     // burslu okumak moral verir; ücretli öğrenci fahiş fiyatta huzursuzlaşır
     const bursMutluluk = a.burs >= 100 ? 0.4 : a.burs >= 50 ? 0.2
       : pahaliBolum.get(a.deptId) ? -0.6 : 0;
-    a.mutluluk = clamp(a.mutluluk + ortakMutluluk + bursMutluluk, 0, 100);
+    const kisilikMutluluk = a.kisilik === 'sosyal' ? 0.15 : 0; // 🎉 sosyal kelebek
+    a.mutluluk = clamp(a.mutluluk + ortakMutluluk + bursMutluluk + kisilikMutluluk, 0, 100);
     toplamMutluluk += a.mutluluk;
     ogrenciSayisi++;
   }

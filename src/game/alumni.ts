@@ -12,7 +12,7 @@ import {
 } from '../core/types';
 import { chance, clamp, formatMoney, newId, pick, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
-import { addPrestij, earn, notify } from './state';
+import { addPrestij, earn, notify, spend } from './state';
 
 /** Sektör başına kariyer basamakları (kademe 0-4). */
 export const MESLEKLER: Record<Sektor, string[]> = {
@@ -147,9 +147,11 @@ export function yillikMezunGuncelle(state: GameState): void {
     haberEkle(state, `💎 ${enZengin.ad} yıllık ${formatMoney(enZengin.gelir)} gelirle listelerde!`);
   }
 
-  // 🏛️ İsimli bina bağışı: zirvedeki bir mezun nadiren dev bağış yapar
+  // 🏛️ İsimli bina bağışı: zirvedeki bir mezun nadiren dev bağış TEKLİF eder —
+  // pazarlık olay kartıyla yapılır (isim hakkı karşılığı para). Olay yuvası
+  // doluysa teklif bu yıl gelmez.
   const zirvedekiler = state.mezunlar.filter((m) => !m.issiz && m.kademe >= 3 && m.gelir >= 800_000);
-  if (zirvedekiler.length > 0 && chance(state, 0.25)) {
+  if (zirvedekiler.length > 0 && chance(state, 0.25) && !state.aktifOlay && !state.bekleyenBina) {
     const bagisci = pick(state, zirvedekiler);
     const binaAd: Record<string, string> = {
       girisim: 'Teknoloji Merkezi', muhendis: 'Mühendislik Laboratuvarı',
@@ -157,11 +159,10 @@ export function yillikMezunGuncelle(state: GameState): void {
       medya: 'Medya Stüdyosu',
     };
     const tutar = Math.round(bagisci.gelir * 0.6 / 1000) * 1000;
-    earn(state, tutar);
-    addPrestij(state, 3);
     const bina = `${bagisci.ad.split(' ').pop()} ${binaAd[bagisci.sektor]}`;
-    haberEkle(state, `🏛️ BÜYÜK BAĞIŞ: ${bagisci.ad}, "${bina}" için ${formatMoney(tutar)} bağışladı!`);
-    notify(state, `🏛️ ${bagisci.ad} kampüse "${bina}" için ${formatMoney(tutar)} bağışladı! (+3 prestij)`, 'odul');
+    state.bekleyenBina = { ad: bagisci.ad, bina, tutar };
+    state.aktifOlay = { id: 'bina-bagisi', gun: state.gun };
+    notify(state, `🏛️ Mezunumuz ${bagisci.ad}'dan İSİMLİ BİNA BAĞIŞI teklifi geldi — karar bekliyor (olay kartı)!`, 'odul');
   }
 
   if (bagis > 0) {
@@ -170,6 +171,51 @@ export function yillikMezunGuncelle(state: GameState): void {
     haberEkle(state, `💝 Dernek yıllık bağışı: ${formatMoney(tutar)} (${state.mezunlar.filter((m) => !m.issiz).length} çalışan mezun).`);
     notify(state, `🤝 Mezunlar Derneği bağışı: ${formatMoney(tutar)}`, 'iyi');
   }
+}
+
+/**
+ * 🎓 Mezun Buluşması: yılda 1 kez düzenlenen ağ etkinliği.
+ * Çalışan mezunlar bağış bırakır, işsiz mezunların bir kısmı network sayesinde
+ * iş bulur (istihdam oranı yükselir), öğrenciler ilham alır.
+ */
+export function mezunBulusmasi(state: GameState): boolean {
+  const calisan = state.mezunlar.filter((m) => !m.issiz);
+  if (calisan.length < 5) {
+    notify(state, 'Buluşma için en az 5 çalışan mezun gerekir.', 'kotu');
+    return false;
+  }
+  if (state.gun - state.sonBulusmaGunu < 40 && state.sonBulusmaGunu > 0) {
+    notify(state, 'Mezun buluşması yılda bir düzenlenebilir.', 'kotu');
+    return false;
+  }
+  if (!spend(state, BALANCE.BULUSMA_MALIYET, 'mezun buluşması')) return false;
+  state.sonBulusmaGunu = state.gun;
+
+  const bagis = calisan.length * BALANCE.BULUSMA_BAGIS;
+  earn(state, bagis);
+
+  // network etkisi: işsiz mezunların bir kısmı buluşmada iş bulur
+  let isBulan = 0;
+  for (const m of state.mezunlar) {
+    if (m.issiz && chance(state, 0.3)) {
+      m.issiz = false;
+      m.kademe = 0;
+      m.meslek = MESLEKLER[m.sektor][0];
+      m.gelir = yeniGelir(m);
+      isBulan++;
+    }
+  }
+
+  // öğrenciler mezunlarla tanışır: 📣 nitelik + moral
+  for (const a of state.agents) {
+    if (a.kind !== 'ogrenci') continue;
+    a.nitelik.influencer = Math.min(100, a.nitelik.influencer + 1);
+    a.mutluluk = Math.min(100, a.mutluluk + 3);
+  }
+
+  haberEkle(state, `🎓 Mezun Buluşması: ${calisan.length} mezun kampüse döndü; ${formatMoney(bagis)} bağış, ${isBulan} mezuna iş.`);
+  notify(state, `🎓 Mezun Buluşması muhteşemdi: ${formatMoney(bagis)} bağış toplandı, ${isBulan} işsiz mezun network sayesinde işe girdi, öğrenciler ilham aldı (📣+1, 😊+3).`, 'odul');
+  return true;
 }
 
 /** Kariyer Günü: tek seferlik etkinlik — öğrenci nitelik/mutluluk artışı. */

@@ -65,7 +65,11 @@ export type ObjectTypeId =
   | 'servis_duragi' // ulaşım: sabah kampüse geliş hızlanır, cazibe artar
   | 'basket_potasi' // aktivite: eğlence + influencer
   | 'satranc_masasi'// aktivite: eğlence + filozof
-  | 'muzik_sahnesi';// aktivite: eğlence + artist
+  | 'muzik_sahnesi' // aktivite: eğlence + artist
+  | 'cicek_tarhi'   // dekor: kampüs estetiği
+  | 'heykel'        // dekor: kampüs estetiği (prestijli görünüm)
+  | 'sus_havuzu'    // dekor: kampüs estetiği
+  | 'fidan';        // dekor: kampüs estetiği (ucuz yeşillik)
 
 export interface PlacedObject {
   id: number;
@@ -100,6 +104,18 @@ export const ALAN_META: Record<Alan, { ad: string; emoji: string; renk: string; 
 
 /** Öğrenci gelişim nitelikleri: 4 akademik alan + sosyal etki. */
 export type Nitelik = Alan | 'influencer';
+
+/** Öğrenci kişiliği — davranışları ve gelişimi hafifçe şekillendirir. */
+export type Kisilik = 'normal' | 'dahi' | 'tembel' | 'sosyal' | 'kitapkurdu' | 'girisimci';
+
+export const KISILIK_META: Record<Kisilik, { ad: string; emoji: string; tanim: string }> = {
+  normal: { ad: 'Dengeli', emoji: '🙂', tanim: 'Sıradan bir kampüs yaşamı sürer' },
+  dahi: { ad: 'Dahi', emoji: '🌟', tanim: 'Öğrenme eğilimi doğuştan yüksek (+15)' },
+  tembel: { ad: 'Tembel', emoji: '😴', tanim: 'Eğilimi düşük (-10), ara sıra dersi asar' },
+  sosyal: { ad: 'Sosyal Kelebek', emoji: '🎉', tanim: 'Kampüs yaşamından beslenir: her gün +mutluluk' },
+  kitapkurdu: { ad: 'Kitap Kurdu', emoji: '🐛', tanim: 'Boş vaktini kütüphanede geçirmeyi sever (2× çekim)' },
+  girisimci: { ad: 'Girişimci Ruh', emoji: '🚀', tanim: 'Girişim geliri ×1.25 — sermayesi hızlı büyür' },
+};
 
 export const NITELIK_META: Record<Nitelik, { ad: string; emoji: string }> = {
   muhendis: { ad: 'Mühendis', emoji: '🔬' },
@@ -194,6 +210,8 @@ export interface Student extends AgentBase {
   sermaye: number;
   /** burs oranı: 100 tam burslu, 50 yarı, 0 ücretli — kayıt ücretinden düşülür */
   burs: number;
+  /** kişilik — davranış ve gelişim çarpanları (kartta rozet) */
+  kisilik: Kisilik;
 }
 
 export const LEVEL_LABEL: Record<StudentLevel, string> = {
@@ -236,6 +254,8 @@ export interface Academic extends AgentBase {
 export interface StaffAgent extends AgentBase {
   kind: 'asci' | 'temizlikci' | 'tamirci';
   maas: number;
+  /** 0-100 iş becerisi — çalıştıkça artar, hız çarpanı verir (0.7 + beceri/125) */
+  beceri: number;
 }
 
 export type Agent = Student | Academic | StaffAgent;
@@ -283,6 +303,8 @@ export interface Department {
   ucret: number | null;
   /** son yerleştirmede koltuk yetmediği için geri çevrilen istekli aday */
   sonGeriCevrilen: number;
+  /** kademeli kapanış: yeni kayıt alınmaz, son öğrenci mezun olunca bölüm silinir */
+  kapaniyor: boolean;
 }
 
 /** Yıllık YKS yerleştirme töreni verisi (açıklanınca null'a çekilir). */
@@ -304,6 +326,19 @@ export interface YerlestirmeSatir {
   ucretli: number;
   /** derslik koltuğu yetmediği için geri çevrilen istekli aday */
   geriCevrilen: number;
+}
+
+/** Dönem sonu mezuniyet töreni verisi (kapanınca null). */
+export interface MezuniyetSonuc {
+  yil: number;
+  toplam: number;
+  /** GNO >= 3.2 (yüksek onur) mezun sayısı */
+  onur: number;
+  /** mezuniyet bağışları toplamı ₺ */
+  bagis: number;
+  bolumler: { ad: string; renk: string; n: number }[];
+  /** GNO dereceleri (ilk 5) + yerleştikleri iş */
+  dereceler: { ad: string; bolumAd: string; gno: number; meslek: string; issiz: boolean; doktora: boolean }[];
 }
 
 export interface YerlestirmeSonuc {
@@ -549,10 +584,26 @@ export interface GameState {
   sonrakiTalepCarpan: number;
   /** son YÖK akreditasyon denetimi sonucu (hiç olmadıysa null) */
   sonDenetim: { gun: number; puan: number; sonuc: string } | null;
+  /** dönemlik trend fotoğrafları (son 24 dönem) — Raporlar grafikleri */
+  trend: { gun: number; para: number; prestij: number; ogrenci: number; mutluluk: number }[];
   /** aktif kampüs olay kartı (cevaplanınca null) */
   aktifOlay: { id: string; gun: number } | null;
   /** son olayın günü — art arda olay yağmasın */
   sonOlayGunu: number;
+  /** olay günlüğü: verilen kararların kaydı (son 40) */
+  olayGecmisi: { gun: number; baslik: string; secim: string; sonuc: string }[];
+  /** dönemlik sınav haftası destekleri (dönem sonunda sıfırlanır) */
+  sinavDestek: { etut: boolean; gece: boolean };
+  /** son hedefli ayartma girişimi günü (dönemde 1 kez) */
+  sonAyartmaGunu: number;
+  /** son mezun buluşması günü (yılda 1 kez) */
+  sonBulusmaGunu: number;
+  /** bekleyen isimli bina bağışı teklifi (olay kartıyla pazarlık edilir) */
+  bekleyenBina: { ad: string; bina: string; tutar: number } | null;
+  /** kurulu öğrenci kulübü id'leri */
+  kulupler: string[];
+  /** planlanmış zincir olayları: verdiğin kararın devamı ileride kapına gelir */
+  bekleyenZincir: { id: string; gun: number }[];
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */
@@ -563,6 +614,8 @@ export interface GameState {
   tutorialAcik: boolean;
   /** bekleyen YKS yerleştirme töreni (yıl başında dolar, tören kapanınca null) */
   yerlestirme: YerlestirmeSonuc | null;
+  /** bekleyen mezuniyet töreni (dönem sonunda mezun varsa dolar) */
+  mezuniyet: MezuniyetSonuc | null;
   /** YKS dönemi açık mı — oyuncu 'Yerleştirmeyi Başlat'a basana dek bekler */
   yksBekliyor: boolean;
   /** günlük ders programı (her gece ve kadro değişiminde yeniden kurulur) */

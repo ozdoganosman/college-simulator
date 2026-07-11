@@ -29,6 +29,8 @@ export interface DenetimKriter {
   puan: number;
   max: number;
   detay: string;
+  /** tıklanınca açılacak panel — kriteri düzeltmenin yolu */
+  panel?: string;
 }
 
 /** Canlı karne — denetimde de, Raporlar panelinde de aynı hesap kullanılır. */
@@ -73,10 +75,10 @@ export function denetimKarnesi(state: GameState): DenetimKriter[] {
   const cazibePuan = cazibe >= 40 ? 10 : cazibe >= 20 ? 5 : 0;
 
   return [
-    { ad: '👩‍🏫 Öğrenci/öğretim üyesi oranı', puan: oranPuan, max: 25, detay: hocalar.length === 0 ? 'hoca yok' : `${oran.toFixed(1)} öğrenci/hoca (ideal ≤ 20)` },
-    { ad: '📖 Eğitim kalitesi (ort. GNO)', puan: gnoPuan, max: 25, detay: ortGno === null ? 'henüz veri yok' : `${ortGno.toFixed(2)} / 4.00 (hedef ≥ 2.40)` },
-    { ad: '⚡ Ders yükü sağlığı', puan: yukPuan, max: 15, detay: `ortalama verim %${Math.round(ortYuk * 100)} (hedef ≥ %85 — asistan ata)` },
-    { ad: '📚 Kütüphane kaynakları', puan: kutPuan, max: 15, detay: `${koleksiyon} koleksiyon / ${state.departments.length} bölüm (hedef ≥ 2×bölüm)` },
+    { ad: '👩‍🏫 Öğrenci/öğretim üyesi oranı', puan: oranPuan, max: 25, detay: hocalar.length === 0 ? 'hoca yok' : `${oran.toFixed(1)} öğrenci/hoca (ideal ≤ 20)`, panel: 'kadro' },
+    { ad: '📖 Eğitim kalitesi (ort. GNO)', puan: gnoPuan, max: 25, detay: ortGno === null ? 'henüz veri yok' : `${ortGno.toFixed(2)} / 4.00 (hedef ≥ 2.40)`, panel: 'program' },
+    { ad: '⚡ Ders yükü sağlığı', puan: yukPuan, max: 15, detay: `ortalama verim %${Math.round(ortYuk * 100)} (hedef ≥ %85 — asistan ata)`, panel: 'program' },
+    { ad: '📚 Kütüphane kaynakları', puan: kutPuan, max: 15, detay: `${koleksiyon} koleksiyon / ${state.departments.length} bölüm (hedef ≥ 2×bölüm)`, panel: 'kutuphane' },
     { ad: '🏫 Kampüs düzeni', puan: duzenPuan, max: 10, detay: `${gecersiz} geçersiz oda · dün aç kalan: ${state.dunAcKalan}` },
     { ad: '✨ Kampüs yaşamı', puan: cazibePuan, max: 10, detay: `cazibe ${cazibe}/100 (hedef ≥ 40)` },
   ];

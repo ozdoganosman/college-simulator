@@ -44,6 +44,9 @@ export const BALANCE = {
   // Sınavlar (dönem sonunda)
   SINAV_GECME: 40,            // altı KALIR: ilerleme -15, mutluluk -10
   SINAV_ONUR: 85,             // üstü onur listesi: mutluluk +5
+  AYARTMA_MALIYET: 100000,    // rakipten hedefli hoca ayartma girişimi ₺ (dönemde 1)
+  ETUT_MALIYET: 15000,        // dönemlik etüt programı ₺ (sınav notu +5)
+  GECE_KUTUPHANE_MALIYET: 10000, // dönemlik gece kütüphanesi ₺ (sınav notu +3, kütüphane gerekir)
 
   // Araştırma
   PROJE_MALIYET_TABAN: 40000,
@@ -67,6 +70,10 @@ export const BALANCE = {
   DERNEK_BAGIS_ORANI: 0.005,   // çalışan mezunların yıllık gelirinden dernek bağışı
   MENTORLUK_GIDER: 2000,       // günlük ₺ (aktifken); nitelik gelişimi +%15
   MENTORLUK_MIN_MEZUN: 8,      // mentorluk için gereken çalışan mezun
+  KULUP_KURULUM: 15_000,       // öğrenci kulübü kurulum ₺
+  KULUP_GIDER: 300,            // kulüp başına günlük gider ₺
+  BULUSMA_MALIYET: 40_000,     // mezun buluşması etkinliği ₺ (yılda 1)
+  BULUSMA_BAGIS: 2_000,        // çalışan mezun başına buluşma bağışı ₺
   KARIYER_GUNU_MALIYET: 75_000,
   KARIYER_GUNU_BEKLEME: 20,    // gün (dönemde 1 kez)
 

@@ -15,6 +15,8 @@ export interface OlaySecenek {
   etiket: string;
   ipucu: string;
   uygula: (s: GameState) => string; // sonuç metni (bildirime yazılır)
+  /** bu seçimin DEVAMI: verilen kararın sonucu ileride yeni olay olarak döner */
+  zincir?: { id: string; gecikme: number };
 }
 
 export interface OlayTanim {
@@ -100,8 +102,9 @@ export const OLAYLAR: OlayTanim[] = [
     secenekler: [
       {
         etiket: 'Soruşturma başlat',
-        ipucu: 'Şeffaflık prestij verir ama kadro morali sarsılır',
-        uygula: (s) => { tumHocaMoral(s, -6); addPrestij(s, 2); return 'Etik kurul soruşturması açıldı — basın şeffaflığı övdü (+2 prestij), kadro huzursuz (-6 moral).'; },
+        ipucu: 'Şeffaflık prestij verir ama kadro morali sarsılır — rapor 1 dönem sonra gelir',
+        uygula: (s) => { tumHocaMoral(s, -6); addPrestij(s, 2); return 'Etik kurul soruşturması açıldı — basın şeffaflığı övdü (+2 prestij), kadro huzursuz (-6 moral). Rapor yolda…'; },
+        zincir: { id: 'intihal-sonuc', gecikme: 20 },
       },
       {
         etiket: 'Üstünü ört',
@@ -123,8 +126,9 @@ export const OLAYLAR: OlayTanim[] = [
     secenekler: [
       {
         etiket: 'Kabul et (+₺400.000)',
-        ipucu: 'Para iyi ama kampüs ticarileşir',
+        ipucu: 'Para iyi ama kampüs ticarileşir — holding bunu unutmaz',
         uygula: (s) => { earn(s, 400000); tumOgrMutluluk(s, -3); return `${formatMoney(400000)} kasaya girdi — kampüs panolarla doldu (öğrenci mutluluğu -3).`; },
+        zincir: { id: 'bagisci-talebi', gecikme: 15 },
       },
       {
         etiket: 'Reddet',
@@ -278,8 +282,9 @@ export const OLAYLAR: OlayTanim[] = [
     secenekler: [
       {
         etiket: 'Sahiplen (mama bütçesi ₺5.000)',
-        ipucu: 'Küçük masraf, büyük sevgi',
+        ipucu: 'Küçük masraf, büyük sevgi — bu hikâye burada bitmez',
         uygula: (s) => { s.para -= 5000; tumOgrMutluluk(s, 4); return 'Sarman artık resmî maskot! 🐈 Öğrenci mutluluğu +4 — kedili üniversite batmaz.'; },
+        zincir: { id: 'kedi-festivali', gecikme: 15 },
       },
       {
         etiket: 'Kampüse hayvan giremez',
@@ -290,8 +295,124 @@ export const OLAYLAR: OlayTanim[] = [
   },
 ];
 
+/**
+ * ZİNCİR OLAYLARI: rastgele havuza girmez (kosul false) — yalnızca önceki
+ * bir kararın devamı olarak, planlanan günde kapıya gelir.
+ */
+export const ZINCIR_OLAYLAR: OlayTanim[] = [
+  {
+    id: 'bina-bagisi',
+    emoji: '🏛️',
+    baslik: 'İsimli Bina Bağışı Teklifi',
+    metin: 'Zirvedeki bir mezunun dev bağış teklifi masada — karşılığında binaya kendi adının verilmesini istiyor. (Ayrıntılar bildirimde)',
+    kosul: () => false,
+    varsayilan: 0,
+    secenekler: [
+      {
+        etiket: 'Kabul et — isim onun, para bizim',
+        ipucu: 'Dev bağış + prestij',
+        uygula: (s) => {
+          const b = s.bekleyenBina;
+          s.bekleyenBina = null;
+          if (!b) return 'Teklif çoktan geri çekilmiş.';
+          earn(s, b.tutar);
+          addPrestij(s, 3);
+          return `"${b.bina}" kampüse kazandırıldı: ${b.ad}'ın ${formatMoney(b.tutar)} bağışı kasada (+3 prestij).`;
+        },
+      },
+      {
+        etiket: 'İsim hakkı vermeyiz',
+        ipucu: 'Para gider ama kurum kimliği korunur (+2 prestij)',
+        uygula: (s) => {
+          const b = s.bekleyenBina;
+          s.bekleyenBina = null;
+          addPrestij(s, 2);
+          return `Teklif reddedildi — "kampüs binaları kişilere değil bilime adanır" (+2 prestij).${b ? ` ${b.ad} anlayışla karşıladı.` : ''}`;
+        },
+      },
+    ],
+  },
+  {
+    id: 'intihal-sonuc',
+    emoji: '📜',
+    baslik: 'Etik Kurul Raporu Masanda',
+    metin: 'Başlattığın intihal soruşturması sonuçlandı: iddialar KISMEN DOĞRU çıktı. Rapor elinde — ne yapacaksın?',
+    kosul: () => false,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Raporu kamuoyuyla paylaş',
+        ipucu: 'Şeffaflık büyük prestij verir ama kadro sarsılır',
+        uygula: (s) => { addPrestij(s, 4); tumHocaMoral(s, -5); return 'Rapor yayınlandı — akademik dünya dürüstlüğünü konuşuyor (+4 prestij), kadro morali -5.'; },
+      },
+      {
+        etiket: 'Raporu arşive kaldır',
+        ipucu: 'Riskli: %40 ihtimalle sızar',
+        uygula: (s) => {
+          if (chance(s, 0.4)) { addPrestij(s, -6); return 'Rapor SIZDI! "Örtbas rektörü" manşetleri: -6 prestij.'; }
+          tumHocaMoral(s, 3);
+          return 'Rapor sessizce arşive kalktı; kadro rahatladı (+3 moral)… şimdilik.';
+        },
+      },
+    ],
+  },
+  {
+    id: 'kedi-festivali',
+    emoji: '🐈',
+    baslik: 'Sarman Fenomen Oldu',
+    metin: 'Maskotun sosyal medya hesabı 100 bin takipçiyi geçti! Öğrenci konseyi bir "Kedi Festivali" düzenlemek istiyor.',
+    kosul: () => false,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Festivali destekle (₺12.000)',
+        ipucu: 'Mutluluk + tanıtım — kedili kampüs efsanesi',
+        uygula: (s) => { s.para -= 12000; tumOgrMutluluk(s, 6); s.sonrakiTalepCarpan *= 1.05; return 'Kedi Festivali muhteşemdi! Mutluluk +6, bir sonraki YKS talebi ×1.05 — Sarman kampüsün yüzü oldu.'; },
+      },
+      {
+        etiket: 'İzin verme',
+        ipucu: 'Sarman yine de sevilir ama fırsat kaçar',
+        uygula: (s) => { tumOgrMutluluk(s, -2); return 'Festival iptal — öğrenciler biraz bozuldu (-2 mutluluk), Sarman umursamadı.'; },
+      },
+    ],
+  },
+  {
+    id: 'bagisci-talebi',
+    emoji: '💼',
+    baslik: 'Holding Geri Döndü',
+    metin: 'Bağış yaptığın holding reklam alanını genişletmek istiyor: "Amfilere de logo koyalım, bağışı büyütelim."',
+    kosul: () => false,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Kabul et (+₺250.000)',
+        ipucu: 'Daha çok para, daha çok ticarileşme',
+        uygula: (s) => { earn(s, 250000); tumOgrMutluluk(s, -4); addPrestij(s, -1); return `${formatMoney(250000)} daha kasada — ama amfiler reklam panosuna döndü (mutluluk -4, prestij -1).`; },
+      },
+      {
+        etiket: 'Bu kadarı fazla, reddet',
+        ipucu: 'Sınır çizmek prestij getirir',
+        uygula: (s) => { addPrestij(s, 2); return '"Sınıflarımız satılık değil" — akademik camia alkışladı (+2 prestij). Holding küstü.'; },
+      },
+    ],
+  },
+];
+
 export function olayTanim(id: string): OlayTanim | undefined {
-  return OLAYLAR.find((o) => o.id === id);
+  return OLAYLAR.find((o) => o.id === id) ?? ZINCIR_OLAYLAR.find((o) => o.id === id);
+}
+
+/** Karar günlüğüne yaz (son 40 kayıt tutulur). */
+function gecmiseYaz(state: GameState, tanim: OlayTanim, secim: string, sonuc: string): void {
+  state.olayGecmisi.push({ gun: state.gun, baslik: `${tanim.emoji} ${tanim.baslik}`, secim, sonuc });
+  if (state.olayGecmisi.length > 40) state.olayGecmisi.shift();
+}
+
+/** Seçimin zinciri varsa devam olayını planla. */
+function zinciriPlanla(state: GameState, secenek: OlaySecenek): void {
+  if (secenek.zincir) {
+    state.bekleyenZincir.push({ id: secenek.zincir.id, gun: state.gun + secenek.zincir.gecikme });
+  }
 }
 
 /** Gün sonu: süresi dolan olayı varsayılanla kapat, gerekirse yeni olay çıkar. */
@@ -300,7 +421,10 @@ export function olayGuncelle(state: GameState): void {
     if (state.gun - state.aktifOlay.gun >= 2) {
       const tanim = olayTanim(state.aktifOlay.id);
       if (tanim) {
-        const sonuc = tanim.secenekler[tanim.varsayilan].uygula(state);
+        const secenek = tanim.secenekler[tanim.varsayilan];
+        const sonuc = secenek.uygula(state);
+        zinciriPlanla(state, secenek);
+        gecmiseYaz(state, tanim, `(sessiz kalındı → ${secenek.etiket})`, sonuc);
         notify(state, `${tanim.emoji} ${tanim.baslik} (rektörlük sessiz kaldı): ${sonuc}`, 'bilgi');
       }
       state.aktifOlay = null;
@@ -308,6 +432,19 @@ export function olayGuncelle(state: GameState): void {
     }
     return;
   }
+
+  // günü gelen ZİNCİR olayı her şeyden önceliklidir (bekleme süresi tanımaz)
+  const zincirIdx = state.bekleyenZincir.findIndex((z) => state.gun >= z.gun);
+  if (zincirIdx >= 0) {
+    const z = state.bekleyenZincir.splice(zincirIdx, 1)[0];
+    const tanim = olayTanim(z.id);
+    if (tanim) {
+      state.aktifOlay = { id: z.id, gun: state.gun };
+      notify(state, `⚡ KARARININ DEVAMI: ${tanim.emoji} ${tanim.baslik} — karar bekliyor (2 gün)!`, 'kotu');
+      return;
+    }
+  }
+
   if (state.gun < 4 || state.gun - state.sonOlayGunu < 6) return;
   if (!chance(state, 0.3)) return;
   const uygunlar = OLAYLAR.filter((o) => o.kosul(state));
@@ -324,6 +461,9 @@ export function olayCoz(state: GameState, secim: 0 | 1): void {
   state.aktifOlay = null;
   state.sonOlayGunu = state.gun;
   if (!tanim) return;
-  const sonuc = tanim.secenekler[secim].uygula(state);
+  const secenek = tanim.secenekler[secim];
+  const sonuc = secenek.uygula(state);
+  zinciriPlanla(state, secenek);
+  gecmiseYaz(state, tanim, secenek.etiket, sonuc);
   notify(state, `${tanim.emoji} ${tanim.baslik}: ${sonuc}`, 'bilgi');
 }

@@ -24,6 +24,7 @@ import { addPrestij, earn, notify } from './state';
 export function ogrenciGunlukKazanc(state: GameState, s: Student): number {
   const n = s.nitelik;
   let kazanc = n.pratik * 6 + n.influencer * 5 + (n.muhendis + n.artist + n.filozof) * 2;
+  if (s.kisilik === 'girisimci') kazanc *= 1.25; // 🚀 girişimci ruh
   if (state.strategies.includes('teknokent')) kazanc *= 1.5;
   if (state.vizyon === 'girisim') kazanc *= 1.35;
   kazanc *= 1 + 0.05 * mutevelliBonusu(state, 'girisim'); // heyetteki girişimci mezunlar
@@ -77,6 +78,7 @@ export function dailyEconomy(state: GameState): void {
   // aktif politikaların günlük bakım giderleri (yemek sübvansiyonu dahil)
   let politikaGideri = 0;
   for (const id of state.strategies) politikaGideri += strategyDef(id).gunlukGider;
+  politikaGideri += state.kulupler.length * BALANCE.KULUP_GIDER; // öğrenci kulüpleri
   const mentorlukGider = state.mentorluk ? BALANCE.MENTORLUK_GIDER : 0;
   const malzeme = Math.round(state.gunlukUretim * BALANCE.YEMEK_MALZEME);
   state.gunlukUretim = 0;

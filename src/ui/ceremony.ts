@@ -24,7 +24,55 @@ export function checkCeremony(state: GameState): void {
   if (acikMi) return;
   if (state.oyunBitti) openGameOver(state);
   else if (state.yilSonu) openYilSonu(state);
+  else if (state.mezuniyet) openMezuniyet(state);
   else if (state.yerlestirme) open(state);
+}
+
+// --- Mezuniyet töreni (kep atma) ------------------------------------------------
+
+function openMezuniyet(state: GameState): void {
+  if (!root || !state.mezuniyet) return;
+  acikMi = true;
+  const m = state.mezuniyet;
+
+  const bolumSatirlari = m.bolumler.map((b, i) => `
+    <div class="toren-satir" style="animation-delay:${1.2 + i * 0.4}s">
+      <span class="toren-renk" style="background:${b.renk}"></span>
+      <span class="toren-bolum">${b.ad}</span>
+      <span class="toren-veri"><b class="sayac" data-hedef="${b.n}" data-gecikme="${1.2 + i * 0.4}">0</b> mezun</span>
+    </div>`).join('');
+
+  const madalya = ['🥇', '🥈', '🥉', '🎖', '🎖'];
+  const dereceGecikme = 1.2 + m.bolumler.length * 0.4 + 0.3;
+  const dereceler = m.dereceler.map((d, i) => `
+    <div class="toren-satir" style="animation-delay:${dereceGecikme + i * 0.35}s">
+      <span class="toren-bolum">${madalya[i] ?? '🎓'} <b>${d.ad}</b>${d.doktora ? ' <span class="rozet" style="color:#c9b8f0">Dr.</span>' : ''} <small>(${d.bolumAd})</small></span>
+      <span class="toren-veri"><small>GNO</small><b>${d.gno.toFixed(2)}</b></span>
+      <span class="toren-veri" style="min-width:170px"><small>${d.issiz ? 'henüz' : 'ilk durak'}</small><b style="${d.issiz ? 'color:#f0c674' : 'color:#9fd3a8'}">${d.meslek}</b></span>
+    </div>`).join('');
+
+  const ozetGecikme = dereceGecikme + m.dereceler.length * 0.35 + 0.4;
+  root.innerHTML = `
+    <div class="toren-perde">
+      ${konfetiHtml(80, 0.6)}
+      <div class="toren-kart">
+        <div class="toren-ust">🎓 MEZUNİYET TÖRENİ</div>
+        <div class="toren-yil">${m.yil}. Yıl</div>
+        <div class="toren-liste">${bolumSatirlari}
+          ${m.dereceler.length > 0 ? `<div class="toren-ozet" style="animation-delay:${dereceGecikme - 0.2}s;margin:4px auto"><b>🏅 Dönem Dereceleri</b></div>${dereceler}` : ''}
+        </div>
+        <div class="toren-ozet" style="animation-delay:${ozetGecikme}s">
+          <b class="sayac" data-hedef="${m.toplam}" data-gecikme="${ozetGecikme}">0</b> öğrencimiz kep attı
+          · 🌟 ${m.onur} yüksek onur
+          ${m.bagis > 0 ? ` · 💝 mezuniyet bağışı: <b>${formatMoney(m.bagis)}</b>` : ''}
+        </div>
+        <button class="menu-btn toren-btn" id="toren-kapat" style="animation-delay:${ozetGecikme + 0.5}s">
+          🎓 Kepler Havaya!
+        </button>
+      </div>
+    </div>`;
+
+  torenKur(state, () => { state.mezuniyet = null; });
 }
 
 /** Oyun sonu (kayyum) ekranı — kapatılamaz, tek çıkış yeni oyun. */

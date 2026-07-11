@@ -60,14 +60,23 @@ export function createInitialState(): GameState {
     mutevelli: [],
     sonrakiTalepCarpan: 1,
     sonDenetim: null,
+    trend: [],
     aktifOlay: null,
     sonOlayGunu: 0,
+    olayGecmisi: [],
+    bekleyenZincir: [],
+    sinavDestek: { etut: false, gece: false },
+    sonAyartmaGunu: 0,
+    sonBulusmaGunu: 0,
+    bekleyenBina: null,
+    kulupler: [],
 
     nextId: 1,
     insaatSurumu: 0,
     tutorialAdim: 0,
     tutorialAcik: true,
     yerlestirme: null,
+    mezuniyet: null,
     yksBekliyor: true,
     dersProgrami: [],
     toplamMezun: 0,
@@ -166,14 +175,24 @@ export function eskiKayitUyumu(s: GameState): void {
   if (!Array.isArray(s.mutevelli)) s.mutevelli = [];
   if (typeof s.sonrakiTalepCarpan !== 'number') s.sonrakiTalepCarpan = 1;
   if (s.sonDenetim === undefined) s.sonDenetim = null;
+  if (s.mezuniyet === undefined) s.mezuniyet = null;
+  if (!Array.isArray(s.trend)) s.trend = [];
   if (s.aktifOlay === undefined) s.aktifOlay = null;
   if (typeof s.sonOlayGunu !== 'number') s.sonOlayGunu = 0;
+  if (!Array.isArray(s.olayGecmisi)) s.olayGecmisi = [];
+  if (!Array.isArray(s.bekleyenZincir)) s.bekleyenZincir = [];
+  if (!s.sinavDestek || typeof s.sinavDestek !== 'object') s.sinavDestek = { etut: false, gece: false };
+  if (typeof s.sonAyartmaGunu !== 'number') s.sonAyartmaGunu = 0;
+  if (typeof s.sonBulusmaGunu !== 'number') s.sonBulusmaGunu = 0;
+  if (s.bekleyenBina === undefined) s.bekleyenBina = null;
+  if (!Array.isArray(s.kulupler)) s.kulupler = [];
   for (const o of s.objects) {
     if (typeof o.yipranma !== 'number') o.yipranma = 0; // eskime sonradan eklendi
   }
   for (const d of s.departments) {
     if (d.ucret === undefined) d.ucret = null; // bölüm bazlı ücret sonradan eklendi
     if (typeof d.sonGeriCevrilen !== 'number') d.sonGeriCevrilen = 0;
+    if (typeof d.kapaniyor !== 'boolean') d.kapaniyor = false;
   }
   for (const pr of s.projects) {
     if (pr.tip !== 'uygulamali' && pr.tip !== 'atilim') pr.tip = 'temel';
@@ -214,6 +233,8 @@ export function eskiKayitUyumu(s: GameState): void {
       if (typeof a.yetistirdigi !== 'number') a.yetistirdigi = 0;
       if (typeof a.memnuniyet !== 'number') a.memnuniyet = 70;
       if (typeof a.yas !== 'number') a.yas = 35 + (a.id % 20);
+    } else if (a.kind === 'asci' || a.kind === 'temizlikci' || a.kind === 'tamirci') {
+      if (typeof a.beceri !== 'number') a.beceri = 40 + (a.id % 21); // beceri sonradan eklendi
     } else if (a.kind === 'ogrenci') {
       if (typeof a.egilim !== 'number') a.egilim = 70 + ((a.id * 37) % 61); // 70-130
       if (typeof a.kaliteToplam !== 'number') a.kaliteToplam = 0;
@@ -226,6 +247,12 @@ export function eskiKayitUyumu(s: GameState): void {
       if (typeof a.sermaye !== 'number') a.sermaye = 0;
       // eski kayıt: ücretsiz modelde herkes tam burslu sayılır, ücretliyse öder
       if (typeof a.burs !== 'number') a.burs = s.ucret === 0 ? 100 : 0;
+      if (!(a as { kisilik?: string }).kisilik) {
+        // eski kayıt: kişiliği id'den deterministik dağıt (kampüs renklensin)
+        const r = (a.id * 37) % 100;
+        a.kisilik = r < 8 ? 'dahi' : r < 18 ? 'tembel' : r < 30 ? 'sosyal'
+          : r < 40 ? 'kitapkurdu' : r < 50 ? 'girisimci' : 'normal';
+      }
     }
   }
   if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç

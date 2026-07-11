@@ -364,6 +364,56 @@ const CIZIMLER: Record<ObjectTypeId, (c: Ctx2, s: number) => void> = {
     c.fillStyle = '#e8e2d4';
     c.beginPath(); c.arc(s * 0.495, s * 0.16, s * 0.045, 0, Math.PI * 2); c.fill();
   },
+  cicek_tarhi(c, s) {
+    golge(c, s);
+    // toprak yatak + renkli çiçekler
+    c.fillStyle = '#5a4632';
+    rr(c, s * 0.12, s * 0.3, s * 0.76, s * 0.5, s * 0.1); c.fill();
+    const renkler = ['#e15759', '#f0c674', '#c77dff', '#ff9da7'];
+    for (let i = 0; i < 6; i++) {
+      c.fillStyle = renkler[i % renkler.length];
+      c.beginPath();
+      c.arc(s * (0.22 + (i % 3) * 0.26), s * (0.42 + Math.floor(i / 3) * 0.22), s * 0.07, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#f7e8a0';
+      c.beginPath();
+      c.arc(s * (0.22 + (i % 3) * 0.26), s * (0.42 + Math.floor(i / 3) * 0.22), s * 0.025, 0, Math.PI * 2);
+      c.fill();
+    }
+  },
+  fidan(c, s) {
+    golge(c, s);
+    c.fillStyle = '#6b4a2f';
+    c.fillRect(s * 0.46, s * 0.5, s * 0.08, s * 0.34);
+    c.fillStyle = '#3f7d3a';
+    c.beginPath(); c.arc(s * 0.5, s * 0.36, s * 0.24, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#4f9a48';
+    c.beginPath(); c.arc(s * 0.42, s * 0.3, s * 0.14, 0, Math.PI * 2); c.fill();
+  },
+  heykel(c, s) {
+    golge(c, s);
+    // kaide + büst silueti
+    c.fillStyle = '#8d949e';
+    rr(c, s * 0.28, s * 0.62, s * 0.44, s * 0.22, s * 0.04); c.fill();
+    c.fillStyle = '#b8bfc9';
+    rr(c, s * 0.36, s * 0.34, s * 0.28, s * 0.3, s * 0.05); c.fill();
+    c.beginPath(); c.arc(s * 0.5, s * 0.26, s * 0.11, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.35)';
+    c.beginPath(); c.arc(s * 0.46, s * 0.22, s * 0.035, 0, Math.PI * 2); c.fill();
+  },
+  sus_havuzu(c, s) {
+    golge(c, s);
+    c.fillStyle = '#9aa2ac';
+    c.beginPath(); c.arc(s * 0.5, s * 0.52, s * 0.38, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#3b7dc4';
+    c.beginPath(); c.arc(s * 0.5, s * 0.52, s * 0.3, 0, Math.PI * 2); c.fill();
+    // fıskiye
+    c.fillStyle = '#bfe3ff';
+    c.fillRect(s * 0.485, s * 0.24, s * 0.03, s * 0.28);
+    c.beginPath(); c.arc(s * 0.5, s * 0.24, s * 0.05, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.5)';
+    c.beginPath(); c.arc(s * 0.42, s * 0.46, s * 0.04, 0, Math.PI * 2); c.fill();
+  },
 };
 
 export function objectSprite(tip: ObjectTypeId): HTMLCanvasElement {

@@ -21,6 +21,7 @@ import { kontrolBasarimlar } from './goals';
 import { denetimUygula } from './accreditation';
 import { olayGuncelle } from './events';
 import { gunlukYipranma } from './maintenance';
+import { gunlukKulupEtkisi, kulupSenligi } from './clubs';
 import { addPrestij, notify, saveGame } from './state';
 
 /** Simülasyonu dtMin oyun-dakikası ilerletir (büyük adımları böler). */
@@ -56,6 +57,7 @@ function endOfDay(state: GameState): void {
   dailyAcademicUpdate(state);
   dailyDepartmentUpdate(state);
   gunlukYipranma(state); // eşyalar eskir; bozulanlar tamirci bekler
+  gunlukKulupEtkisi(state); // kulüp üyeleri nitelik/moral kazanır
 
   state.gun += 1;
 
@@ -68,7 +70,22 @@ function endOfDay(state: GameState): void {
   // Yerleştirme OTOMATİK YAPILMAZ — yıl başında YKS dönemi açılır,
   // oyuncu hazır olunca 'Yerleştirmeyi Başlat' butonuna basar.
   if (donemGunu(state.gun) === 1) {
+    // trend fotoğrafı: biten dönemin son hali (Raporlar grafikleri)
+    let trendOgr = 0, trendMut = 0;
+    for (const a of state.agents) {
+      if (a.kind === 'ogrenci') { trendOgr++; trendMut += a.mutluluk; }
+    }
+    state.trend.push({
+      gun: state.gun,
+      para: Math.round(state.para),
+      prestij: Math.round(state.prestij),
+      ogrenci: trendOgr,
+      mutluluk: trendOgr > 0 ? Math.round(trendMut / trendOgr) : 0,
+    });
+    if (state.trend.length > 24) state.trend.shift();
+
     semesterEnd(state);
+    kulupSenligi(state); // dönem sonu kulüp şenliği
     donemIstifaKontrol(state); // mutsuz hocalar rakiplere gidebilir
     donemRakipOlayi(state); // rakipler boş durmaz: skandal, atılım, ayartma, kampanya
     refreshCandidatePools(state);

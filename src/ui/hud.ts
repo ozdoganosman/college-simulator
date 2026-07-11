@@ -1,5 +1,5 @@
 import {
-  GameState, LEVEL_LABEL, NITELIK_META, Nitelik, RANK_LABEL, ALAN_META, WALL_NONE, donemAdi,
+  GameState, KISILIK_META, LEVEL_LABEL, NITELIK_META, Nitelik, RANK_LABEL, ALAN_META, WALL_NONE, donemAdi,
   donemGunu, DONEM_GUN, yil,
 } from '../core/types';
 import { formatClock, formatMoney } from '../core/util';
@@ -326,6 +326,9 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     const egilimEtiket = a.egilim >= 115 ? 'çalışkan' : a.egilim >= 85 ? 'normal' : 'zorlanıyor';
     const hoca = a.asistani !== -1 ? state.agents.find((x) => x.id === a.asistani) : undefined;
     let html = `<span class="baslik">🎓 ${a.ad} — ${LEVEL_LABEL[a.level]} · ${bolum}</span>`;
+    if (a.kisilik && a.kisilik !== 'normal') {
+      html += cip(`${KISILIK_META[a.kisilik].emoji} ${KISILIK_META[a.kisilik].ad} — ${KISILIK_META[a.kisilik].tanim}`);
+    }
     html += cip(gno === null ? '📖 GNO: henüz yok'
       : `📖 GNO ${miniBar(gno / 4, gno >= 2.5 ? '#46b45e' : gno >= 1.5 ? '#e8b931' : '#d9534f')} ${gno.toFixed(2)}`, gno !== null && gno < 2);
     html += cip(`🧠 Öğrenme eğilimi: %${a.egilim} (${egilimEtiket})`, a.egilim < 85);
@@ -366,8 +369,11 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     if (a.mezunumuz) html += cip(`🎓 Kendi mezunumuz${a.danismanAd ? ` — danışmanı ${a.danismanAd}` : ''}`);
     return html;
   }
-  const rol = a.kind === 'asci' ? 'Aşçı' : 'Temizlikçi';
-  return `<span class="baslik">${rol} ${a.ad}</span>` + cip(`Maaş: ${formatMoney(a.maas)}/gün`);
+  const rol = a.kind === 'asci' ? 'Aşçı' : a.kind === 'tamirci' ? '🔧 Tamirci' : 'Temizlikçi';
+  const beceri = Math.round(a.beceri ?? 40);
+  return `<span class="baslik">${rol} ${a.ad}</span>`
+    + cip(`🛠 Beceri ${miniBar(beceri / 100, beceri >= 70 ? '#46b45e' : '#e8b931')} ${beceri} — çalıştıkça ustalaşır (hız ×${(0.7 + beceri / 125).toFixed(2)})`)
+    + cip(`Maaş: ${formatMoney(a.maas)}/gün`);
 }
 
 function setStat(anahtar: string, metin: string): void {

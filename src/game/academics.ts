@@ -27,7 +27,7 @@
  *    egitim+arastirma küçük artış (+2..+5), notify(iyi) + addPrestij(PRESTIJ.terfi).
  *  - Araştırma XP'si research.ts içinde ekleniyor; burada sadece eşik kontrolü.
  */
-import { AcademicRank, Candidate, GameState, RANK_LABEL } from '../core/types';
+import { AcademicRank, Candidate, DONEM_GUN, GameState, RANK_LABEL } from '../core/types';
 import { chance, clamp, formatMoney, newId, pick, randInt, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
@@ -196,6 +196,53 @@ export function asistanBirak(state: GameState, studentId: number): void {
   const ogrenci = state.agents.find((a) => a.id === studentId);
   if (!ogrenci || ogrenci.kind !== 'ogrenci') return;
   ogrenci.asistani = -1;
+}
+
+/**
+ * Rakipten HEDEFLİ hoca ayartma: kur masrafı öde, şans prestij farkına bağlı.
+ * Başarı: rakibin yıldız hocası kadroya katılır, rakip sarsılır (+3 prestij).
+ * Ret: masraf gitti, haber duyuldu (-2 prestij). Dönemde 1 kez denenebilir.
+ */
+export function hedefliAyartma(state: GameState, rakipAd: string): boolean {
+  const rakip = state.rakipler.find((r) => r.ad === rakipAd);
+  if (!rakip) return false;
+  if (state.gun - state.sonAyartmaGunu < DONEM_GUN && state.sonAyartmaGunu > 0) {
+    notify(state, `Transfer masası bu dönem kapalı — bir sonraki dönem yeniden dene (dönemde 1 girişim).`, 'kotu');
+    return false;
+  }
+  if (officeCapacity(state) <= state.agents.filter((a) => a.kind === 'akademisyen').length) {
+    notify(state, 'Ofis masası yetersiz — önce yeni hocaya masa hazırla.', 'kotu');
+    return false;
+  }
+  if (!spend(state, BALANCE.AYARTMA_MALIYET, 'transfer görüşmesi')) return false;
+  state.sonAyartmaGunu = state.gun;
+
+  const sans = clamp(0.25 + (state.prestij - rakip.prestij) / 400, 0.05, 0.75);
+  if (!chance(state, sans)) {
+    addPrestij(state, -2);
+    notify(state, `🎣 ${rakip.ad}'in yıldız hocası teklifini REDDETTİ — görüşme basına sızdı (-2 prestij, masraf yandı).`, 'kotu');
+    return false;
+  }
+
+  const rank: AcademicRank = rakip.prestij >= 220 ? 'prof' : 'docent';
+  const taban = clamp(Math.round(48 + rakip.prestij / 8), 48, 92);
+  const alan = rakip.uzmanlik ?? pick(state, [...ALANLAR]);
+  const hoca = spawnAcademic(
+    state,
+    `${pick(state, AD)} ${pick(state, SOYAD)}`,
+    -1,
+    rank,
+    alan,
+    clamp(taban + randInt(state, -6, 8), 40, 95),
+    clamp(taban + randInt(state, -6, 8), 40, 95),
+    Math.round(BALANCE.MAAS[rank] * 1.25), // yıldız hoca yüksek maaş ister
+    randInt(state, 42, 56),
+  );
+  hoca.memnuniyet = 78;
+  rakip.prestij = Math.max(30, rakip.prestij - 15);
+  addPrestij(state, 3);
+  notify(state, `🎣 TRANSFER DARBESİ: ${RANK_LABEL[rank]} ${hoca.ad}, ${rakip.ad}'den kadromuza katıldı! (+3 prestij, rakip sarsıldı) — 📅 Program'dan ders dağıtmayı unutma.`, 'odul');
+  return true;
 }
 
 export function assignAcademicDept(state: GameState, academicId: number, deptId: number): void {

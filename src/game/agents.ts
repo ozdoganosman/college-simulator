@@ -534,6 +534,8 @@ function trySatisfy(state: GameState, s: Student, ctx: Ctx, need: keyof Needs): 
 }
 
 function tryClass(state: GameState, s: Student, ctx: Ctx, blok: number): boolean {
+  // 😴 tembel kişilik: ara sıra dersi asar (o blok başka şeyle oyalanır)
+  if (s.kisilik === 'tembel' && chance(state, 0.12)) return false;
   const yigin = ctx.freeSira.get(s.deptId);
   const obj = yigin ? yigin.pop() : undefined;
   if (!obj) return false;
@@ -588,7 +590,8 @@ function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
     // kitaplı kütüphane cazibesi: alanının koleksiyonu varsa bazı öğrenciler
     // dersi kütüphane çalışmasına tercih eder (kitap yatırımı karşılığını verir)
     const alan = ctx.deptAlan.get(s.deptId);
-    if (alan && (state.kitapKoleksiyon[alan] ?? 0) > 0 && chance(state, 0.2)
+    const kutupCekim = s.kisilik === 'kitapkurdu' ? 0.4 : 0.2; // 🐛 kitap kurdu 2× çekilir
+    if (alan && (state.kitapKoleksiyon[alan] ?? 0) > 0 && chance(state, kutupCekim)
         && tryKutuphane(state, s, ctx, bitis)) return;
     if (tryClass(state, s, ctx, blok)) return;
     if (s.level !== 'lisans' && tryResearch(state, s, ctx, bitis)) return;
@@ -603,7 +606,7 @@ function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
   // 5) yüksek (kritik olmayan) ihtiyaç, kendi kendine kütüphane çalışması ya da gezinme
   const yuksek = enBuyukIhtiyac(n, 60);
   if (yuksek && trySatisfy(state, s, ctx, yuksek)) return;
-  if (chance(state, 0.3) && tryKutuphane(state, s, ctx, dk + 90)) return;
+  if (chance(state, s.kisilik === 'kitapkurdu' ? 0.6 : 0.3) && tryKutuphane(state, s, ctx, dk + 90)) return;
   idleWander(state, s, dtMin);
 }
 
@@ -870,12 +873,25 @@ function updateAcademic(state: GameState, a: Academic, dtMin: number, ctx: Ctx):
 
 // --- Personel ------------------------------------------------------------------
 
+/** Personel hız çarpanı: usta personel işini daha hızlı yapar (0.94 → 1.5). */
+function beceriCarpani(a: StaffAgent): number {
+  return 0.7 + (a.beceri ?? 40) / 125;
+}
+
+/** Çalışırken beceri gelişimi (günde ~+0.6, 100'de durur). */
+function beceriGelis(a: StaffAgent, dtMin: number): void {
+  a.beceri = Math.min(100, (a.beceri ?? 40) + 0.0012 * dtMin);
+}
+
 function updateCook(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
   const mesai = ctx.dk >= ASCI_BASLA && ctx.dk < ASCI_BITIS;
   if (a.activity === 'calisiyor' && mesai) {
-    // mutfak üretimi: banko başındaki her aşçı porsiyon üretir (malzeme gideri günlük düşülür)
-    state.yemekStok += BALANCE.ASCI_URETIM_DK * dtMin;
-    state.gunlukUretim += BALANCE.ASCI_URETIM_DK * dtMin;
+    // mutfak üretimi: banko başındaki her aşçı porsiyon üretir (malzeme gideri günlük
+    // düşülür); usta aşçı daha hızlı üretir
+    const uretim = BALANCE.ASCI_URETIM_DK * beceriCarpani(a) * dtMin;
+    state.yemekStok += uretim;
+    state.gunlukUretim += uretim;
+    beceriGelis(a, dtMin);
   }
   if (!mesai) {
     if (a.activity === 'calisiyor' || a.usingObject !== -1) finishActivity(state, a, ctx);
@@ -927,7 +943,8 @@ function dirtiestTile(state: GameState): number {
 function updateJanitor(state: GameState, a: StaffAgent, dtMin: number): void {
   if (a.activity === 'calisiyor') {
     const idx = tileIndex(Math.round(a.x), Math.round(a.y));
-    state.dirt[idx] = Math.max(0, state.dirt[idx] - 8 * dtMin);
+    state.dirt[idx] = Math.max(0, state.dirt[idx] - 8 * beceriCarpani(a) * dtMin);
+    beceriGelis(a, dtMin);
     if (state.dirt[idx] <= 0) a.activity = 'bosta';
     return;
   }
@@ -954,7 +971,8 @@ function updateRepairman(state: GameState, a: StaffAgent, dtMin: number): void {
       a.activity = 'bosta';
       return;
     }
-    o.yipranma = Math.max(0, (o.yipranma ?? 0) - BALANCE.TAMIR_HIZ * dtMin);
+    o.yipranma = Math.max(0, (o.yipranma ?? 0) - BALANCE.TAMIR_HIZ * beceriCarpani(a) * dtMin);
+    beceriGelis(a, dtMin);
     if (o.yipranma <= 0) {
       if (o.reservedBy === a.id) o.reservedBy = -1;
       a.usingObject = -1;
@@ -1115,9 +1133,21 @@ function danismanSec(state: GameState, deptId: number): number {
   return secilen;
 }
 
+/** Kişilik zarı: nadir tipler kampüse renk katar. */
+function kisilikSec(state: GameState): Student['kisilik'] {
+  const r = randInt(state, 0, 99);
+  if (r < 8) return 'dahi';
+  if (r < 18) return 'tembel';
+  if (r < 30) return 'sosyal';
+  if (r < 40) return 'kitapkurdu';
+  if (r < 50) return 'girisimci';
+  return 'normal';
+}
+
 export function spawnStudent(
   state: GameState, deptId: number, level: StudentLevel, burs = 100,
 ): Student {
+  const kisilik = kisilikSec(state);
   const s: Student = {
     id: newId(state),
     kind: 'ogrenci',
@@ -1140,8 +1170,10 @@ export function spawnStudent(
     },
     mutluluk: randRange(state, 70, 85),
     girisDonemi: donemIndex(state.gun),
-    // iki zar ortalaması: uçlar nadir, orta yaygın (çan eğrisine yakın)
-    egilim: Math.round((randInt(state, 55, 145) + randInt(state, 55, 145)) / 2),
+    // iki zar ortalaması: uçlar nadir, orta yaygın (çan eğrisine yakın);
+    // kişilik eğilimi kaydırır (dahi +15, tembel -10)
+    egilim: Math.round((randInt(state, 55, 145) + randInt(state, 55, 145)) / 2)
+      + (kisilik === 'dahi' ? 15 : kisilik === 'tembel' ? -10 : 0),
     kaliteToplam: 0,
     dersDakika: 0,
     asistani: -1,
@@ -1155,6 +1187,7 @@ export function spawnStudent(
     },
     sermaye: 0,
     burs,
+    kisilik,
   };
   state.agents.push(s);
   if (level !== 'lisans') s.danisman = danismanSec(state, deptId);
@@ -1216,6 +1249,7 @@ export function hireStaff(state: GameState, kind: 'asci' | 'temizlikci' | 'tamir
     usingObject: -1,
     activityUntil: -1,
     maas: BALANCE.MAAS[kind],
+    beceri: randInt(state, 30, 60),
   };
   state.agents.push(p);
   notify(state, `${unvan} işe alındı: ${p.ad} (günlük ₺${p.maas})`, 'iyi');
