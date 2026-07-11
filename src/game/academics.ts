@@ -32,7 +32,7 @@ import { clamp, formatMoney, newId, pick, randInt, randRange } from '../core/uti
 import { BALANCE } from '../data/balance';
 import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
 import { removeAgent, spawnAcademic } from './agents';
-import { otoDersSec, rebuildDersProgrami } from './schedule';
+import { ASISTAN_LIMIT, asistanlari, otoDersSec, rebuildDersProgrami } from './schedule';
 
 const ALANLAR = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
 import { addPrestij, notify, spend } from './state';
@@ -144,6 +144,36 @@ export function hireFromPool(
     notify(state, `${RANK_LABEL[aday.rank]} ${aday.ad} kadroya katıldı (KPSS ataması).`, 'iyi');
   }
   return true;
+}
+
+
+/** YL/doktora öğrencisini hocaya asistan atar — okul asistana günlük maaş öder. */
+export function asistanAta(state: GameState, studentId: number, academicId: number): boolean {
+  const ogrenci = state.agents.find((a) => a.id === studentId);
+  const hoca = state.agents.find((a) => a.id === academicId);
+  if (!ogrenci || ogrenci.kind !== 'ogrenci' || !hoca || hoca.kind !== 'akademisyen') return false;
+  if (ogrenci.level === 'lisans') {
+    notify(state, 'Yalnızca yüksek lisans ve doktora öğrencileri asistan olabilir.', 'kotu');
+    return false;
+  }
+  if (asistanlari(state, academicId).length >= ASISTAN_LIMIT) {
+    notify(state, `${hoca.ad} en fazla ${ASISTAN_LIMIT} asistan alabilir.`, 'kotu');
+    return false;
+  }
+  ogrenci.asistani = academicId;
+  notify(
+    state,
+    `🧑‍🔬 ${ogrenci.ad}, ${RANK_LABEL[hoca.rank]} ${hoca.ad}'in asistanı oldu (günlük ${formatMoney(BALANCE.ASISTAN_MAAS)}).`,
+    'iyi',
+  );
+  return true;
+}
+
+/** Asistanlıktan çıkarır. */
+export function asistanBirak(state: GameState, studentId: number): void {
+  const ogrenci = state.agents.find((a) => a.id === studentId);
+  if (!ogrenci || ogrenci.kind !== 'ogrenci') return;
+  ogrenci.asistani = -1;
 }
 
 export function assignAcademicDept(state: GameState, academicId: number, deptId: number): void {

@@ -1,4 +1,6 @@
-import { GameState, WALL_NONE, donemAdi, donemGunu, DONEM_GUN, yil } from '../core/types';
+import {
+  GameState, LEVEL_LABEL, RANK_LABEL, ALAN_META, WALL_NONE, donemAdi, donemGunu, DONEM_GUN, yil,
+} from '../core/types';
 import { formatClock, formatMoney } from '../core/util';
 import { FLOOR_DEFS, ROOM_DEFS, ROOM_LIST, WALL_COST, DOOR_COST } from '../data/rooms';
 import { OBJECT_DEFS, OBJECT_LIST } from '../data/objects';
@@ -7,6 +9,9 @@ import {
   PREFABS, autoFurnishCost, autoFurnishRoom, prefabCost, prefabOzet, roomFurnishPlan,
 } from '../game/prefab';
 import { runYerlestirme } from '../game/departments';
+import { gnoHesapla } from '../game/agents';
+import { DERS_LIMIT, asistanlari, dersYukuVerimi } from '../game/schedule';
+import { deptDef } from '../data/departments';
 import { deleteRoom } from '../game/build';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
@@ -177,6 +182,14 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         () => { ui.tool = { kind: 'esya', obj: o.id }; },
         o.odalar ? 'Oda: ' + o.odalar.map((x) => ROOM_DEFS[x].ad).join(', ') : 'Her yere konabilir');
     }
+  } else if (ui.selectedAgentId !== -1) {
+    const a = state.agents.find((x) => x.id === ui.selectedAgentId);
+    if (a) {
+      const div = document.createElement('div');
+      div.className = 'gerek-liste';
+      div.innerHTML = agentCard(state, a);
+      subbarEl.appendChild(div);
+    }
   } else if (ui.selectedRoomId !== -1) {
     const room = state.rooms.find((r) => r.id === ui.selectedRoomId);
     if (room) {
@@ -241,6 +254,42 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
   }
 }
 
+/** Tıklanan kişinin bilgi kartı (öğrenci: GNO + eğilim; hoca: yük verimi). */
+function agentCard(state: GameState, a: GameState['agents'][number]): string {
+  const cip = (metin: string, kotu = false) =>
+    `<span class="gerek${kotu ? ' eksik' : ''}">${metin}</span>`;
+
+  if (a.kind === 'ogrenci') {
+    const dept = state.departments.find((d) => d.id === a.deptId);
+    const bolum = dept ? deptDef(dept.defId).ad : 'Bölümsüz';
+    const gno = gnoHesapla(a);
+    const egilimEtiket = a.egilim >= 115 ? 'çalışkan' : a.egilim >= 85 ? 'normal' : 'zorlanıyor';
+    const hoca = a.asistani !== -1 ? state.agents.find((x) => x.id === a.asistani) : undefined;
+    let html = `<span class="baslik">🎓 ${a.ad} — ${LEVEL_LABEL[a.level]} · ${bolum}</span>`;
+    html += cip(gno === null ? '📖 GNO: henüz yok' : `📖 GNO: ${gno.toFixed(2)}/4.00`, gno !== null && gno < 2);
+    html += cip(`🧠 Öğrenme eğilimi: %${a.egilim} (${egilimEtiket})`, a.egilim < 85);
+    html += cip(`📈 Mezuniyet ilerlemesi: %${Math.round(a.ilerleme)}`);
+    html += cip(`😊 Mutluluk: %${Math.round(a.mutluluk)}`, a.mutluluk < 40);
+    if (hoca && hoca.kind === 'akademisyen') {
+      html += cip(`🧑‍🔬 Asistanlık: ${RANK_LABEL[hoca.rank]} ${hoca.ad}`);
+    }
+    return html;
+  }
+  if (a.kind === 'akademisyen') {
+    const verim = Math.round(dersYukuVerimi(state, a) * 100);
+    const asistan = asistanlari(state, a.id).length;
+    const ders = (a.verdigiDersler ?? []).length;
+    let html = `<span class="baslik">${RANK_LABEL[a.rank]} ${a.ad} · ${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>`;
+    html += cip(`📚 Ders: ${ders}/${DERS_LIMIT} · 👥 Asistan: ${asistan}`);
+    html += cip(`⚡ Yük verimi: %${verim} — ders kalitesi ve araştırma hızı çarpanı`, verim < 75);
+    html += cip(`🎓 Eğitim: ${Math.round(a.egitim)} · 🔬 Araştırma: ${Math.round(a.arastirma)}`);
+    html += cip(`📄 Makale: ${a.makale} (${a.uluslararasiMakale} 🌍)`);
+    return html;
+  }
+  const rol = a.kind === 'asci' ? 'Aşçı' : 'Temizlikçi';
+  return `<span class="baslik">${rol} ${a.ad}</span>` + cip(`Maaş: ${formatMoney(a.maas)}/gün`);
+}
+
 function setStat(anahtar: string, metin: string): void {
   const el = topEl.querySelector<HTMLElement>(`[data-st="${anahtar}"]`);
   if (el && el.textContent !== metin) el.textContent = metin;
@@ -278,7 +327,7 @@ export function refreshHud(state: GameState, ui: UIState): void {
 
   // seçili oda bilgisi açıkken (kategori kapalı) durumu tazele — butonsuz içerik,
   // yeniden çizim tıklama yutmaz
-  if (ui.selectedRoomId !== -1 && subbarKategoriYok()) {
+  if ((ui.selectedRoomId !== -1 || ui.selectedAgentId !== -1) && subbarKategoriYok()) {
     renderSubbarRef?.();
   }
 }

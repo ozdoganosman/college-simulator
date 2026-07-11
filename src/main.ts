@@ -40,6 +40,7 @@ const ui = createUIState();
 function swapState(yeni: GameState): void {
   state = yeni;
   ui.selectedRoomId = -1;
+  ui.selectedAgentId = -1;
   ui.tool = { kind: 'sec' };
   ui.dragStart = null;
   invalidateGround();
@@ -73,6 +74,7 @@ import * as agents from './game/agents';
   state: () => state,
   advance: (dk: number) => advance(state, dk),
   build, departments, academics, research, agents,
+  ui, cam,
 };
 
 let sonZaman = performance.now();

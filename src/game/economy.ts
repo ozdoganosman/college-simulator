@@ -22,6 +22,7 @@ export function dailyEconomy(state: GameState): void {
   for (const a of state.agents) {
     if (a.kind === 'akademisyen') maas += a.maas * (tesvik ? 1.10 : 1);
     else if (a.kind === 'asci' || a.kind === 'temizlikci') maas += a.maas;
+    else if (a.kind === 'ogrenci' && a.asistani !== -1) maas += BALANCE.ASISTAN_MAAS;
   }
   maas = Math.round(maas);
 

@@ -106,7 +106,10 @@ function open(state: GameState): void {
     if (state.hiz === 0) state.hiz = 1; // dersler başlasın!
   };
   const escKapat = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' || e.key === 'Enter') kapat();
+    if (e.key === 'Escape' || e.key === 'Enter') {
+      e.stopPropagation(); // genel Esc kısayolu (menü aç/kapat) tetiklenmesin
+      kapat();
+    }
   };
   document.getElementById('toren-kapat')?.addEventListener('click', kapat);
   document.addEventListener('keydown', escKapat); // güvence: buton görünmese bile geçilebilsin

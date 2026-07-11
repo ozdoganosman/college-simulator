@@ -11,12 +11,13 @@
  *   (styles.css'te hazır).
  */
 import {
-  ALAN_META, AcademicRank, Alan, GameState, RANK_LABEL, RoomType, StrategyDef, StudentLevel,
+  ALAN_META, AcademicRank, Alan, GameState, LEVEL_LABEL, RANK_LABEL, RoomType, StrategyDef,
+  StudentLevel,
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
 import {
-  DERS_LIMIT, acikDersler, akilliOtoSec, blokDersi, bolumuHedefle, hocaDersCikar,
-  hocaDersEkle, otoDersSec, verilemeyenDersler,
+  ASISTAN_LIMIT, DERS_LIMIT, acikDersler, akilliOtoSec, asistanlari, blokDersi, bolumuHedefle,
+  dersYukuVerimi, hocaDersCikar, hocaDersEkle, otoDersSec, verilemeyenDersler, yukVerimi,
 } from '../game/schedule';
 import { COURSES } from '../data/courses';
 import { formatMoney } from '../core/util';
@@ -26,7 +27,9 @@ import {
   canOpenDepartment, openDepartment, seatCapacity, setDoktoraQuota, setQuota, setYlQuota,
   toggleGradProgram,
 } from '../game/departments';
-import { assignAcademicDept, fireAcademic, hireFromPool, officeCapacity } from '../game/academics';
+import {
+  asistanAta, asistanBirak, assignAcademicDept, fireAcademic, hireFromPool, officeCapacity,
+} from '../game/academics';
 import { cancelProject, startProject } from '../game/research';
 import { hireStaff, removeAgent } from '../game/agents';
 import { BALANCE } from '../data/balance';
@@ -186,6 +189,9 @@ function onPanelClick(e: Event): void {
     case 'ders-cikar':
       hocaDersCikar(state, Number(id), hedef.dataset.ders ?? '');
       break;
+    case 'asistan-cikar':
+      asistanBirak(state, Number(id));
+      break;
     case 'hedefle': {
       const kalan = bolumuHedefle(state, id);
       if (kalan.length === 0) notify(state, '🎯 Eksik dersler hocalara atandı — bölüm ders şartını karşılıyor!', 'iyi');
@@ -247,6 +253,10 @@ function onPanelChange(e: Event): void {
   } else if (action === 'ders-ekle') {
     const sec = hedef as HTMLSelectElement;
     if (sec.value) hocaDersEkle(state, id, sec.value);
+    render(state);
+  } else if (action === 'asistan-ata') {
+    const sec = hedef as HTMLSelectElement;
+    if (sec.value) asistanAta(state, Number(sec.value), id);
     render(state);
   }
 }
@@ -384,10 +394,17 @@ function kadroGovde(state: GameState): string {
   let kadroTablo = '<p class="aciklama">Henüz akademisyen yok — aşağıdaki havuzlardan alım yapın.</p>';
   if (akademisyenler.length > 0) {
     const satirlar = akademisyenler.map((a) => {
+      if (a.kind !== 'akademisyen') return '';
       const tazminat = 30 * a.maas;
+      const dersSayisi = (a.verdigiDersler ?? []).length;
+      const asistan = asistanlari(state, a.id).length;
+      const verim = Math.round(dersYukuVerimi(state, a) * 100);
+      const verimRenk = verim >= 90 ? '#9fd3a8' : verim >= 75 ? '#f0c674' : '#f4a09c';
       return `<tr>
         <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b> <span class="rozet" title="${ALAN_META[a.alan].tanim}">${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span></td>
         <td><select data-action="bolum-sec" data-id="${a.id}">${bolumSecenekleri(state, a.deptId)}</select></td>
+        <td title="${dersSayisi} ders, ${asistan} asistan — ders kalitesi ve araştırma hızı çarpanı (📅 Program panelinden yönetilir)">
+          <b style="color:${verimRenk}">⚡ %${verim}</b><br><small>${dersSayisi}📚 ${asistan}👥</small></td>
         <td>${Math.round(a.egitim)}</td>
         <td>${Math.round(a.arastirma)}</td>
         <td>${Math.floor(a.xp)}</td>
@@ -398,7 +415,7 @@ function kadroGovde(state: GameState): string {
       </tr>`;
     }).join('');
     kadroTablo = `<table>
-      <tr><th>Akademisyen</th><th>Bölüm</th><th>Eğitim</th><th>Arş.</th><th>XP</th>
+      <tr><th>Akademisyen</th><th>Bölüm</th><th>Yük</th><th>Eğitim</th><th>Arş.</th><th>XP</th>
         <th>Makale</th><th>Maaş/gün</th><th></th></tr>
       ${satirlar}
     </table>`;
@@ -755,6 +772,17 @@ function yardimGovde(): string {
       Öğrencilerin açlık/tuvalet/enerji/eğlence ihtiyaçları var; karşılanmazsa mutsuzlaşıp
       <b>okulu bırakırlar</b> (prestij düşer). Doçent varsa <b>yüksek lisans</b>, profesör varsa
       <b>doktora</b> programı açabilirsin — lisansüstü öğrenciler araştırmayı hızlandırır.
+      Haritada bir <b>öğrenciye tıkla</b>: not ortalaması (GNO), öğrenme eğilimi, ilerlemesi ve
+      mutluluğu alt çubukta görünür. Her öğrencinin <b>öğrenme eğilimi</b> farklıdır — çalışkanlar
+      hem hızlı öğrenir hem yüksek not alır.
+    </div>
+
+    <h3>4b) Ders yükü ve asistanlar</h3>
+    <div class="aciklama">
+      Bir hoca ne kadar çok ders verirse <b>ders kalitesi ve araştırma hızı o kadar düşer</b> —
+      📅 Program panelindeki <b>⚡ verim rozeti</b> bunu gösterir (1 ders %100, 4 ders %58).
+      Yüksek lisans/doktora öğrencilerini <b>🧑‍🔬 asistan</b> atayarak yükü hafiflet: her asistan
+      1 dersin yükünü üstlenir (hoca başına en çok 2), okul asistana günlük maaş öder.
     </div>
 
     <h3>5) Araştırma, yayın ve ödüller</h3>
@@ -829,7 +857,11 @@ function programGovde(state: GameState): string {
   let html = `<div class="aciklama"><b>Akış: derslerden bölümlere.</b> Her hocaya bu yıl vereceği
     dersleri seç (en çok ${DERS_LIMIT}) — bir bölüm ancak müfredatındaki TÜM dersler bir hocada
     seçiliyse açılabilir (önlisans 4, lisans 8 ders). Uyum yüzdesi öğrenme hızını belirler:
-    birincil alan %100, ikincil %76, alan dışı %44.</div>`;
+    birincil alan %100, ikincil %76, alan dışı %44.
+    <br><b>⚡ Yük:</b> hoca ne kadar çok ders verirse ders kalitesi ve araştırma hızı o kadar düşer
+    (1 ders %100 → ${DERS_LIMIT} ders %${Math.round(yukVerimi(DERS_LIMIT) * 100)}). Yüksek lisans /
+    doktora öğrencilerini <b>🧑‍🔬 asistan</b> atayarak yükü hafiflet — her asistan 1 dersin yükünü
+    alır (okul asistana günlük ${formatMoney(BALANCE.ASISTAN_MAAS)} maaş öder).</div>`;
 
   // --- 1) Hoca ders seçimi (çip editörü) ---
   html += `<h3>1) Hoca Ders Seçimi
@@ -839,16 +871,37 @@ function programGovde(state: GameState): string {
   if (hocalar.length === 0) {
     html += '<div class="aciklama">Kadroda akademisyen yok — önce 👩‍🏫 Kadro panelinden alım yap.</div>';
   } else {
+    const lisansustu = state.agents.filter(
+      (a): a is import('../core/types').Student => a.kind === 'ogrenci' && a.level !== 'lisans',
+    );
     for (const h of hocalar) {
       const dersler = h.verdigiDersler ?? [];
       const dolu = dersler.length >= DERS_LIMIT;
+      const asistanlarim = asistanlari(state, h.id);
+      const verim = Math.round(yukVerimi(dersler.length, asistanlarim.length) * 100);
+      const verimSinif = verim >= 90 ? 'iyi' : verim >= 75 ? 'orta' : 'dusuk';
+      const bosAdaylar = lisansustu.filter((s) => s.asistani === -1);
+      const asistanCipleri = asistanlarim.map((s) =>
+        `<span class="ders-cip asistan" title="${esc(s.ad)} — ${LEVEL_LABEL[s.level]} · asistanlığı bırakması için ×">
+          🧑‍🔬 ${esc(s.ad.split(' ')[0])} <small>${s.level === 'yl' ? 'YL' : 'Dr'}</small>
+          <button class="cip-cikar" data-action="asistan-cikar" data-id="${s.id}" title="Asistanlıktan çıkar">×</button></span>`).join('');
+      let asistanSecici = '';
+      if (asistanlarim.length < ASISTAN_LIMIT && bosAdaylar.length > 0) {
+        asistanSecici = `<select class="kontenjan-input ders-ekle" data-action="asistan-ata" data-id="${h.id}">
+          <option value="">🧑‍🔬 asistan ata…</option>
+          ${bosAdaylar.map((s) => `<option value="${s.id}">${esc(s.ad)} (${LEVEL_LABEL[s.level]})</option>`).join('')}
+        </select>`;
+      }
       html += `<div class="hoca-satir">
         <span class="hoca-ad"><b>${RANK_LABEL[h.rank]} ${esc(h.ad)}</b><br>
           <small>${ALAN_META[h.alan].emoji} ${ALAN_META[h.alan].ad} · eğitim ${h.egitim}</small></span>
         <span class="hoca-dersler">
           ${dersler.map((d) => dersCipi(d, h.alan, h.id)).join('')}
           ${dolu ? '' : dersEkleSecici(h.id, h.alan, dersler)}
+          ${asistanCipleri}${asistanSecici}
         </span>
+        <span class="yuk-rozet ${verimSinif}"
+          title="Ders yükü verimi: ders kalitesi ve araştırma hızı çarpanı. ${dersler.length} ders${asistanlarim.length > 0 ? `, ${asistanlarim.length} asistan` : ''} — asistan atayarak yükseltebilirsin">⚡ %${verim}</span>
         <span class="hoca-kota ${dolu ? 'dolu' : ''}">${dersler.length}/${DERS_LIMIT}</span>
         <button class="eylem" data-action="oto-ders" data-id="${h.id}" ${dolu ? 'disabled' : ''}
           title="Boş kotayı alanına uygun derslerle doldur">Doldur</button>
@@ -930,7 +983,9 @@ function programGovde(state: GameState): string {
         let hoca = '<span style="color:#f4a09c">hoca yok!</span>';
         if (slot.academicId !== -1 && hocaAd.has(slot.academicId)) {
           const alan = hocaAlan.get(slot.academicId)!;
-          hoca = `${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!)} <small>(%${uyumYuzde(slot.courseId, alan)})</small>`;
+          const hocaObj = hocalar.find((x) => x.id === slot.academicId);
+          const verim = hocaObj ? Math.round(dersYukuVerimi(state, hocaObj) * 100) : 100;
+          hoca = `${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!)} <small>(%${uyumYuzde(slot.courseId, alan)}${verim < 100 ? ` · ⚡%${verim}` : ''})</small>`;
         }
         html += `<td><b>${ders.kod}</b> ${ders.ad}<br><small>${hoca}</small></td>`;
       }

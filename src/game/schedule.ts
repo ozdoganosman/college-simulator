@@ -8,12 +8,50 @@
  * Günlük program: her bölüm için günün 4 bloğuna müfredattan ders yerleştirilir;
  * derse, o dersi SEÇMİŞ hocalar arasından en uygunu atanır (günde en çok 2 blok).
  */
-import { Academic, DersSlot, GameState } from '../core/types';
+import { Academic, DersSlot, GameState, Student } from '../core/types';
 import { COURSES, courseDef, dersEtki } from '../data/courses';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 
 /** Bir hocanın bir yılda verebileceği azami ders sayısı. */
 export const DERS_LIMIT = 4;
+
+/** Bir hocanın alabileceği azami asistan sayısı. */
+export const ASISTAN_LIMIT = 2;
+
+/**
+ * Ders yükü verim tablosu — indeks: efektif ders sayısı (asistanlar düşülür).
+ * Yük arttıkça hem ders kalitesi hem araştırma hızı GİDEREK hızlanan biçimde düşer.
+ */
+const YUK_VERIM = [1, 1, 0.88, 0.74, 0.58];
+
+/** Verim çarpanı: ders sayısı - asistan (her asistan 1 dersin yükünü alır). */
+export function yukVerimi(dersSayisi: number, asistan = 0): number {
+  const n = Math.max(0, Math.min(dersSayisi - asistan, YUK_VERIM.length - 1));
+  return YUK_VERIM[n];
+}
+
+/** academicId -> asistan (YL/doktora öğrenci) sayısı. */
+export function asistanSayilari(state: GameState): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci' && a.asistani !== -1) {
+      m.set(a.asistani, (m.get(a.asistani) ?? 0) + 1);
+    }
+  }
+  return m;
+}
+
+/** Hocanın asistanları. */
+export function asistanlari(state: GameState, academicId: number): Student[] {
+  return state.agents.filter(
+    (a): a is Student => a.kind === 'ogrenci' && a.asistani === academicId,
+  );
+}
+
+/** Hocanın güncel ders yükü verimi (0.58-1). */
+export function dersYukuVerimi(state: GameState, a: Academic): number {
+  return yukVerimi((a.verdigiDersler ?? []).length, asistanlari(state, a.id).length);
+}
 
 function akademisyenler(state: GameState): Academic[] {
   return state.agents.filter((a): a is Academic => a.kind === 'akademisyen');

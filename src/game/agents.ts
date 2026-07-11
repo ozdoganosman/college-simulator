@@ -47,6 +47,7 @@ import {
 } from '../core/types';
 import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
 import { dersEtki } from '../data/courses';
+import { asistanSayilari, yukVerimi } from './schedule';
 import { findPath } from '../core/pathfinding';
 import { libraryLevel, roomCenter, walkable } from '../core/grid';
 import { BALANCE } from '../data/balance';
@@ -244,6 +245,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
   const teacherEtki = new Map<number, number>();
   const academicIndex = new Map<number, number>();
   const deptAkademik = new Map<number, Academic[]>();
+  const asistanlar = asistanSayilari(state);
   let mutfak = false;
   for (const a of state.agents) {
     if (!a.onCampus) continue;
@@ -258,9 +260,10 @@ function buildCtx(state: GameState, dk: number): Ctx {
           if (set) set.add(a.deptId);
           else teacherRooms.set(rid, new Set([a.deptId]));
           if ((teacherSkill.get(rid) ?? 0) < a.egitim) teacherSkill.set(rid, a.egitim);
-          // alan-ders uyumu: bu bloktaki dersin hocaya etkisi
+          // alan-ders uyumu × ders yükü verimi: bu bloktaki dersin gerçek kalitesi
           const ders = blokDersleri.get(a.deptId);
-          const etki = ders ? dersEtki(ders, a.alan) : 1;
+          const yuk = yukVerimi((a.verdigiDersler ?? []).length, asistanlar.get(a.id) ?? 0);
+          const etki = (ders ? dersEtki(ders, a.alan) : 1) * yuk;
           if ((teacherEtki.get(rid) ?? 0) < etki) teacherEtki.set(rid, etki);
         }
       }
@@ -566,11 +569,15 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       }
       const rid = state.roomAt[tileIndex(Math.round(s.x), Math.round(s.y))];
       const ogretmenli = rid >= 0 && ctx.teacherRooms.get(rid)?.has(s.deptId) === true;
-      // hocanın eğitim becerisi VE dersin alanına uygunluğu öğrenme hızını etkiler
+      // hocanın eğitim becerisi VE dersin alanına uygunluğu (× hoca ders yükü) öğrenme hızını etkiler
       const kalite = ogretmenli
         ? (0.6 + (ctx.teacherSkill.get(rid) ?? 50) / 125) * (ctx.teacherEtki.get(rid) ?? 1)
         : BALANCE.OGRETMENSIZ_CARPAN;
-      s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * kalite * ctx.ogrenmeCarpan, 0, 100);
+      // öğrencinin kendi öğrenme eğilimi de hızı ve not ortalamasını belirler
+      const efektif = kalite * (s.egilim / 100) * ctx.ogrenmeCarpan;
+      s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * efektif, 0, 100);
+      s.kaliteToplam += efektif * dtMin;
+      s.dersDakika += dtMin;
       break;
     }
     case 'yemege_gidiyor':
@@ -612,13 +619,15 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       if (s.activityUntil !== -1 && dk >= s.activityUntil) finishActivity(state, s, ctx);
       else if (s.path.length === 0) s.activity = 'arastiriyor';
       break;
-    case 'arastiriyor':
+    case 'arastiriyor': {
       // lisansüstü öğrenci için araştırma da tez ilerlemesidir
-      s.ilerleme = clamp(
-        s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * ctx.ogrenmeCarpan, 0, 100,
-      );
+      const tez = (s.egilim / 100) * ctx.ogrenmeCarpan;
+      s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * tez, 0, 100);
+      s.kaliteToplam += 1.1 * tez * dtMin;
+      s.dersDakika += dtMin;
       if (s.activityUntil !== -1 && dk >= s.activityUntil) finishActivity(state, s, ctx);
       break;
+    }
     case 'bosta':
       decideStudent(state, s, dtMin, ctx);
       break;
@@ -910,9 +919,21 @@ export function spawnStudent(state: GameState, deptId: number, level: StudentLev
     },
     mutluluk: randRange(state, 70, 85),
     girisDonemi: donemIndex(state.gun),
+    // iki zar ortalaması: uçlar nadir, orta yaygın (çan eğrisine yakın)
+    egilim: Math.round((randInt(state, 55, 145) + randInt(state, 55, 145)) / 2),
+    kaliteToplam: 0,
+    dersDakika: 0,
+    asistani: -1,
   };
   state.agents.push(s);
   return s;
+}
+
+/** Genel not ortalaması (0-4); yeterli ders verisi yoksa null. */
+export function gnoHesapla(s: Student): number | null {
+  if (s.dersDakika < 60) return null;
+  // ort. ders kalitesi ~1.0 (hocalı, uyumlu) → GNO ~2.9; öğretmensiz ağırlıklıysa düşer
+  return clamp((s.kaliteToplam / s.dersDakika) * 2.9, 0, 4);
 }
 
 export function spawnAcademic(
@@ -970,4 +991,8 @@ export function removeAgent(state: GameState, agentId: number): void {
   releaseReservations(state, agentId);
   const i = state.agents.findIndex((a) => a.id === agentId);
   if (i !== -1) state.agents.splice(i, 1);
+  // çıkarılan bir hocaysa asistan bağlarını çöz
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci' && a.asistani === agentId) a.asistani = -1;
+  }
 }

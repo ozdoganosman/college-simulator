@@ -39,6 +39,7 @@ import {
   Academic, GameState, Publication, RANK_LABEL, ResearchProject,
 } from '../core/types';
 import { chance, clamp, formatMoney, newId, pick, randRange } from '../core/util';
+import { asistanSayilari, yukVerimi } from './schedule';
 import { libraryLevel, validRooms } from '../core/grid';
 import { BALANCE } from '../data/balance';
 import { deptDef } from '../data/departments';
@@ -111,11 +112,14 @@ export function updateResearch(state: GameState, dtMin: number): void {
     }
     return k;
   };
+  const asistanlar = asistanSayilari(state);
   for (const a of state.agents) {
     if (!a.onCampus || a.activity !== 'arastiriyor') continue;
     if (a.kind === 'akademisyen') {
       const k = al(a.deptId);
-      k.akademisyenToplam += a.arastirma;
+      // ders yükü araştırma hızını da düşürür — asistanlar yükü hafifletir
+      k.akademisyenToplam += a.arastirma
+        * yukVerimi((a.verdigiDersler ?? []).length, asistanlar.get(a.id) ?? 0);
       k.arastiranlar.push(a);
     } else if (a.kind === 'ogrenci') {
       if (a.level === 'yl') al(a.deptId).yl++;

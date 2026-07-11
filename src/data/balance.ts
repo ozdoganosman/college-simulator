@@ -16,6 +16,7 @@ export const BALANCE = {
   // Maaşlar (günlük ₺)
   MAAS: { arsgor: 1200, dr: 2000, docent: 3000, prof: 4500, asci: 900, temizlikci: 700 },
   PERSONEL_ALIM: { asci: 5000, temizlikci: 3000 }, // ilan maliyeti
+  ASISTAN_MAAS: 500,           // asistan atanan YL/doktora öğrencisinin günlük maaşı ₺
 
   // Araştırma
   PROJE_MALIYET_TABAN: 40000,

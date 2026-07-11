@@ -4,6 +4,7 @@ import {
 } from '../game/build';
 import { placePrefab, prefabDef, prefabOrigin } from '../game/prefab';
 import { Camera, clampCamera, screenToTile, zoomAt } from './camera';
+import { isCeremonyOpen } from './ceremony';
 import type { UIState } from './uistate';
 
 export function attachInput(
@@ -92,13 +93,16 @@ export function attachInput(
     if (hedef && (hedef.tagName === 'INPUT' || hedef.tagName === 'TEXTAREA' || hedef.tagName === 'SELECT')) {
       return; // panel girdilerinde kısayol çalışmasın
     }
+    if (isCeremonyOpen()) return; // tören ekranında kısayollar (özellikle Esc) devre dışı
     const st = state();
     if (e.key === 'Escape') {
-      const arac = ui.tool.kind !== 'sec' || ui.dragStart !== null || ui.selectedRoomId !== -1;
+      const arac = ui.tool.kind !== 'sec' || ui.dragStart !== null
+        || ui.selectedRoomId !== -1 || ui.selectedAgentId !== -1;
       if (arac) {
         ui.tool = { kind: 'sec' };
         ui.dragStart = null;
         ui.selectedRoomId = -1;
+        ui.selectedAgentId = -1;
         document.dispatchEvent(new CustomEvent('tool-changed'));
       } else {
         document.dispatchEvent(new CustomEvent('toggle-menu'));
@@ -120,7 +124,18 @@ export function attachInput(
 
 function selectAt(state: GameState, ui: UIState, x: number, y: number): void {
   if (!inBounds(x, y)) return;
-  const rid = state.roomAt[tileIndex(x, y)];
-  ui.selectedRoomId = rid;
+  // önce kişi: tıklanan kareye en yakın kampüsteki ajan (¾ kare içinde)
+  let ajan = -1;
+  let enYakin = 0.75;
+  for (const a of state.agents) {
+    if (!a.onCampus) continue;
+    const d = Math.hypot(a.x - x, a.y - y);
+    if (d < enYakin) {
+      enYakin = d;
+      ajan = a.id;
+    }
+  }
+  ui.selectedAgentId = ajan;
+  ui.selectedRoomId = ajan !== -1 ? -1 : state.roomAt[tileIndex(x, y)];
   document.dispatchEvent(new CustomEvent('room-selected'));
 }

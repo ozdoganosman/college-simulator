@@ -214,6 +214,7 @@ html, body, #app {
 .panel.genis { width: min(1160px, 96vw); }
 .hoca-satir {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
@@ -242,6 +243,19 @@ html, body, #app {
   padding: 2px 8px;
 }
 .hoca-kota.dolu { color: #b8f5cd; background: #1f6b39; }
+.yuk-rozet {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 2px 8px;
+  background: #262b38;
+}
+.yuk-rozet.iyi { color: #9fd3a8; }
+.yuk-rozet.orta { color: #f0c674; }
+.yuk-rozet.dusuk { color: #f4a09c; background: #3d2626; }
+.ders-cip.asistan { border-color: #8e7cc3; border-left-width: 3px; }
+.ders-cip.asistan small { color: #b4a7d6; }
 .ders-cip {
   display: inline-flex;
   align-items: center;

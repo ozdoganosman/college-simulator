@@ -125,6 +125,11 @@ export function eskiKayitUyumu(s: GameState): void {
         a.verdigiDersler = [];
         dersSecimiEksik = true;
       }
+    } else if (a.kind === 'ogrenci') {
+      if (typeof a.egilim !== 'number') a.egilim = 70 + ((a.id * 37) % 61); // 70-130
+      if (typeof a.kaliteToplam !== 'number') a.kaliteToplam = 0;
+      if (typeof a.dersDakika !== 'number') a.dersDakika = 0;
+      if (typeof a.asistani !== 'number') a.asistani = -1;
     }
   }
   if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç

@@ -160,7 +160,20 @@ export interface Student extends AgentBase {
   mutluluk: number;
   /** kayıt olduğu dönem indeksi */
   girisDonemi: number;
+  /** öğrenme eğilimi (yüzde, ~60-140) — öğrenme hızı ve not ortalaması çarpanı */
+  egilim: number;
+  /** not ortalaması birikimi: derste toplanan kalite ve süre (GNO = kalite/süre ölçeği) */
+  kaliteToplam: number;
+  dersDakika: number;
+  /** asistanı olduğu akademisyen id (YL/doktora; değilse -1) */
+  asistani: number;
 }
+
+export const LEVEL_LABEL: Record<StudentLevel, string> = {
+  lisans: 'Lisans',
+  yl: 'Yüksek Lisans',
+  doktora: 'Doktora',
+};
 
 export interface Academic extends AgentBase {
   kind: 'akademisyen';

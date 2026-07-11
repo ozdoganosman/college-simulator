@@ -18,6 +18,8 @@ export interface UIState {
   hoverTile: Point | null;
   /** seçili oda (bilgi göstermek için), yoksa -1 */
   selectedRoomId: number;
+  /** seçili kişi (öğrenci/hoca kartı göstermek için), yoksa -1 */
+  selectedAgentId: number;
   paused: boolean;
 }
 
@@ -27,6 +29,7 @@ export function createUIState(): UIState {
     dragStart: null,
     hoverTile: null,
     selectedRoomId: -1,
+    selectedAgentId: -1,
     paused: false,
   };
 }

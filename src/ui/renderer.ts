@@ -419,6 +419,20 @@ export function render(
     }
   }
 
+  // --- seçili kişi vurgusu (ayak halkası) ---
+  if (ui.selectedAgentId !== -1) {
+    const a = state.agents.find((x) => x.id === ui.selectedAgentId);
+    if (a && a.onCampus) {
+      const px = a.x * TILE + TILE / 2;
+      const py = a.y * TILE + TILE / 2;
+      ctx.strokeStyle = '#ffe066';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(px, py + TILE * 0.24, TILE * 0.4, TILE * 0.2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
   // --- eşyalar (sprite atlası) ---
   for (const o of state.objects) {
     if (o.x < x0 - 1 || o.x > x1 + 1 || o.y < y0 - 1 || o.y > y1 + 1) continue;
