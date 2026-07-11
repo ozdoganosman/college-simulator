@@ -267,6 +267,7 @@ function completeProject(state: GameState, proje: ResearchProject): void {
   const ikinci = yazarSec();
 
   let anaYayin: Publication | null = null;
+  let tesvikMakalesi = false;
   if (yazar) {
     anaYayin = publishPaper(state, proje, yazar);
     if (anaYayin.uluslararasi) hibe *= BALANCE.ULUSLARARASI_HIBE_CARPAN;
@@ -274,17 +275,23 @@ function completeProject(state: GameState, proje: ResearchProject): void {
     // Akademik teşvik: %20 olasılıkla ikinci makale (ikinci yazar ya da aynı yazar)
     if (state.strategies.includes('tesvik') && chance(state, 0.2)) {
       publishPaper(state, proje, ikinci ?? yazar);
+      tesvikMakalesi = true;
     }
   }
 
   earn(state, hibe);
-  notify(state, `Araştırma tamamlandı: "${proje.baslik}" — hibe ${formatMoney(hibe)}.`, 'iyi');
+  // bildirim birleştirme: tamamlanma + hibe + makale(ler) TEK satırda (spam önlemi)
+  const makaleNot = anaYayin && yazar
+    ? ` · ${anaYayin.uluslararasi ? '🌍 uluslararası ' : ''}makale: ${RANK_LABEL[yazar.rank]} ${yazar.ad}${tesvikMakalesi ? ' (+1 teşvik makalesi)' : ''}`
+    : '';
+  notify(state, `Araştırma tamamlandı: "${proje.baslik}" — hibe ${formatMoney(hibe)}${makaleNot}.`, 'iyi');
 
   // Çığır açan buluş (yazar yoksa buluş da yok)
   if (yazar) {
     const bulusOlasilik = (BALANCE.BULUS_OLASILIK + (yazar.arastirma > 80 ? 0.05 : 0)) * tipMeta.bulusCarpan;
     if (chance(state, bulusOlasilik)) {
       if (anaYayin) anaYayin.cigirAcici = true;
+      state.toplamBulus += 1;
       let gelir = BALANCE.BULUS_GELIR;
       if (state.strategies.includes('teknokent')) gelir *= 2;
       earn(state, gelir);
@@ -308,6 +315,8 @@ function completeProject(state: GameState, proje: ResearchProject): void {
             aciklama: `${bolumAdi} bölümünün "${proje.baslik}" buluşu ödüle layık görüldü.`,
             gun: state.gun,
           });
+          state.toplamOdul += 1;
+          if (state.awards.length > 60) state.awards.shift(); // kayıt şişmesin
           addPrestij(state, BALANCE.PRESTIJ.odul);
           notify(state, `${odulAd} kazanıldı! (${bolumAdi})`, 'odul');
         }
@@ -318,9 +327,9 @@ function completeProject(state: GameState, proje: ResearchProject): void {
   const idx = state.projects.indexOf(proje);
   if (idx >= 0) state.projects.splice(idx, 1);
 
-  // Araştırma sürekliliği: bütçe yetiyorsa aynı bölümde otomatik yeni proje başlat
-  // (istemeyen oyuncu projeyi panelden iptal edebilir).
-  if (dept && state.para >= BALANCE.PROJE_MALIYET_TABAN * 1.5) {
+  // Araştırma sürekliliği: OYUNCU İZİN VERDİYSE (Araştırma panelindeki 🔁
+  // anahtar) bütçe yeterken aynı bölümde otomatik yeni proje başlar.
+  if (dept && state.arastirmaOtoYenile && state.para >= BALANCE.PROJE_MALIYET_TABAN * 1.5) {
     startProject(state, dept.id);
   }
 }
@@ -341,15 +350,14 @@ function publishPaper(state: GameState, proje: ResearchProject, yazar: Academic)
     gun: state.gun,
   };
   state.publications.push(yayin);
+  state.toplamYayin += 1;
+  if (uluslararasi) state.toplamUluslararasiYayin += 1;
+  if (state.publications.length > 120) state.publications.shift(); // kayıt şişmesin
 
   yazar.makale += 1;
   if (uluslararasi) yazar.uluslararasiMakale += 1;
   addPrestij(state, uluslararasi ? BALANCE.PRESTIJ.uluslararasiMakale : BALANCE.PRESTIJ.makale);
-  notify(
-    state,
-    `Yeni ${uluslararasi ? 'uluslararası ' : ''}makale: "${proje.baslik}" — ${RANK_LABEL[yazar.rank]} ${yazar.ad}`,
-    'iyi',
-  );
+  // ayrı bildirim yok: completeProject tek satırda özetler (bildirim spam önlemi)
   return yayin;
 }
 

@@ -48,7 +48,7 @@ function openZafer(state: GameState): void {
         </div>
         <div class="toren-ozet" style="animation-delay:1.2s">
           🎓 <b class="sayac" data-hedef="${state.toplamMezun}" data-gecikme="1.2">0</b> mezun ·
-          📄 <b class="sayac" data-hedef="${state.publications.length}" data-gecikme="1.2">0</b> yayın ·
+          📄 <b class="sayac" data-hedef="${state.toplamYayin}" data-gecikme="1.2">0</b> yayın ·
           ⭐ <b class="sayac" data-hedef="${Math.round(state.prestij)}" data-gecikme="1.2">0</b> prestij ·
           🏅 ${state.basarimlar.length} başarım
           <br><small>Sıralama yolculuğun: <b>${yolculuk} → 1</b></small>

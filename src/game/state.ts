@@ -30,6 +30,10 @@ export function createInitialState(): GameState {
     publications: [],
     awards: [],
     notices: [],
+    toplamYayin: 0,
+    toplamUluslararasiYayin: 0,
+    toplamBulus: 0,
+    toplamOdul: 0,
 
     kpssPool: [],
     transferPool: [],
@@ -59,6 +63,9 @@ export function createInitialState(): GameState {
     krediBorcu: 0,
     mutevelli: [],
     sonrakiTalepCarpan: 1,
+    olayKuyrugu: [],
+    arastirmaOtoYenile: true,
+    sonErisimUyariGunu: 0,
     sonDenetim: null,
     trend: [],
     aktifOlay: null,
@@ -112,6 +119,14 @@ export function addPrestij(state: GameState, miktar: number): void {
   let m = miktar;
   if (m > 0 && state.strategies.includes('uluslararasi_ofis')) m *= 1.1;
   state.prestij = Math.max(0, Math.min(1000, state.prestij + m));
+}
+
+/**
+ * Bir sonraki YKS talep çarpanını güvenli aralıkta çarpar — olaylar üst üste
+ * binse bile talep [0.6, 1.8] dışına taşamaz (birikip uçma/dibe vurma hatası).
+ */
+export function talepCarp(state: GameState, carpan: number): void {
+  state.sonrakiTalepCarpan = Math.max(0.6, Math.min(1.8, state.sonrakiTalepCarpan * carpan));
 }
 
 const SAVE_KEY = 'universite-simulatoru-save';
@@ -178,6 +193,18 @@ export function eskiKayitUyumu(s: GameState): void {
   if (typeof s.krediBorcu !== 'number') s.krediBorcu = 0;
   if (!Array.isArray(s.mutevelli)) s.mutevelli = [];
   if (typeof s.sonrakiTalepCarpan !== 'number') s.sonrakiTalepCarpan = 1;
+  if (!Array.isArray(s.olayKuyrugu)) s.olayKuyrugu = [];
+  if (typeof s.arastirmaOtoYenile !== 'boolean') s.arastirmaOtoYenile = true;
+  if (typeof s.sonErisimUyariGunu !== 'number') s.sonErisimUyariGunu = 0;
+  // ömürlük sayaçlar sonradan eklendi: eldeki listelerden tohumla
+  if (typeof s.toplamYayin !== 'number') s.toplamYayin = s.publications?.length ?? 0;
+  if (typeof s.toplamUluslararasiYayin !== 'number') {
+    s.toplamUluslararasiYayin = (s.publications ?? []).filter((p) => p.uluslararasi).length;
+  }
+  if (typeof s.toplamBulus !== 'number') {
+    s.toplamBulus = (s.publications ?? []).filter((p) => p.cigirAcici).length;
+  }
+  if (typeof s.toplamOdul !== 'number') s.toplamOdul = s.awards?.length ?? 0;
   if (s.sonDenetim === undefined) s.sonDenetim = null;
   if (s.mezuniyet === undefined) s.mezuniyet = null;
   if (!Array.isArray(s.trend)) s.trend = [];

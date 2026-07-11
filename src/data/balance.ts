@@ -85,6 +85,10 @@ export const BALANCE = {
   // Yemek sistemi: aşçılar mesaide porsiyon üretir, öğrenciler tüketir
   ASCI_URETIM_DK: 1.4,         // aşçı başına dakikada üretilen porsiyon
   YEMEK_MALZEME: 5,            // porsiyon başına malzeme gideri ₺ (günlük düşülür)
+  YEMEK_STOK_PAY: 1.25,        // stok tavanı = öğrenci sayısı × pay + 10 (israf freni)
+
+  // Eksi bakiye günlük gecikme faizi (borcun oranı; en az ₺250)
+  EKSI_BAKIYE_FAIZ: 0.004,
 
   // Öğrenci
   DERS_ILERLEME: 1.2,          // ders periyodu başına ilerleme puanı (öğretmenli)

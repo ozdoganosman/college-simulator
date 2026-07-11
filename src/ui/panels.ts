@@ -414,6 +414,9 @@ function onPanelClick(e: Event): void {
     case 'proje-iptal':
       cancelProject(state, Number(id));
       break;
+    case 'arastirma-oto':
+      state.arastirmaOtoYenile = !state.arastirmaOtoYenile;
+      break;
     case 'strateji-al': {
       const def = strategyDef(id);
       if (stratejiEksikleri(state, def).length > 0) break; // buton zaten disabled — emniyet
@@ -1083,6 +1086,14 @@ function kutuphaneGovde(state: GameState): string {
 // --- Araştırma -----------------------------------------------------------------
 
 function arastirmaGovde(state: GameState): string {
+  const oto = state.arastirmaOtoYenile;
+  const otoAnahtar = `<div style="margin-bottom:8px">
+    <button class="eylem" data-action="arastirma-oto"
+      title="Proje bitince (bütçe yeterse) aynı bölümde otomatik yenisi başlasın mı? Kapalıyken her projeyi sen başlatırsın — sürpriz harcama olmaz.">
+      🔁 Otomatik yenile: <b style="color:${oto ? '#9fd3a8' : '#f4a09c'}">${oto ? 'AÇIK' : 'KAPALI'}</b>
+    </button>
+    <span class="aciklama" style="margin-left:6px">${oto ? 'Biten projenin yerine otomatik yenisi başlar (bütçeden düşer).' : 'Projeler bitince durur — yenisini panelden sen başlatırsın.'}</span>
+  </div>`;
   let bolumler = '<p class="aciklama">Araştırma için önce bölüm açmalısınız.</p>';
   if (state.departments.length > 0) {
     // bölüm -> akademisyen var mı (tek geçiş)
@@ -1145,12 +1156,8 @@ function arastirmaGovde(state: GameState): string {
     }).join('');
   }
 
-  // Sayaçlar
-  let uluslararasi = 0, bulus = 0;
-  for (const p of state.publications) {
-    if (p.uluslararasi) uluslararasi++;
-    if (p.cigirAcici) bulus++;
-  }
+  // Sayaçlar (ömürlük — liste budansa da doğru kalır)
+  const uluslararasi = state.toplamUluslararasiYayin, bulus = state.toplamBulus;
 
   // Yayınlar (son 15, en yeni üstte)
   const agentAd = new Map<number, string>();
@@ -1177,9 +1184,10 @@ function arastirmaGovde(state: GameState): string {
       .map((o) => `<div>🏆 <b>${esc(o.ad)}</b> — ${esc(o.aciklama)} (Gün ${o.gun})</div>`)
       .join('');
 
-  return `<p class="aciklama">Toplam makale: <b>${state.publications.length}</b> ·
+  return `${otoAnahtar}
+    <p class="aciklama">Toplam makale: <b>${state.toplamYayin}</b> ·
       Uluslararası: <b>${uluslararasi}</b> · Buluş: <b>${bulus}</b> ·
-      Ödül: <b>${state.awards.length}</b></p>
+      Ödül: <b>${state.toplamOdul}</b></p>
     ${bolumler}
     <h3>Yayınlar (son 15)</h3>
     ${yayinTablo}
@@ -1571,11 +1579,7 @@ function raporlarGovde(state: GameState): string {
   const okulPayi = Math.round(ekosistemGelir * BALANCE.GIRISIM_OKUL_PAYI);
   const ucretGelir = Math.round(gunlukUcretGeliri(state));
   const gunlukNet = okulPayi + ucretGelir - maasYuku - bakim - programGider - arastirmaButce;
-  let uluslararasi = 0, bulus = 0;
-  for (const p of state.publications) {
-    if (p.uluslararasi) uluslararasi++;
-    if (p.cigirAcici) bulus++;
-  }
+  const uluslararasi = state.toplamUluslararasiYayin, bulus = state.toplamBulus;
   const ortMutluluk = ogrenciSayisi > 0 ? Math.round(mutlulukToplam / ogrenciSayisi) : null;
 
   // Oda sayıları (tür bazında geçerli/geçersiz)
@@ -1655,9 +1659,9 @@ function raporlarGovde(state: GameState): string {
     </table>
     <h3>Araştırma</h3>
     <table>
-      ${satir('Makale (uluslararası)', `${state.publications.length} (${uluslararasi})`)}
+      ${satir('Makale (uluslararası)', `${state.toplamYayin} (${uluslararasi})`)}
       ${satir('Çığır açan buluş', String(bulus))}
-      ${satir('Ödül', String(state.awards.length))}
+      ${satir('Ödül', String(state.toplamOdul))}
       ${satir('Aktif proje', String(state.projects.length))}
     </table>
     <h3>Kampüs</h3>

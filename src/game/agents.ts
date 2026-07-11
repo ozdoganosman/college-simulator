@@ -167,6 +167,8 @@ interface Ctx {
   /** akademisyen id -> bölümündeki kampüsteki akademisyenler arasındaki sırası */
   academicIndex: Map<number, number>;
   copYakini: Set<number>;
+  /** toplam öğrenci sayısı (mutfak üretim tavanı için) */
+  ogrenciSayisi: number;
 }
 
 function buildCtx(state: GameState, dk: number): Ctx {
@@ -313,6 +315,8 @@ function buildCtx(state: GameState, dk: number): Ctx {
   // yurt sakinleri: kapasite kadar öğrenci (id sırasıyla — kayıt önceliği)
   const yurtSakinleri = new Set<number>();
   const kapasite = yurtOdalar.length > 0 ? yurtKapasitesi(state) : 0;
+  let ogrenciSayisi = 0;
+  for (const a of state.agents) if (a.kind === 'ogrenci') ogrenciSayisi++;
   if (kapasite > 0) {
     const ogrenciIds: number[] = [];
     for (const a of state.agents) if (a.kind === 'ogrenci') ogrenciIds.push(a.id);
@@ -355,6 +359,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     deptClassrooms,
     academicIndex,
     copYakini: copYakiniSet(state),
+    ogrenciSayisi,
   };
 }
 
@@ -451,6 +456,9 @@ function leaveCampus(state: GameState, a: Agent): void {
   a.activityUntil = -1;
   // evde geçen gece: yemek, uyku, banyo — ihtiyaçlar büyük ölçüde sıfırlanır
   if (a.kind === 'ogrenci') {
+    // günü çok aç kapatan öğrenci "aç kaldı" sayılır — sadece yemekhane
+    // kuyruğunda değil, yemeğe HİÇ ulaşamayanlar da rapora girer
+    if (a.needs.aclik > 75) state.acKalanBugun++;
     a.needs.aclik = randRange(state, 10, 25);
     a.needs.tuvalet = randRange(state, 5, 15);
     a.needs.enerji = randRange(state, 10, 25);
@@ -483,7 +491,14 @@ function maybeArrive(state: GameState, a: Agent, dk: number, dtMin: number, ulas
   a.usingObject = -1;
   a.activityUntil = -1;
   const hedef = randomWalkableFloorTile(state);
-  if (hedef) goTo(state, a, hedef);
+  if (!hedef || !goTo(state, a, hedef)) {
+    // kapıdan kampüse yol YOK (giriş duvarla kapanmış olabilir) — sessizce
+    // yığılmak yerine oyuncu uyarılır (günde bir kez)
+    if (state.sonErisimUyariGunu !== state.gun) {
+      state.sonErisimUyariGunu = state.gun;
+      notify(state, '🚧 Gelenler kampüse GİREMİYOR — girişten binalara yürünebilir yol yok! Kapı önünü ve duvarları kontrol et.', 'kotu');
+    }
+  }
 }
 
 function depositDirt(state: GameState, a: Agent, dtMin: number, ctx: Ctx): void {
@@ -818,6 +833,14 @@ function updateAcademic(state: GameState, a: Academic, dtMin: number, ctx: Ctx):
   }
 
   if (mod === 'ders' && sinif) {
+    // derse geçerken ofis masası SERBEST bırakılır — rezervasyon bütün gün
+    // hocanın üstünde kalıp masa kıtlığında diğerlerini araştırmasız bırakmasın
+    const masa = ctx.deskOf.get(a.id);
+    if (masa && masa.reservedBy === a.id) {
+      masa.reservedBy = -1;
+      ctx.deskOf.delete(a.id);
+      ctx.freeMasa.push(masa);
+    }
     if (a.activity === 'ders_veriyor') {
       a.activityUntil = blok + BLOK_SURE;
     } else if (a.activity === 'derse_gidiyor') {
@@ -886,12 +909,17 @@ function beceriGelis(a: StaffAgent, dtMin: number): void {
 function updateCook(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
   const mesai = ctx.dk >= ASCI_BASLA && ctx.dk < ASCI_BITIS;
   if (a.activity === 'calisiyor' && mesai) {
-    // mutfak üretimi: banko başındaki her aşçı porsiyon üretir (malzeme gideri günlük
-    // düşülür); usta aşçı daha hızlı üretir
-    const uretim = BALANCE.ASCI_URETIM_DK * beceriCarpani(a) * dtMin;
-    state.yemekStok += uretim;
-    state.gunlukUretim += uretim;
-    beceriGelis(a, dtMin);
+    // mutfak üretimi: banko başındaki her aşçı porsiyon üretir (malzeme gideri
+    // günlük düşülür); usta aşçı daha hızlı üretir. İSRAF FRENİ: stok, öğrenci
+    // sayısına göre tavana dayandıysa üretim durur — gün sonunda çöpe gidecek
+    // porsiyonlar için malzeme parası yakılmaz.
+    const stokTavani = ctx.ogrenciSayisi * BALANCE.YEMEK_STOK_PAY + 10;
+    if (state.yemekStok < stokTavani) {
+      const uretim = BALANCE.ASCI_URETIM_DK * beceriCarpani(a) * dtMin;
+      state.yemekStok += uretim;
+      state.gunlukUretim += uretim;
+      beceriGelis(a, dtMin);
+    }
   }
   if (!mesai) {
     if (a.activity === 'calisiyor' || a.usingObject !== -1) finishActivity(state, a, ctx);

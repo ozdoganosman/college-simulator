@@ -81,9 +81,9 @@ export function siralama(state: GameState): SiralamaSatir[] {
   liste.push({
     ad: 'ÜNİVERSİTEN',
     prestij: Math.round(state.prestij),
-    yayin: state.publications.length,
+    yayin: state.toplamYayin,
     mezun: state.toplamMezun,
-    skor: uniSkor(state.prestij, state.publications.length, state.toplamMezun),
+    skor: uniSkor(state.prestij, state.toplamYayin, state.toplamMezun),
     oyuncu: true,
   });
   return liste.sort((a, b) => b.skor - a.skor);
@@ -163,7 +163,7 @@ export function yilSonuHesapla(state: GameState): YilSonuSonuc {
     yilinGirisimcisi: girisimci,
     yilinBulusu: bulus ? bulus.baslik : null,
     mezun: state.toplamMezun - state.yilBasi.mezun,
-    yayin: state.publications.length - state.yilBasi.yayin,
+    yayin: state.toplamYayin - state.yilBasi.yayin,
     ortGno: gnoSayi > 0 ? gnoToplam / gnoSayi : null,
     toplamSermaye: Math.round(toplamSermaye),
     siraPrestij,

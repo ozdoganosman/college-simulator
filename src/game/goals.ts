@@ -31,7 +31,7 @@ export const BASARIMLAR: Basarim[] = [
   },
   {
     id: 'ilk_bulus', ad: 'Eureka!', aciklama: 'İlk çığır açan buluşu yap',
-    prestij: 5, para: 0, kosul: (s) => s.publications.some((p) => p.cigirAcici),
+    prestij: 5, para: 0, kosul: (s) => s.toplamBulus > 0,
   },
   {
     id: 'yuz_ogrenci', ad: 'Kalabalık Kampüs', aciklama: 'Aynı anda 100 öğrenciye ulaş',

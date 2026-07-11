@@ -123,16 +123,20 @@ export function dailyEconomy(state: GameState): void {
   }
 
   const toplam = maas + bakim + politikaGideri + mentorlukGider + malzeme + arastirmaButce + taksit;
-  if (toplam <= 0) return;
+  if (toplam > 0) {
+    state.para -= toplam; // borca girebilir — spend kullanma
 
-  state.para -= toplam; // borca girebilir — spend kullanma
-
-  if (state.gun % 5 === 0) {
-    notify(state, `Günlük gider: ${formatMoney(toplam)} (maaş ${formatMoney(maas)}, bakım ${formatMoney(bakim)}${arastirmaButce > 0 ? `, araştırma ${formatMoney(arastirmaButce)}` : ''})`, 'bilgi');
+    if (state.gun % 5 === 0) {
+      notify(state, `Günlük gider: ${formatMoney(toplam)} (maaş ${formatMoney(maas)}, bakım ${formatMoney(bakim)}${arastirmaButce > 0 ? `, araştırma ${formatMoney(arastirmaButce)}` : ''})`, 'bilgi');
+    }
   }
+  // Eksi bakiye = zorunlu borçlanma: her gün gecikme faizi işler — borçta
+  // yüzmek bedava değildir (prestij de düşer, kayyum sayacı game.ts'te ayrı).
   if (state.para < 0) {
+    const faiz = Math.max(250, Math.round(-state.para * BALANCE.EKSI_BAKIYE_FAIZ));
+    state.para -= faiz;
     addPrestij(state, -1);
-    notify(state, '💸 Bütçe açığı! Prestij düşüyor.', 'kotu');
+    notify(state, `💸 Bütçe açığı! Gecikme faizi ${formatMoney(faiz)} işledi — prestij düşüyor.`, 'kotu');
   }
 }
 

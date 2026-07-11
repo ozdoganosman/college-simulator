@@ -13,6 +13,7 @@ import {
 import { chance, clamp, formatMoney, newId, pick, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { addPrestij, earn, notify, spend } from './state';
+import { olayOner } from './events'; // döngüsel görünür ama yalnız çalışma anında çağrılır
 
 /** Sektör başına kariyer basamakları (kademe 0-4). */
 export const MESLEKLER: Record<Sektor, string[]> = {
@@ -81,8 +82,11 @@ export function mezunEkle(state: GameState, s: Student, bolumAd: string, gno: nu
     notify(state, `⭐ Yıldız öğrencin ${m.ad} mezun oldu — ${m.issiz ? 'iş arıyor' : `ilk durağı: ${m.meslek} (${formatMoney(m.gelir)}/yıl)`}. Kariyerini haberlerden izleyeceğiz!`, 'odul');
   }
   if (state.mezunlar.length > BALANCE.MEZUN_LIMIT) {
-    // en eski ve en düşük gelirli kayıtlar düşer
-    state.mezunlar.sort((a, b) => b.yil - a.yil || b.gelir - a.gelir);
+    // en eski ve en düşük gelirli kayıtlar düşer — mütevelli heyeti üyeleri
+    // ASLA budanmaz (yoksa koltuk sessizce boşalır ve katkıları buharlaşırdı)
+    const korunan = new Set(state.mutevelli);
+    state.mezunlar.sort((a, b) => (korunan.has(b.id) ? 1 : 0) - (korunan.has(a.id) ? 1 : 0)
+      || b.yil - a.yil || b.gelir - a.gelir);
     state.mezunlar.length = BALANCE.MEZUN_LIMIT;
   }
   return m;
@@ -159,9 +163,10 @@ export function yillikMezunGuncelle(state: GameState): void {
 
   // 🏛️ İsimli bina bağışı: zirvedeki bir mezun nadiren dev bağış TEKLİF eder —
   // pazarlık olay kartıyla yapılır (isim hakkı karşılığı para). Olay yuvası
-  // doluysa teklif bu yıl gelmez.
+  // doluysa kart SIRAYA girer; sıra da doluysa teklif bu yıl gelmez.
   const zirvedekiler = state.mezunlar.filter((m) => !m.issiz && m.kademe >= 3 && m.gelir >= 800_000);
-  if (zirvedekiler.length > 0 && chance(state, 0.25) && !state.aktifOlay && !state.bekleyenBina) {
+  if (zirvedekiler.length > 0 && chance(state, 0.25) && !state.bekleyenBina
+      && olayOner(state, 'bina-bagisi')) {
     const bagisci = pick(state, zirvedekiler);
     const binaAd: Record<string, string> = {
       girisim: 'Teknoloji Merkezi', muhendis: 'Mühendislik Laboratuvarı',
@@ -171,7 +176,6 @@ export function yillikMezunGuncelle(state: GameState): void {
     const tutar = Math.round(bagisci.gelir * 0.6 / 1000) * 1000;
     const bina = `${bagisci.ad.split(' ').pop()} ${binaAd[bagisci.sektor]}`;
     state.bekleyenBina = { ad: bagisci.ad, bina, tutar };
-    state.aktifOlay = { id: 'bina-bagisi', gun: state.gun };
     notify(state, `🏛️ Mezunumuz ${bagisci.ad}'dan İSİMLİ BİNA BAĞIŞI teklifi geldi — karar bekliyor (olay kartı)!`, 'odul');
   }
 

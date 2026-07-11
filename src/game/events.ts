@@ -10,7 +10,7 @@ import { GameState, Student } from '../core/types';
 import { chance, formatMoney, randInt } from '../core/util';
 import { istihdamOrani } from './alumni';
 import { removeAgent } from './agents';
-import { addPrestij, earn, notify } from './state';
+import { addPrestij, earn, notify, talepCarp } from './state';
 
 export interface OlaySecenek {
   etiket: string;
@@ -81,13 +81,13 @@ export const OLAYLAR: OlayTanim[] = [
       {
         etiket: 'Resmî tanıtıma çevir (₺30.000)',
         ipucu: 'Bir sonraki YKS talebi ×1.2',
-        uygula: (s) => { s.para -= 30000; s.sonrakiTalepCarpan *= 1.2; return 'Video resmî tanıtım kampanyasına dönüştü — bir sonraki YKS talebi ×1.2!'; },
+        uygula: (s) => { s.para -= 30000; talepCarp(s, 1.2); return 'Video resmî tanıtım kampanyasına dönüştü — bir sonraki YKS talebi ×1.2!'; },
       },
       {
         etiket: 'Kendi haline bırak',
         ipucu: 'Bedava — belki yine işe yarar',
         uygula: (s) => {
-          if (chance(s, 0.4)) { s.sonrakiTalepCarpan *= 1.08; return 'Video organik yayıldı — talep yine de biraz arttı (×1.08).'; }
+          if (chance(s, 0.4)) { talepCarp(s, 1.08); return 'Video organik yayıldı — talep yine de biraz arttı (×1.08).'; }
           return 'Video birkaç güne unutuldu gitti.';
         },
       },
@@ -111,7 +111,7 @@ export const OLAYLAR: OlayTanim[] = [
         etiket: 'Üstünü ört',
         ipucu: 'Riskli: sızarsa prestij çöker',
         uygula: (s) => {
-          if (chance(s, 0.4)) { addPrestij(s, -8); s.sonrakiTalepCarpan *= 0.95; return 'Örtbas SIZDI! Manşetlerdesin: -8 prestij, talep ×0.95.'; }
+          if (chance(s, 0.4)) { addPrestij(s, -8); talepCarp(s, 0.95); return 'Örtbas SIZDI! Manşetlerdesin: -8 prestij, talep ×0.95.'; }
           return 'İddia gündemden düştü... bu sefer.';
         },
       },
@@ -176,7 +176,7 @@ export const OLAYLAR: OlayTanim[] = [
       {
         etiket: 'Stant aç (₺30.000)',
         ipucu: 'Bir sonraki YKS talebi ×1.15',
-        uygula: (s) => { s.para -= 30000; s.sonrakiTalepCarpan *= 1.15; return 'Standın önünde kuyruk oluştu — bir sonraki YKS talebi ×1.15.'; },
+        uygula: (s) => { s.para -= 30000; talepCarp(s, 1.15); return 'Standın önünde kuyruk oluştu — bir sonraki YKS talebi ×1.15.'; },
       },
       { etiket: 'Pas geç', ipucu: 'Bütçe cebinde kalır', uygula: () => 'Fuara katılmadık; rakipler broşür dağıttı.' },
     ],
@@ -358,7 +358,7 @@ export const ZINCIR_OLAYLAR: OlayTanim[] = [
       {
         etiket: 'Boş ver',
         ipucu: 'Bedava ama bir sonraki YKS talebi ×0.88',
-        uygula: (s) => { s.sonrakiTalepCarpan *= 0.88; return 'Kampanyaya karşılık verilmedi — bir sonraki YKS talebi ×0.88.'; },
+        uygula: (s) => { talepCarp(s, 0.88); return 'Kampanyaya karşılık verilmedi — bir sonraki YKS talebi ×0.88.'; },
       },
     ],
   },
@@ -437,7 +437,7 @@ export const ZINCIR_OLAYLAR: OlayTanim[] = [
       {
         etiket: 'Festivali destekle (₺12.000)',
         ipucu: 'Mutluluk + tanıtım — kedili kampüs efsanesi',
-        uygula: (s) => { s.para -= 12000; tumOgrMutluluk(s, 6); s.sonrakiTalepCarpan *= 1.05; return 'Kedi Festivali muhteşemdi! Mutluluk +6, bir sonraki YKS talebi ×1.05 — Sarman kampüsün yüzü oldu.'; },
+        uygula: (s) => { s.para -= 12000; tumOgrMutluluk(s, 6); talepCarp(s, 1.05); return 'Kedi Festivali muhteşemdi! Mutluluk +6, bir sonraki YKS talebi ×1.05 — Sarman kampüsün yüzü oldu.'; },
       },
       {
         etiket: 'İzin verme',
@@ -485,6 +485,23 @@ function zinciriPlanla(state: GameState, secenek: OlaySecenek): void {
   }
 }
 
+/**
+ * Bir olay kartını gündeme getirir: yuva boşsa hemen açılır, doluysa kuyruğa
+ * girer (aynı gün çakışan olaylar artık sessizce KAYBOLMAZ). false = kuyruk da
+ * dolu, olay hiç gösterilemeyecek — çağıran yedek etkisini uygulamalı.
+ */
+export function olayOner(state: GameState, id: string): boolean {
+  if (!state.aktifOlay) {
+    state.aktifOlay = { id, gun: state.gun };
+    return true;
+  }
+  if (state.aktifOlay.id !== id && !state.olayKuyrugu.includes(id) && state.olayKuyrugu.length < 4) {
+    state.olayKuyrugu.push(id);
+    return true;
+  }
+  return false;
+}
+
 /** Gün sonu: süresi dolan olayı varsayılanla kapat, gerekirse yeni olay çıkar. */
 export function olayGuncelle(state: GameState): void {
   if (state.aktifOlay) {
@@ -513,6 +530,16 @@ export function olayGuncelle(state: GameState): void {
       notify(state, `⚡ KARARININ DEVAMI: ${tanim.emoji} ${tanim.baslik} — karar bekliyor (2 gün)!`, 'kotu');
       return;
     }
+  }
+
+  // sırada bekleyen olay varsa (yuva doluyken gelmişti) şimdi gösterilir
+  while (state.olayKuyrugu.length > 0) {
+    const id = state.olayKuyrugu.shift()!;
+    const tanim = olayTanim(id);
+    if (!tanim) continue;
+    state.aktifOlay = { id, gun: state.gun };
+    notify(state, `⚡ SIRADAKİ OLAY: ${tanim.emoji} ${tanim.baslik} — karar bekliyor (2 gün)!`, 'kotu');
+    return;
   }
 
   if (state.gun < 4 || state.gun - state.sonOlayGunu < 6) return;

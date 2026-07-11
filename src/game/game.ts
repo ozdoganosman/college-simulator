@@ -19,10 +19,10 @@ import { yillikMezunGuncelle } from './alumni';
 import { donemIstifaKontrol, yillikYaslanma } from './academics';
 import { kontrolBasarimlar } from './goals';
 import { denetimUygula } from './accreditation';
-import { olayGuncelle } from './events';
+import { olayGuncelle, olayOner } from './events';
 import { gunlukYipranma } from './maintenance';
 import { gunlukKulupEtkisi, kulupSenligi } from './clubs';
-import { addPrestij, notify, saveGame } from './state';
+import { addPrestij, notify, saveGame, talepCarp } from './state';
 
 /** Simülasyonu dtMin oyun-dakikası ilerletir (büyük adımları böler). */
 export function advance(state: GameState, dtMin: number): void {
@@ -47,7 +47,7 @@ function stepSim(state: GameState, dt: number): void {
 function endOfDay(state: GameState): void {
   // yemek sistemi gün kapanışı: kalan yemek bayatlar, aç kalanlar raporlanır
   if (state.acKalanBugun > 0) {
-    notify(state, `🍽️ Bugün ${state.acKalanBugun} öğrenci yemekhanede aç kaldı — aşçı sayısını artır!`, 'kotu');
+    notify(state, `🍽️ Bugün ${state.acKalanBugun} öğrenci aç kaldı (stok bitti ya da yemeğe ulaşamadı) — aşçı/yemekhane kapasitesini gözden geçir!`, 'kotu');
   }
   state.dunAcKalan = state.acKalanBugun;
   state.acKalanBugun = 0;
@@ -112,7 +112,7 @@ function endOfDay(state: GameState): void {
         state.sonSira = sonuc.sira;
         state.siraGecmisi.push(sonuc.sira);
         if (state.siraGecmisi.length > 12) state.siraGecmisi.shift();
-        state.yilBasi = { mezun: state.toplamMezun, yayin: state.publications.length };
+        state.yilBasi = { mezun: state.toplamMezun, yayin: state.toplamYayin };
         rakipleriGelistir(state); // rakipler de boş durmuyor
         yillikMezunGuncelle(state); // mezun kariyerleri + dernek bağışı + haberler
         yillikYaslanma(state); // yaş +1; emeklilik yaşına gelen ayrılır
@@ -122,6 +122,10 @@ function endOfDay(state: GameState): void {
       if (!state.yksBekliyor) {
         state.yksBekliyor = true;
         notify(state, '🎓 YKS dönemi açıldı! Hazırlıkların bitince yerleştirmeyi başlat.', 'odul');
+      } else if (state.gun > 1) {
+        // yerleştirme bir yıl atlandı: birikmiş talep etkisi yarıya söner —
+        // olay çarpanları yıllar boyunca üst üste binip talebi uçuramaz
+        state.sonrakiTalepCarpan = 1 + (state.sonrakiTalepCarpan - 1) * 0.5;
       }
     }
   }
@@ -166,7 +170,7 @@ function donemRakipOlayi(state: GameState): void {
 
   if (zar === 0 && rakip) {
     rakip.prestij = Math.max(30, rakip.prestij - 20);
-    state.sonrakiTalepCarpan *= 1.15;
+    talepCarp(state, 1.15);
     notify(state, `📰 ${rakip.ad}'de intihal skandalı patladı! Öğrenciler alternatif arıyor — bir sonraki YKS talebin artacak (×1.15).`, 'iyi');
   } else if (zar === 1 && rakip) {
     rakip.prestij = Math.min(1000, rakip.prestij + 20);
@@ -184,21 +188,19 @@ function donemRakipOlayi(state: GameState): void {
         hedef = a;
       }
     }
-    if (hedef && !state.aktifOlay) {
+    if (hedef && !state.bekleyenAyartma && olayOner(state, 'rakip-ayartma')) {
       state.bekleyenAyartma = { academicId: hedef.id, rakipAd };
-      state.aktifOlay = { id: 'rakip-ayartma', gun: state.gun };
       notify(state, `🎣 ${rakipAd}, ${hedef.ad}'a transfer teklif etti — kararın bekleniyor (olay kartı)!`, 'kotu');
     } else if (hedef) {
-      // olay yuvası doluysa eski davranış: moral sarsılır
+      // kart hiç gösterilemeyecekse eski davranış: moral sarsılır
       hedef.memnuniyet = clamp(hedef.memnuniyet - 12, 0, 100);
       notify(state, `🎣 ${rakipAd}, ${hedef.ad}'a transfer teklif etti — morali sarsıldı (%${Math.round(hedef.memnuniyet)}). Zam vermenin tam zamanı olabilir!`, 'kotu');
     }
-  } else if (!state.aktifOlay) {
-    // tanıtım savaşı — karşı kampanya kartı
-    state.aktifOlay = { id: 'tanitim-savasi', gun: state.gun };
+  } else if (olayOner(state, 'tanitim-savasi')) {
+    // tanıtım savaşı — karşı kampanya kartı (yuva doluysa kuyruğa girer)
     notify(state, `📉 ${rakipAd} dev bir tanıtım kampanyası başlattı — karşılık verecek misin (olay kartı)?`, 'kotu');
   } else {
-    state.sonrakiTalepCarpan *= 0.88;
+    talepCarp(state, 0.88);
     notify(state, `📉 ${rakipAd} dev bir tanıtım kampanyası başlattı — bir sonraki YKS talebin düşebilir (×0.88).`, 'kotu');
   }
 }

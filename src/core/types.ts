@@ -530,9 +530,16 @@ export interface GameState {
   agents: Agent[];
   departments: Department[];
   projects: ResearchProject[];
+  /** son yayın kayıtları (görüntü için ~120 tutulur; toplamlar sayaçlarda) */
   publications: Publication[];
+  /** son ödül kayıtları (~60 tutulur; toplam ayrı sayaçta) */
   awards: Award[];
   notices: Notice[];
+  /** ömürlük sayaçlar — listeler budansa da toplamlar kaybolmaz */
+  toplamYayin: number;
+  toplamUluslararasiYayin: number;
+  toplamBulus: number;
+  toplamOdul: number;
 
   kpssPool: Candidate[];
   transferPool: Candidate[];
@@ -588,6 +595,12 @@ export interface GameState {
   mutevelli: number[];
   /** rakip olaylarının bir sonraki YKS talebine çarpanı (uygulanınca 1'e döner) */
   sonrakiTalepCarpan: number;
+  /** sıradaki olay kartları — aktif yuva doluyken gelenler burada bekler */
+  olayKuyrugu: string[];
+  /** proje bitince aynı bölümde otomatik yenisi başlasın mı (Araştırma paneli) */
+  arastirmaOtoYenile: boolean;
+  /** girişe-ulaşılamıyor uyarısının son verildiği gün (günde bir uyarı) */
+  sonErisimUyariGunu: number;
   /** son YÖK akreditasyon denetimi sonucu (hiç olmadıysa null) */
   sonDenetim: { gun: number; puan: number; sonuc: string } | null;
   /** dönemlik trend fotoğrafları (son 24 dönem) — Raporlar grafikleri */
