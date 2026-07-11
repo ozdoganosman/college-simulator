@@ -301,6 +301,8 @@ export interface GameState {
   strategies: string[];
 
   nextId: number;         // tüm id'ler için tek sayaç
+  /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */
+  insaatSurumu: number;
   /** toplam mezun, toplam bırakan (istatistik) */
   toplamMezun: number;
   toplamBirakan: number;

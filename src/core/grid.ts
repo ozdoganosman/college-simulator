@@ -65,6 +65,7 @@ export function isEnclosed(state: GameState, room: Room): boolean {
 
 /** Tüm odaların geçerliliğini (boyut, kapalılık, eşya gereksinimleri) günceller. */
 export function validateRooms(state: GameState): void {
+  state.insaatSurumu = (state.insaatSurumu ?? 0) + 1; // render önbelleğini tazele
   for (const room of state.rooms) {
     const def = ROOM_DEFS[room.type];
     const missing: string[] = [];

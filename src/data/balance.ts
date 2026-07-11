@@ -33,7 +33,7 @@ export const BALANCE = {
   },
 
   // Öğrenci
-  DERS_ILERLEME: 1.8,          // ders periyodu başına ilerleme puanı (öğretmenli)
+  DERS_ILERLEME: 1.2,          // ders periyodu başına ilerleme puanı (öğretmenli)
   OGRETMENSIZ_CARPAN: 0.3,
   MEZUNIYET_ESIK: 100,         // ~4 dönemde mezuniyet hedefi
   MUTLULUK_BIRAKMA_ESIK: 25,   // altındaysa her gün bırakma riski

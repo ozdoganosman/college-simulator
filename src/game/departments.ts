@@ -65,9 +65,13 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   const def = deptDef(defId);
   const eksik: string[] = [];
 
-  const bosDerslik = state.rooms.filter((r) => sinifMi(r) && r.valid && r.deptId === null).length;
-  if (bosDerslik < def.minDerslik) {
-    eksik.push(`${def.minDerslik} boş geçerli derslik gerekli (mevcut ${bosDerslik})`);
+  // Toplam derslik, açık bölümlerin asgari ihtiyaçları + yeni bölümün ihtiyacını
+  // karşılamalı (derslikler bölümlere her gün yeniden dengelenerek dağıtılır).
+  const toplamDerslik = state.rooms.filter((r) => sinifMi(r) && r.valid).length;
+  let gerekli = def.minDerslik;
+  for (const d of state.departments) gerekli += deptDef(d.defId).minDerslik;
+  if (toplamDerslik < gerekli) {
+    eksik.push(`Toplam ${gerekli} geçerli derslik gerekli (mevcut ${toplamDerslik})`);
   }
   if (def.labGerekli && !state.rooms.some((r) => r.type === 'laboratuvar' && r.valid)) {
     eksik.push('Geçerli laboratuvar yok');
@@ -160,11 +164,13 @@ export function toggleGradProgram(state: GameState, deptId: number, level: 'yl' 
 }
 
 export function assignClassrooms(state: GameState): void {
-  const deptIds = new Set(state.departments.map((d) => d.id));
-
-  // Geçersiz odaların ve kalkmış bölümlerin atamalarını temizle
+  // Derslikler her çağrıda SIFIRDAN, ihtiyaç oranına göre dengelenerek dağıtılır —
+  // böylece yeni açılan bölüm de mevcut stoktan adil pay alır.
   for (const r of state.rooms) {
-    if (r.deptId !== null && (!r.valid || !deptIds.has(r.deptId))) r.deptId = null;
+    if (sinifMi(r) || r.deptId !== null) {
+      if (sinifMi(r)) r.deptId = null;
+      else if (!r.valid || !state.departments.some((d) => d.id === r.deptId)) r.deptId = null;
+    }
   }
   if (state.departments.length === 0) return;
 
@@ -182,27 +188,25 @@ export function assignClassrooms(state: GameState): void {
     }
   }
 
-  // bölüm -> mevcut atanmış sıra kapasitesi
   const koltuk = new Map<number, number>();
-  for (const d of state.departments) koltuk.set(d.id, 0);
-  for (const r of state.rooms) {
-    if (sinifMi(r) && r.valid && r.deptId !== null) {
-      koltuk.set(r.deptId, (koltuk.get(r.deptId) ?? 0) + (odaSira.get(r.id) ?? 0));
-    }
+  const odaAdedi = new Map<number, number>();
+  for (const d of state.departments) {
+    koltuk.set(d.id, 0);
+    odaAdedi.set(d.id, 0);
   }
 
-  // Bölümsüz geçerli derslik/amfileri sıra-başına-öğrenci oranı en kötü bölüme ver.
-  // ÖNEMLİ: bir bölüm ihtiyacından (öğrenci + kontenjan) fazla koltuk KAPATMAZ —
-  // artan derslikler bölümsüz kalır ki yeni bölüm açılabilsin.
+  // Geçerli derslik/amfileri tek tek, doyma oranı en düşük bölüme ver.
+  // Bölüm doymuş sayılır: koltuk >= öğrenci + kontenjan VE oda >= minDerslik.
   for (const r of state.rooms) {
-    if (!sinifMi(r) || !r.valid || r.deptId !== null) continue;
+    if (!sinifMi(r) || !r.valid) continue;
     let secilen: Department | null = null;
     let enKotu = Infinity;
     for (const d of state.departments) {
-      const ihtiyac = (ogrenci.get(d.id) ?? 0) + d.kontenjan;
+      const ihtiyac = Math.max(1, (ogrenci.get(d.id) ?? 0) + d.kontenjan);
       const mevcut = koltuk.get(d.id) ?? 0;
-      if (mevcut >= ihtiyac) continue; // bu bölümün yeterli koltuğu var
-      const oran = mevcut / Math.max(1, ihtiyac);
+      const minOda = deptDef(d.defId).minDerslik;
+      if (mevcut >= ihtiyac && (odaAdedi.get(d.id) ?? 0) >= minOda) continue; // doydu
+      const oran = mevcut / ihtiyac;
       if (oran < enKotu) {
         enKotu = oran;
         secilen = d;
@@ -211,6 +215,7 @@ export function assignClassrooms(state: GameState): void {
     if (secilen) {
       r.deptId = secilen.id;
       koltuk.set(secilen.id, (koltuk.get(secilen.id) ?? 0) + (odaSira.get(r.id) ?? 0));
+      odaAdedi.set(secilen.id, (odaAdedi.get(secilen.id) ?? 0) + 1);
     }
   }
 
