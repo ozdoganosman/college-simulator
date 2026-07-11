@@ -24,6 +24,7 @@ export function attachInput(
       return;
     }
     if (e.button === 0) {
+      ui.dragStart = null; // yarım kalmış eski sürükleme kalıntısını temizle
       const tile = screenToTile(cam, e.offsetX, e.offsetY);
       const t = ui.tool;
       if (t.kind === 'kapi') {
@@ -82,6 +83,10 @@ export function attachInput(
   }, { passive: false });
 
   window.addEventListener('keydown', (e) => {
+    const hedef = e.target as HTMLElement | null;
+    if (hedef && (hedef.tagName === 'INPUT' || hedef.tagName === 'TEXTAREA' || hedef.tagName === 'SELECT')) {
+      return; // panel girdilerinde kısayol çalışmasın
+    }
     const st = state();
     if (e.key === 'Escape') {
       ui.tool = { kind: 'sec' };

@@ -8,9 +8,7 @@
  *    - T.CIKIS'ten sonra öğrenci ve personel GATE'e yürüyüp onCampus=false olur
  *      (activity='cikiyor' -> GATE'e varınca 'yok'). Akademisyenler de çıkar.
  *    - Gece (KAMPUS_KAPANIS) hâlâ kampüste kalan varsa doğrudan onCampus=false yap.
- *  - Hareket: a.path doluysa sıradaki kareye doğru yürü (hız ~2.4 kare/oyun-dk...
- *    gerçekçi değil ama oynanış için: HIZ = 0.12 kare/dakika*dt yerine pratikte
- *    SPEED=0.35 kare/dk kullan). Kareye varınca path.shift().
+ *  - Hareket: a.path doluysa sıradaki kareye doğru yürü; kareye varınca path.shift().
  *  - Yol bulma: findPath(state, {x:round,y:round}, hedef). Yol yoksa aktiviteyi iptal et.
  *  - Öğrenci ihtiyaçları (BALANCE.NEED_RATE): kampüsteyken dakika başına artar.
  *    Ders saatlerinde (T.DERS1..T.CIKIS arasındaki ders bloklarında) dersteyse öğrenir.
@@ -24,56 +22,920 @@
  *    4) YL/doktora öğrencisi ders bloklarının yarısında derse girmek yerine 'arastiriyor'
  *       (geçerli lab varsa lab, yoksa kütüphane) — research sistemine katkı orada okunur.
  *    5) Hiçbiri yoksa: eğlence/dinlenme ya da rastgele gezin.
- *  - Derste: blok bitince ilerleme += BALANCE.DERS_ILERLEME * (odada 'ders_veriyor'
- *    akademisyen varsa 1 yoksa BALANCE.OGRETMENSIZ_CARPAN) * (1 + kütüphaneSeviyesi *
- *    BALANCE.KUTUPHANE_OGRENME_BONUS). Pratikte dakika başına oransal ekle.
- *  - Mutluluk: karşılanmayan kritik ihtiyaç dakikada -0.05; ihtiyaç karşılanınca +;
- *    0-100 clamp. İhtiyaç objesi kullanılırken ilgili ihtiyaç dakikada ~-2 azalır.
- *  - Akademisyen: ders bloklarında kendi bölümünün dolu dersliğine gidip 'ders_veriyor'
- *    (tahta başı). Bölümün o blokta dersliği yoksa ofis/lab'da 'arastiriyor'.
- *    XP: ders bloğu başına BALANCE.XP_DERS (dailyAcademicUpdate toplayabilsin diye
- *    doğrudan a.xp'ye ekle).
+ *  - Derste: dakika başına ilerleme += (BALANCE.DERS_ILERLEME/120) * (odada 'ders_veriyor'
+ *    aynı bölümden akademisyen varsa 1 yoksa BALANCE.OGRETMENSIZ_CARPAN) *
+ *    (1 + kütüphaneSeviyesi * BALANCE.KUTUPHANE_OGRENME_BONUS).
+ *  - Mutluluk: herhangi bir ihtiyaç > 85 ise -0.06/dk; hepsi < 50 ise +0.03/dk; 0-100 clamp.
+ *    İhtiyaç objesi kullanılırken ilgili ihtiyaç dakikada ~2 azalır (yemek 3).
+ *  - Akademisyen: ders bloklarında kendi bölümünün i'inci geçerli dersliğinde 'ders_veriyor'
+ *    (tahta başı). Bölümün o blokta dersliği yoksa ofis/lab/kütüphanede 'arastiriyor'.
+ *    XP: ders verirken dakika başına BALANCE.XP_DERS/120.
  *  - Aşçı: 11:00-14:00 arasında geçerli yemekhanedeki bankonun başında 'calisiyor';
- *    diğer zamanlarda bosta/gezinir. Görevdeki aşçı yoksa yemekhane servis yapamaz.
- *  - Temizlikçi: en kirli kareyi bulur, gider, temizler (dakikada -8 kir, 0'a inince
- *    yeni hedef). Kir: her ajan yürürken bulunduğu kareye +0.02/dk kir bırakır (max 100).
- *  - Obje rezervasyonu: kullanmadan önce reservedBy=agent.id yap; bırakınca -1'e çek.
- *    Ajan kampüsten çıkarken rezervasyonlarını bırakmalı.
+ *    diğer zamanlarda bosta/gezinir. Görevdeki aşçı yoksa yemekhane servis yapamaz
+ *    (mutfakAcik yardımcı fonksiyonu).
+ *  - Temizlikçi: en kirli kareyi (>20) bulur, gider, temizler (dakikada -8 kir).
+ *    Kir: her ajan bulunduğu kareye +0.02/dk bırakır (çöp kutusuna 2 kare yakınsa yarısı).
+ *  - Obje rezervasyonu: kullanmadan önce reservedBy=agent.id; bırakınca -1.
+ *    Ajan kampüsten çıkarken rezervasyonlarını bırakır.
  *
- * spawnStudent: yeni öğrenci ajanı yaratır (kampüs dışında başlar), state.agents'a ekler.
- * spawnAcademic: yeni akademisyen ajanı yaratır ve ekler (academics.ts çağırır).
- * hireStaff/fireStaff: personel yönetimi (panels çağırır); alım maliyeti
- *   BALANCE.PERSONEL_ALIM, günlük maaş BALANCE.MAAS.
- * removeAgent: ajanı state'ten güvenle çıkarır (rezervasyonları bırakarak).
+ * spawnStudent / spawnAcademic / hireStaff / removeAgent: ajan yaşam döngüsü.
  */
 import {
-  Academic, AcademicRank, Agent, GameState, StaffAgent, Student, StudentLevel,
+  Academic, AcademicRank, Agent, AgentActivity, AgentKind, GameState, GATE, MAP_H, MAP_W,
+  Needs, PlacedObject, Point, Room, StaffAgent, Student, StudentLevel, T,
+  donemIndex, inBounds, tileIndex,
 } from '../core/types';
+import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
+import { findPath } from '../core/pathfinding';
+import { libraryLevel, roomCenter, walkable } from '../core/grid';
+import { BALANCE } from '../data/balance';
+import { AD, SOYAD } from '../data/names';
+import { notify, spend } from './state';
 
-export function updateAgents(state: GameState, dtMin: number): void {
-  // TODO(workflow): davranış makinesi
-  void state; void dtMin;
+// kare/oyun-dakikası yürüme hızları
+const SPEED: Record<AgentKind, number> = {
+  ogrenci: 0.6,
+  akademisyen: 0.55,
+  asci: 0.5,
+  temizlikci: 0.5,
+};
+
+const DERS_BLOKLARI: number[] = [T.DERS1, T.DERS2, T.DERS3, T.DERS4];
+const BLOK_SURE = 120;
+const ASCI_BASLA = 11 * 60;
+const ASCI_BITIS = 14 * 60;
+
+/** İçinde bulunulan ders bloğunun başlangıç dakikası, blok dışıysa -1. */
+export function dersBlogu(dakika: number): number {
+  for (const b of DERS_BLOKLARI) {
+    if (dakika >= b && dakika < b + BLOK_SURE) return b;
+  }
+  return -1;
 }
 
+/** Görevde ('calisiyor') aşçı var mı — yemekhane servisi için gerekli. */
+export function mutfakAcik(state: GameState): boolean {
+  return state.agents.some(
+    (a) => a.kind === 'asci' && a.onCampus && a.activity === 'calisiyor',
+  );
+}
+
+/** Ajanın tuttuğu tüm obje rezervasyonlarını bırakır. */
+export function releaseReservations(state: GameState, agentId: number): void {
+  for (const o of state.objects) {
+    if (o.reservedBy === agentId) o.reservedBy = -1;
+  }
+}
+
+// --- Çöp kutusu yakınlığı önbelleği (obje sayısı değişince yenilenir) -------
+
+let copCacheAnahtar = -1;
+let copYakini = new Set<number>();
+
+function copYakiniSet(state: GameState): Set<number> {
+  // önbellek anahtarı: çöp kutularının konum/id özeti (eşit sayıda takas da yakalanır)
+  let anahtar = state.objects.length;
+  for (const o of state.objects) {
+    if (o.type === 'cop_kutusu') anahtar = (anahtar * 31 + o.id * 7 + o.x * 131 + o.y) | 0;
+  }
+  if (anahtar === copCacheAnahtar) return copYakini;
+  copCacheAnahtar = anahtar;
+  copYakini = new Set<number>();
+  for (const o of state.objects) {
+    if (o.type !== 'cop_kutusu') continue;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const x = o.x + dx, y = o.y + dy;
+        if (inBounds(x, y)) copYakini.add(tileIndex(x, y));
+      }
+    }
+  }
+  return copYakini;
+}
+
+// --- Çağrı başına ortak önbellek ---------------------------------------------
+
+interface Ctx {
+  dk: number;
+  ogrenmeCarpan: number;
+  mutfak: boolean;
+  /** roomId -> o odada 'ders_veriyor' akademisyenlerin bölüm id'leri */
+  teacherRooms: Map<number, Set<number>>;
+  /** roomId -> odadaki en iyi hocanın eğitim becerisi */
+  teacherSkill: Map<number, number>;
+  objById: Map<number, PlacedObject>;
+  /** deptId -> boş sıra yığını (geçerli, bölüme atanmış dersliklerde) */
+  freeSira: Map<number, PlacedObject[]>;
+  freeKlozet: PlacedObject[];
+  freeYemekSandalye: PlacedObject[];
+  freeKantinSandalye: PlacedObject[];
+  freeOtomat: PlacedObject[];
+  freeBank: PlacedObject[];
+  freeMasa: PlacedObject[];
+  freeBanko: PlacedObject[];
+  tahtaByRoom: Map<number, PlacedObject>;
+  /** akademisyenin gün içinde tuttuğu çalışma masası / aşçının bankosu */
+  deskOf: Map<number, PlacedObject>;
+  bankoOf: Map<number, PlacedObject>;
+  labs: Room[];
+  kutuphaneler: Room[];
+  yemekhaneler: Room[];
+  kantinler: Room[];
+  /** deptId -> bölüme atanmış geçerli derslik/amfiler */
+  deptClassrooms: Map<number, Room[]>;
+  /** akademisyen id -> bölümündeki kampüsteki akademisyenler arasındaki sırası */
+  academicIndex: Map<number, number>;
+  copYakini: Set<number>;
+}
+
+function buildCtx(state: GameState, dk: number): Ctx {
+  const roomById = new Map<number, Room>();
+  const deptClassrooms = new Map<number, Room[]>();
+  const labs: Room[] = [];
+  const kutuphaneler: Room[] = [];
+  const yemekhaneler: Room[] = [];
+  const kantinler: Room[] = [];
+
+  for (const r of state.rooms) {
+    roomById.set(r.id, r);
+    if (!r.valid) continue;
+    if ((r.type === 'derslik' || r.type === 'amfi') && r.deptId !== null) {
+      const liste = deptClassrooms.get(r.deptId);
+      if (liste) liste.push(r);
+      else deptClassrooms.set(r.deptId, [r]);
+    } else if (r.type === 'laboratuvar') labs.push(r);
+    else if (r.type === 'kutuphane') kutuphaneler.push(r);
+    else if (r.type === 'yemekhane') yemekhaneler.push(r);
+    else if (r.type === 'kantin') kantinler.push(r);
+  }
+
+  const objById = new Map<number, PlacedObject>();
+  const freeSira = new Map<number, PlacedObject[]>();
+  const freeKlozet: PlacedObject[] = [];
+  const freeYemekSandalye: PlacedObject[] = [];
+  const freeKantinSandalye: PlacedObject[] = [];
+  const freeOtomat: PlacedObject[] = [];
+  const freeBank: PlacedObject[] = [];
+  const freeMasa: PlacedObject[] = [];
+  const freeBanko: PlacedObject[] = [];
+  const tahtaByRoom = new Map<number, PlacedObject>();
+  const deskOf = new Map<number, PlacedObject>();
+  const bankoOf = new Map<number, PlacedObject>();
+
+  for (const o of state.objects) {
+    objById.set(o.id, o);
+    if (o.type === 'tahta' && o.roomId >= 0 && !tahtaByRoom.has(o.roomId)) {
+      tahtaByRoom.set(o.roomId, o);
+    }
+    if (o.reservedBy !== -1) {
+      if (o.type === 'calisma_masasi') deskOf.set(o.reservedBy, o);
+      else if (o.type === 'yemek_bankosu') bankoOf.set(o.reservedBy, o);
+      continue;
+    }
+    const oda = o.roomId >= 0 ? roomById.get(o.roomId) : undefined;
+    switch (o.type) {
+      case 'sira':
+        if (oda && oda.valid && oda.deptId !== null && (oda.type === 'derslik' || oda.type === 'amfi')) {
+          const yigin = freeSira.get(oda.deptId);
+          if (yigin) yigin.push(o);
+          else freeSira.set(oda.deptId, [o]);
+        }
+        break;
+      case 'klozet':
+        if (oda && oda.valid && oda.type === 'tuvalet') freeKlozet.push(o);
+        break;
+      case 'sandalye':
+        if (oda && oda.valid && oda.type === 'yemekhane') freeYemekSandalye.push(o);
+        else if (oda && oda.valid && oda.type === 'kantin') freeKantinSandalye.push(o);
+        break;
+      case 'otomat':
+        if (oda && oda.valid && oda.type === 'kantin') freeOtomat.push(o);
+        break;
+      case 'bank':
+        freeBank.push(o);
+        break;
+      case 'calisma_masasi':
+        if (oda && oda.valid && oda.type === 'ofis') freeMasa.push(o);
+        break;
+      case 'yemek_bankosu':
+        if (oda && oda.valid && oda.type === 'yemekhane') freeBanko.push(o);
+        break;
+      default:
+        break;
+    }
+  }
+
+  // öğretmen mevcudu + akademisyen sınıf sırası + mutfak durumu (tek geçiş)
+  const teacherRooms = new Map<number, Set<number>>();
+  const teacherSkill = new Map<number, number>();
+  const academicIndex = new Map<number, number>();
+  const sayac = new Map<number, number>();
+  let mutfak = false;
+  for (const a of state.agents) {
+    if (!a.onCampus) continue;
+    if (a.kind === 'akademisyen') {
+      const i = sayac.get(a.deptId) ?? 0;
+      academicIndex.set(a.id, i);
+      sayac.set(a.deptId, i + 1);
+      if (a.activity === 'ders_veriyor') {
+        const rid = state.roomAt[tileIndex(Math.round(a.x), Math.round(a.y))];
+        if (rid >= 0) {
+          const set = teacherRooms.get(rid);
+          if (set) set.add(a.deptId);
+          else teacherRooms.set(rid, new Set([a.deptId]));
+          if ((teacherSkill.get(rid) ?? 0) < a.egitim) teacherSkill.set(rid, a.egitim);
+        }
+      }
+    } else if (a.kind === 'asci' && a.activity === 'calisiyor') {
+      mutfak = true;
+    }
+  }
+
+  return {
+    dk,
+    ogrenmeCarpan: 1 + libraryLevel(state) * BALANCE.KUTUPHANE_OGRENME_BONUS,
+    mutfak,
+    teacherRooms,
+    teacherSkill,
+    objById,
+    freeSira,
+    freeKlozet,
+    freeYemekSandalye,
+    freeKantinSandalye,
+    freeOtomat,
+    freeBank,
+    freeMasa,
+    freeBanko,
+    tahtaByRoom,
+    deskOf,
+    bankoOf,
+    labs,
+    kutuphaneler,
+    yemekhaneler,
+    kantinler,
+    deptClassrooms,
+    academicIndex,
+    copYakini: copYakiniSet(state),
+  };
+}
+
+// --- Hareket ve hedef yardımcıları -------------------------------------------
+
+function moveAgent(state: GameState, a: Agent, dtMin: number): void {
+  let butce = SPEED[a.kind] * dtMin;
+  while (butce > 0 && a.path.length > 0) {
+    const h = a.path[0];
+    // yol üstüne sonradan duvar örüldüyse rotayı iptal et (bosta karar verilir)
+    if (!walkable(state, h.x, h.y)) {
+      a.path = [];
+      break;
+    }
+    const dx = h.x - a.x, dy = h.y - a.y;
+    const mesafe = Math.hypot(dx, dy);
+    if (mesafe <= butce) {
+      a.x = h.x;
+      a.y = h.y;
+      a.path.shift();
+      butce -= mesafe;
+    } else {
+      a.x += (dx / mesafe) * butce;
+      a.y += (dy / mesafe) * butce;
+      butce = 0;
+    }
+  }
+}
+
+/** Hedefe yol kur; oradaysa path boş kalır. Ulaşılamıyorsa false. */
+function goTo(state: GameState, a: Agent, hedef: Point): boolean {
+  const sx = Math.round(a.x), sy = Math.round(a.y);
+  if (sx === hedef.x && sy === hedef.y) {
+    a.path = [];
+    return true;
+  }
+  const p = findPath(state, { x: sx, y: sy }, hedef);
+  if (p.length === 0) return false;
+  a.path = p;
+  return true;
+}
+
+function randomWalkableFloorTile(state: GameState): Point | null {
+  for (let i = 0; i < 12; i++) {
+    const x = randInt(state, 0, MAP_W - 1);
+    const y = randInt(state, 0, MAP_H - 1);
+    if (state.floor[tileIndex(x, y)] !== null && walkable(state, x, y)) return { x, y };
+  }
+  for (let i = 0; i < 8; i++) {
+    const x = randInt(state, 0, MAP_W - 1);
+    const y = randInt(state, 0, MAP_H - 1);
+    if (walkable(state, x, y)) return { x, y };
+  }
+  return null;
+}
+
+function randomRoomTile(state: GameState, oda: Room): Point | null {
+  for (let i = 0; i < 8; i++) {
+    const t = pick(state, oda.tiles);
+    const x = t % MAP_W, y = Math.floor(t / MAP_W);
+    if (walkable(state, x, y)) return { x, y };
+  }
+  for (const t of oda.tiles) {
+    const x = t % MAP_W, y = Math.floor(t / MAP_W);
+    if (walkable(state, x, y)) return { x, y };
+  }
+  return null;
+}
+
+function adjacentWalkable(state: GameState, o: PlacedObject): Point | null {
+  const komsular = [
+    [o.x + 1, o.y], [o.x - 1, o.y], [o.x, o.y + 1], [o.x, o.y - 1],
+  ] as const;
+  for (const [x, y] of komsular) {
+    if (walkable(state, x, y)) return { x, y };
+  }
+  return walkable(state, o.x, o.y) ? { x: o.x, y: o.y } : null;
+}
+
+function idleWander(state: GameState, a: Agent, dtMin: number): void {
+  if (a.path.length > 0) return;
+  if (!chance(state, dtMin / 15)) return;
+  const hedef = randomWalkableFloorTile(state);
+  if (hedef) goTo(state, a, hedef);
+}
+
+// --- Ortak yaşam döngüsü -----------------------------------------------------
+
+function leaveCampus(state: GameState, a: Agent): void {
+  a.onCampus = false;
+  a.activity = 'yok';
+  a.path = [];
+  a.usingObject = -1;
+  a.activityUntil = -1;
+  // evde geçen gece: yemek, uyku, banyo — ihtiyaçlar büyük ölçüde sıfırlanır
+  if (a.kind === 'ogrenci') {
+    a.needs.aclik = randRange(state, 10, 25);
+    a.needs.tuvalet = randRange(state, 5, 15);
+    a.needs.enerji = randRange(state, 10, 25);
+    a.needs.eglence = Math.max(0, a.needs.eglence * 0.5);
+    a.mutluluk = clamp(a.mutluluk + 0.5, 0, 100);
+  }
+}
+
+function finishActivity(state: GameState, a: Agent, ctx: Ctx): void {
+  if (a.usingObject !== -1) {
+    const o = ctx.objById.get(a.usingObject);
+    if (o && o.reservedBy === a.id) o.reservedBy = -1;
+  }
+  a.usingObject = -1;
+  a.activityUntil = -1;
+  a.activity = 'bosta';
+}
+
+function maybeArrive(state: GameState, a: Agent, dk: number, dtMin: number): void {
+  if (dk < T.KAMPUS_ACILIS || dk >= T.CIKIS) return;
+  // kademeli varış: açılış penceresinde seyrek, sonrasında hızla tamamlanır
+  const p = dk < T.DERS1 ? dtMin / 30 : dtMin / 4;
+  if (!chance(state, p)) return;
+  a.onCampus = true;
+  a.x = GATE.x;
+  a.y = GATE.y;
+  a.path = [];
+  a.activity = 'geliyor';
+  a.usingObject = -1;
+  a.activityUntil = -1;
+  const hedef = randomWalkableFloorTile(state);
+  if (hedef) goTo(state, a, hedef);
+}
+
+function depositDirt(state: GameState, a: Agent, dtMin: number, ctx: Ctx): void {
+  const idx = tileIndex(Math.round(a.x), Math.round(a.y));
+  const oran = ctx.copYakini.has(idx) ? 0.01 : 0.02;
+  state.dirt[idx] = Math.min(100, state.dirt[idx] + oran * dtMin);
+}
+
+// --- Öğrenci -----------------------------------------------------------------
+
+function enBuyukIhtiyac(n: Needs, esik: number): keyof Needs | null {
+  let sec: keyof Needs | null = null;
+  let deger = esik;
+  const anahtarlar: (keyof Needs)[] = ['tuvalet', 'aclik', 'enerji', 'eglence'];
+  for (const k of anahtarlar) {
+    if (n[k] > deger) {
+      deger = n[k];
+      sec = k;
+    }
+  }
+  return sec;
+}
+
+function trySatisfy(state: GameState, s: Student, ctx: Ctx, need: keyof Needs): boolean {
+  let obj: PlacedObject | undefined;
+  let git: AgentActivity = 'ihtiyaca_gidiyor';
+  if (need === 'tuvalet') {
+    obj = ctx.freeKlozet.pop();
+  } else if (need === 'aclik') {
+    git = 'yemege_gidiyor';
+    if (ctx.mutfak) obj = ctx.freeYemekSandalye.pop();
+    if (!obj) obj = ctx.freeOtomat.pop();
+  } else {
+    obj = ctx.freeKantinSandalye.pop() ?? ctx.freeBank.pop();
+  }
+  if (!obj) return false;
+  obj.reservedBy = s.id;
+  if (!goTo(state, s, { x: obj.x, y: obj.y })) {
+    obj.reservedBy = -1;
+    return false;
+  }
+  s.usingObject = obj.id;
+  s.activity = git;
+  s.activityUntil = -1;
+  return true;
+}
+
+function tryClass(state: GameState, s: Student, ctx: Ctx, blok: number): boolean {
+  const yigin = ctx.freeSira.get(s.deptId);
+  const obj = yigin ? yigin.pop() : undefined;
+  if (!obj) return false;
+  obj.reservedBy = s.id;
+  if (!goTo(state, s, { x: obj.x, y: obj.y })) {
+    obj.reservedBy = -1;
+    return false;
+  }
+  s.usingObject = obj.id;
+  s.activity = 'derse_gidiyor';
+  s.activityUntil = blok + BLOK_SURE;
+  return true;
+}
+
+function tryResearch(state: GameState, s: Student, ctx: Ctx, bitis: number): boolean {
+  const odalar = ctx.labs.length > 0 ? ctx.labs : ctx.kutuphaneler;
+  if (odalar.length === 0) return false;
+  const oda = pick(state, odalar);
+  const hedef = randomRoomTile(state, oda);
+  if (!hedef || !goTo(state, s, hedef)) return false;
+  s.activity = 'arastirmaya_gidiyor';
+  s.activityUntil = bitis;
+  return true;
+}
+
+function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): void {
+  const dk = ctx.dk;
+  const n = s.needs;
+
+  // 1) kritik ihtiyaç
+  const kritik = enBuyukIhtiyac(n, 75);
+  if (kritik && trySatisfy(state, s, ctx, kritik)) return;
+
+  // 2/4) ders bloğu — YL/doktora blokların yarısında araştırmayı seçer
+  const blok = dersBlogu(dk);
+  if (blok !== -1) {
+    const bitis = blok + BLOK_SURE;
+    if (s.level !== 'lisans' && chance(state, 0.5)) {
+      if (tryResearch(state, s, ctx, bitis)) return;
+    }
+    if (tryClass(state, s, ctx, blok)) return;
+    if (s.level !== 'lisans' && tryResearch(state, s, ctx, bitis)) return;
+    // sıra yok: bekle / gezin
+  }
+
+  // 3) öğle yemeği
+  if (dk >= T.OGLE && dk < T.DERS3 && n.aclik > 10) {
+    if (trySatisfy(state, s, ctx, 'aclik')) return;
+  }
+
+  // 5) yüksek (kritik olmayan) ihtiyaç ya da gezinme
+  const yuksek = enBuyukIhtiyac(n, 60);
+  if (yuksek && trySatisfy(state, s, ctx, yuksek)) return;
+  idleWander(state, s, dtMin);
+}
+
+function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): void {
+  const dk = ctx.dk;
+  const n = s.needs;
+
+  // ihtiyaç artışı
+  n.aclik = clamp(n.aclik + BALANCE.NEED_RATE.aclik * dtMin, 0, 100);
+  n.tuvalet = clamp(n.tuvalet + BALANCE.NEED_RATE.tuvalet * dtMin, 0, 100);
+  n.enerji = clamp(n.enerji + BALANCE.NEED_RATE.enerji * dtMin, 0, 100);
+  n.eglence = clamp(n.eglence + BALANCE.NEED_RATE.eglence * dtMin, 0, 100);
+
+  // mutluluk
+  if (n.aclik > 85 || n.tuvalet > 85 || n.enerji > 85 || n.eglence > 85) {
+    s.mutluluk -= 0.06 * dtMin;
+  } else if (n.aclik < 50 && n.tuvalet < 50 && n.enerji < 50 && n.eglence < 50) {
+    s.mutluluk += 0.01 * dtMin;
+  }
+  s.mutluluk = clamp(s.mutluluk, 0, 100);
+
+  switch (s.activity) {
+    case 'derse_gidiyor':
+      if (s.activityUntil !== -1 && dk >= s.activityUntil) finishActivity(state, s, ctx);
+      else if (s.path.length === 0) s.activity = 'derste';
+      break;
+    case 'derste': {
+      if (s.activityUntil !== -1 && dk >= s.activityUntil) {
+        finishActivity(state, s, ctx);
+        break;
+      }
+      const rid = state.roomAt[tileIndex(Math.round(s.x), Math.round(s.y))];
+      const ogretmenli = rid >= 0 && ctx.teacherRooms.get(rid)?.has(s.deptId) === true;
+      // hocanın eğitim becerisi öğrenme hızını etkiler (50 -> 1.0x, 100 -> 1.4x)
+      const kalite = ogretmenli ? 0.6 + (ctx.teacherSkill.get(rid) ?? 50) / 125 : BALANCE.OGRETMENSIZ_CARPAN;
+      s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * kalite * ctx.ogrenmeCarpan, 0, 100);
+      break;
+    }
+    case 'yemege_gidiyor':
+      if (s.path.length === 0) {
+        s.activity = 'yemekte';
+        s.activityUntil = dk + 30;
+      }
+      break;
+    case 'yemekte':
+      n.aclik = clamp(n.aclik - 3 * dtMin, 0, 100);
+      if (n.aclik <= 5 || (s.activityUntil !== -1 && dk >= s.activityUntil)) {
+        finishActivity(state, s, ctx);
+      }
+      break;
+    case 'ihtiyaca_gidiyor':
+      if (s.path.length === 0) {
+        s.activity = 'ihtiyacta';
+        s.activityUntil = dk + 45;
+      }
+      break;
+    case 'ihtiyacta': {
+      const o = ctx.objById.get(s.usingObject);
+      let bitti = true;
+      if (o && o.type === 'klozet') {
+        n.tuvalet = clamp(n.tuvalet - 2 * dtMin, 0, 100);
+        bitti = n.tuvalet <= 5;
+      } else if (o) {
+        // kantin sandalyesi / bank: dinlenme + eğlence
+        n.enerji = clamp(n.enerji - 2 * dtMin, 0, 100);
+        n.eglence = clamp(n.eglence - 2 * dtMin, 0, 100);
+        bitti = n.enerji <= 5 && n.eglence <= 5;
+      }
+      if (bitti || (s.activityUntil !== -1 && dk >= s.activityUntil)) {
+        finishActivity(state, s, ctx);
+      }
+      break;
+    }
+    case 'arastirmaya_gidiyor':
+      if (s.activityUntil !== -1 && dk >= s.activityUntil) finishActivity(state, s, ctx);
+      else if (s.path.length === 0) s.activity = 'arastiriyor';
+      break;
+    case 'arastiriyor':
+      // lisansüstü öğrenci için araştırma da tez ilerlemesidir
+      s.ilerleme = clamp(
+        s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * ctx.ogrenmeCarpan, 0, 100,
+      );
+      if (s.activityUntil !== -1 && dk >= s.activityUntil) finishActivity(state, s, ctx);
+      break;
+    case 'bosta':
+      decideStudent(state, s, dtMin, ctx);
+      break;
+    default:
+      break;
+  }
+}
+
+// --- Akademisyen ---------------------------------------------------------------
+
+function assignedClassroom(a: Academic, ctx: Ctx): Room | null {
+  const odalar = ctx.deptClassrooms.get(a.deptId);
+  if (!odalar || odalar.length === 0) return null;
+  const i = ctx.academicIndex.get(a.id) ?? 0;
+  return i < odalar.length ? odalar[i] : null;
+}
+
+function teachTarget(state: GameState, oda: Room, ctx: Ctx): Point | null {
+  const tahta = ctx.tahtaByRoom.get(oda.id);
+  if (tahta) {
+    const yan = adjacentWalkable(state, tahta);
+    if (yan) return yan;
+  }
+  const merkez = roomCenter(oda);
+  if (walkable(state, merkez.x, merkez.y)) return merkez;
+  return randomRoomTile(state, oda);
+}
+
+function startAcademicResearch(state: GameState, a: Academic, ctx: Ctx): void {
+  // kendi masası duruyorsa oraya, yoksa boş ofis masası rezerve et
+  let masa = ctx.deskOf.get(a.id);
+  if (!masa) {
+    masa = ctx.freeMasa.pop();
+    if (masa) {
+      masa.reservedBy = a.id;
+      ctx.deskOf.set(a.id, masa);
+    }
+  }
+  if (masa && goTo(state, a, { x: masa.x, y: masa.y })) {
+    a.usingObject = masa.id;
+    a.activity = 'arastirmaya_gidiyor';
+    a.activityUntil = -1;
+    return;
+  }
+  const odalar = ctx.labs.length > 0 ? ctx.labs : ctx.kutuphaneler;
+  if (odalar.length > 0) {
+    const hedef = randomRoomTile(state, pick(state, odalar));
+    if (hedef && goTo(state, a, hedef)) {
+      a.activity = 'arastirmaya_gidiyor';
+      a.activityUntil = -1;
+      return;
+    }
+  }
+  a.activity = 'bosta';
+}
+
+function updateAcademic(state: GameState, a: Academic, dtMin: number, ctx: Ctx): void {
+  const dk = ctx.dk;
+  const blok = dersBlogu(dk);
+
+  if (a.activity === 'ders_veriyor') {
+    a.xp += (BALANCE.XP_DERS / BLOK_SURE) * dtMin;
+  }
+
+  // istenen mod
+  let mod: 'ders' | 'yemek' | 'arastirma' = 'arastirma';
+  let sinif: Room | null = null;
+  if (blok !== -1) {
+    sinif = assignedClassroom(a, ctx);
+    if (sinif) mod = 'ders';
+  } else if (dk >= T.OGLE && dk < T.DERS3
+    && (ctx.yemekhaneler.length > 0 || ctx.kantinler.length > 0)) {
+    mod = 'yemek';
+  }
+
+  if (mod === 'ders' && sinif) {
+    if (a.activity === 'ders_veriyor') {
+      a.activityUntil = blok + BLOK_SURE;
+    } else if (a.activity === 'derse_gidiyor') {
+      if (a.path.length === 0) a.activity = 'ders_veriyor';
+      a.activityUntil = blok + BLOK_SURE;
+    } else {
+      const hedef = teachTarget(state, sinif, ctx);
+      a.usingObject = -1;
+      if (hedef && goTo(state, a, hedef)) {
+        a.activity = a.path.length > 0 ? 'derse_gidiyor' : 'ders_veriyor';
+        a.activityUntil = blok + BLOK_SURE;
+      } else {
+        a.activity = 'bosta';
+        idleWander(state, a, dtMin);
+      }
+    }
+    return;
+  }
+
+  if (mod === 'yemek') {
+    if (a.activity === 'yemekte') {
+      if (a.activityUntil !== -1 && dk >= a.activityUntil) a.activity = 'bosta';
+      return;
+    }
+    if (a.activity === 'yemege_gidiyor') {
+      if (a.path.length === 0) {
+        a.activity = 'yemekte';
+        a.activityUntil = dk + 40;
+      }
+      return;
+    }
+    const odalar = ctx.yemekhaneler.length > 0 ? ctx.yemekhaneler : ctx.kantinler;
+    const hedef = randomRoomTile(state, pick(state, odalar));
+    if (hedef && goTo(state, a, hedef)) {
+      a.activity = 'yemege_gidiyor';
+      a.activityUntil = -1;
+    } else {
+      a.activity = 'bosta';
+      idleWander(state, a, dtMin);
+    }
+    return;
+  }
+
+  // arastirma
+  if (a.activity === 'arastiriyor') return;
+  if (a.activity === 'arastirmaya_gidiyor') {
+    if (a.path.length === 0) a.activity = 'arastiriyor';
+    return;
+  }
+  startAcademicResearch(state, a, ctx);
+  if (a.activity === 'bosta') idleWander(state, a, dtMin);
+}
+
+// --- Personel ------------------------------------------------------------------
+
+function updateCook(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
+  const mesai = ctx.dk >= ASCI_BASLA && ctx.dk < ASCI_BITIS;
+  if (!mesai) {
+    if (a.activity === 'calisiyor' || a.usingObject !== -1) finishActivity(state, a, ctx);
+    const banko = ctx.bankoOf.get(a.id);
+    if (banko && banko.reservedBy === a.id) {
+      banko.reservedBy = -1;
+      ctx.bankoOf.delete(a.id);
+    }
+    idleWander(state, a, dtMin);
+    return;
+  }
+  if (a.activity === 'calisiyor') return;
+  if (a.activity === 'geliyor' && a.path.length > 0) return;
+
+  let banko = ctx.bankoOf.get(a.id);
+  if (!banko) {
+    banko = ctx.freeBanko.pop();
+    if (banko) {
+      banko.reservedBy = a.id;
+      ctx.bankoOf.set(a.id, banko);
+    }
+  }
+  if (!banko) {
+    idleWander(state, a, dtMin);
+    return;
+  }
+  const hedef = adjacentWalkable(state, banko);
+  if (hedef && goTo(state, a, hedef)) {
+    a.usingObject = banko.id;
+    a.activity = a.path.length > 0 ? 'geliyor' : 'calisiyor';
+  } else {
+    idleWander(state, a, dtMin);
+  }
+}
+
+function dirtiestTile(state: GameState): number {
+  let idx = -1;
+  let enKirli = 20;
+  const boyut = MAP_W * MAP_H;
+  for (let t = 0; t < boyut; t++) {
+    if (state.dirt[t] > enKirli) {
+      enKirli = state.dirt[t];
+      idx = t;
+    }
+  }
+  return idx;
+}
+
+function updateJanitor(state: GameState, a: StaffAgent, dtMin: number): void {
+  if (a.activity === 'calisiyor') {
+    const idx = tileIndex(Math.round(a.x), Math.round(a.y));
+    state.dirt[idx] = Math.max(0, state.dirt[idx] - 8 * dtMin);
+    if (state.dirt[idx] <= 0) a.activity = 'bosta';
+    return;
+  }
+  if (a.activity === 'geliyor' && a.path.length > 0) return;
+
+  const hedefIdx = dirtiestTile(state);
+  if (hedefIdx !== -1) {
+    const hedef = { x: hedefIdx % MAP_W, y: Math.floor(hedefIdx / MAP_W) };
+    if (goTo(state, a, hedef)) {
+      a.activity = a.path.length > 0 ? 'geliyor' : 'calisiyor';
+      return;
+    }
+  }
+  a.activity = 'bosta';
+  idleWander(state, a, dtMin);
+}
+
+// --- Ana güncelleme --------------------------------------------------------------
+
+export function updateAgents(state: GameState, dtMin: number): void {
+  const dk = state.dakika;
+  const ctx = buildCtx(state, dk);
+
+  for (const a of state.agents) {
+    if (!a.onCampus) {
+      maybeArrive(state, a, dk, dtMin);
+      continue;
+    }
+
+    // kampüs kapanışı: kalan herkes zorla çıkarılır
+    if (dk >= T.KAMPUS_KAPANIS) {
+      releaseReservations(state, a.id);
+      leaveCampus(state, a);
+      a.x = GATE.x;
+      a.y = GATE.y;
+      continue;
+    }
+
+    depositDirt(state, a, dtMin, ctx);
+
+    // çıkış saati: her şeyi bırakıp kapıya yönel
+    if (dk >= T.CIKIS && a.activity !== 'cikiyor') {
+      releaseReservations(state, a.id);
+      a.usingObject = -1;
+      a.activityUntil = -1;
+      a.activity = 'cikiyor';
+      goTo(state, a, GATE);
+    }
+
+    moveAgent(state, a, dtMin);
+
+    if (a.activity === 'cikiyor') {
+      if (a.path.length === 0) {
+        if (Math.round(a.x) === GATE.x && Math.round(a.y) === GATE.y) {
+          leaveCampus(state, a);
+        } else if (chance(state, dtMin / 5)) {
+          goTo(state, a, GATE); // yol tıkalıysa ara sıra yeniden dene
+        }
+      }
+      continue;
+    }
+
+    // kapıdan hedefe varış
+    if (a.activity === 'geliyor' && a.path.length === 0) a.activity = 'bosta';
+
+    switch (a.kind) {
+      case 'ogrenci':
+        updateStudent(state, a, dtMin, ctx);
+        break;
+      case 'akademisyen':
+        updateAcademic(state, a, dtMin, ctx);
+        break;
+      case 'asci':
+        updateCook(state, a, dtMin, ctx);
+        break;
+      case 'temizlikci':
+        updateJanitor(state, a, dtMin);
+        break;
+    }
+  }
+}
+
+// --- Ajan yaşam döngüsü -----------------------------------------------------------
+
 export function spawnStudent(state: GameState, deptId: number, level: StudentLevel): Student {
-  // TODO(workflow)
-  throw new Error('spawnStudent henüz uygulanmadı');
+  const s: Student = {
+    id: newId(state),
+    kind: 'ogrenci',
+    ad: `${pick(state, AD)} ${pick(state, SOYAD)}`,
+    x: GATE.x,
+    y: GATE.y,
+    path: [],
+    activity: 'yok',
+    onCampus: false,
+    usingObject: -1,
+    activityUntil: -1,
+    deptId,
+    level,
+    ilerleme: 0,
+    needs: {
+      aclik: randRange(state, 10, 30),
+      tuvalet: randRange(state, 10, 30),
+      enerji: randRange(state, 10, 30),
+      eglence: randRange(state, 10, 30),
+    },
+    mutluluk: randRange(state, 70, 85),
+    girisDonemi: donemIndex(state.gun),
+  };
+  state.agents.push(s);
+  return s;
 }
 
 export function spawnAcademic(
   state: GameState, ad: string, deptId: number, rank: AcademicRank,
   egitim: number, arastirma: number, maas: number,
 ): Academic {
-  // TODO(workflow)
-  throw new Error('spawnAcademic henüz uygulanmadı');
+  const a: Academic = {
+    id: newId(state),
+    kind: 'akademisyen',
+    ad,
+    x: GATE.x,
+    y: GATE.y,
+    path: [],
+    activity: 'yok',
+    onCampus: false,
+    usingObject: -1,
+    activityUntil: -1,
+    deptId,
+    rank,
+    egitim,
+    arastirma,
+    maas,
+    xp: 0,
+    makale: 0,
+    uluslararasiMakale: 0,
+  };
+  state.agents.push(a);
+  return a;
 }
 
 export function hireStaff(state: GameState, kind: 'asci' | 'temizlikci'): StaffAgent | null {
-  // TODO(workflow)
-  return null;
+  const unvan = kind === 'asci' ? 'Aşçı' : 'Temizlikçi';
+  if (!spend(state, BALANCE.PERSONEL_ALIM[kind], `${unvan} alımı`)) return null;
+  const p: StaffAgent = {
+    id: newId(state),
+    kind,
+    ad: `${pick(state, AD)} ${pick(state, SOYAD)}`,
+    x: GATE.x,
+    y: GATE.y,
+    path: [],
+    activity: 'yok',
+    onCampus: false,
+    usingObject: -1,
+    activityUntil: -1,
+    maas: BALANCE.MAAS[kind],
+  };
+  state.agents.push(p);
+  notify(state, `${unvan} işe alındı: ${p.ad} (günlük ₺${p.maas})`, 'iyi');
+  return p;
 }
 
 export function removeAgent(state: GameState, agentId: number): void {
-  // TODO(workflow)
-  void state; void agentId;
+  releaseReservations(state, agentId);
+  const i = state.agents.findIndex((a) => a.id === agentId);
+  if (i !== -1) state.agents.splice(i, 1);
 }

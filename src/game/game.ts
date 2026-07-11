@@ -34,6 +34,10 @@ function endOfDay(state: GameState): void {
 
   state.gun += 1;
 
+  // Önce gün içinde yapılan inşaatı işle ki yerleştirme güncel kapasiteyi görsün
+  validateRooms(state);
+  assignClassrooms(state);
+
   // Dönem geçişi: yeni günün dönem günü 1 ise biten dönemi kapatıp yenisini başlat
   if (donemGunu(state.gun) === 1) {
     semesterEnd(state);
@@ -41,8 +45,6 @@ function endOfDay(state: GameState): void {
     semesterStart(state);
   }
 
-  assignClassrooms(state);
-  validateRooms(state);
   saveGame(state);
 }
 

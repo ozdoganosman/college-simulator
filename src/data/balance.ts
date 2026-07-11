@@ -33,7 +33,7 @@ export const BALANCE = {
   },
 
   // Öğrenci
-  DERS_ILERLEME: 0.7,          // ders periyodu başına ilerleme puanı (öğretmenli)
+  DERS_ILERLEME: 1.8,          // ders periyodu başına ilerleme puanı (öğretmenli)
   OGRETMENSIZ_CARPAN: 0.3,
   MEZUNIYET_ESIK: 100,         // ~4 dönemde mezuniyet hedefi
   MUTLULUK_BIRAKMA_ESIK: 25,   // altındaysa her gün bırakma riski
@@ -57,5 +57,5 @@ export const BALANCE = {
   KUTUPHANE_OGRENME_BONUS: 0.05,
 
   // Zaman
-  DAKIKA_SANIYE: 30,           // 1x hızda saniye başına oyun dakikası
+  DAKIKA_SANIYE: 20,           // 1x hızda saniye başına oyun dakikası (1 gün ≈ 72 sn)
 } as const;

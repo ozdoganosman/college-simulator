@@ -39,7 +39,7 @@ export function buildWallRect(state: GameState, x0: number, y0: number, x1: numb
       const kenar = x === xa || x === xb || y === ya || y === yb;
       if (!kenar || !inBounds(x, y)) continue;
       const t = tileIndex(x, y);
-      if (state.wall[t] === WALL_SOLID) continue;
+      if (state.wall[t] !== WALL_NONE) continue; // mevcut duvar/kapının üstüne yazma
       if (state.objects.some((o) => tileIndex(o.x, o.y) === t)) continue; // eşyanın üstüne duvar olmaz
       tiles.push(t);
     }

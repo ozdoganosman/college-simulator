@@ -35,19 +35,253 @@
  *
  * cancelProject(state, projectId): iade yok, notify(kotu).
  */
-import { GameState } from '../core/types';
+import {
+  Academic, GameState, Publication, RANK_LABEL, ResearchProject,
+} from '../core/types';
+import { chance, clamp, formatMoney, newId, pick, randRange } from '../core/util';
+import { libraryLevel, validRooms } from '../core/grid';
+import { BALANCE } from '../data/balance';
+import { deptDef } from '../data/departments';
+import { ODUL_ADLARI, PROJE_KALIP, PROJE_KONU } from '../data/names';
+import { addPrestij, earn, notify, spend } from './state';
 
 export function startProject(state: GameState, deptId: number): boolean {
-  // TODO(workflow)
-  return false;
+  const dept = state.departments.find((d) => d.id === deptId);
+  if (!dept) return false;
+  const def = deptDef(dept.defId);
+
+  if (def.labGerekli) {
+    if (validRooms(state, 'laboratuvar').length === 0) {
+      notify(state, `${def.ad} araştırması için geçerli bir laboratuvar gerekli.`, 'kotu');
+      return false;
+    }
+  } else if (validRooms(state, 'kutuphane').length === 0 && validRooms(state, 'ofis').length === 0) {
+    notify(state, 'Araştırma için geçerli bir kütüphane ya da ofis gerekli.', 'kotu');
+    return false;
+  }
+
+  const akademisyenVar = state.agents.some((a) => a.kind === 'akademisyen' && a.deptId === deptId);
+  if (!akademisyenVar) {
+    notify(state, `${def.ad} bölümünde akademisyen yok — önce kadro atayın.`, 'kotu');
+    return false;
+  }
+
+  if (state.projects.some((p) => p.deptId === deptId)) {
+    notify(state, `${def.ad} bölümünde zaten aktif bir proje var.`, 'kotu');
+    return false;
+  }
+
+  const maliyet = Math.round(BALANCE.PROJE_MALIYET_TABAN * randRange(state, 0.8, 1.4));
+  if (!spend(state, maliyet, 'araştırma projesi')) return false;
+
+  const konu = pick(state, PROJE_KONU);
+  const baslik = pick(state, PROJE_KALIP).replace('{k}', konu);
+  const proje: ResearchProject = {
+    id: newId(state),
+    deptId,
+    baslik,
+    ilerleme: 0,
+    hedefPuan: Math.round(BALANCE.PROJE_HEDEF_PUAN * randRange(state, 0.7, 1.3)),
+    birikenPuan: 0,
+    maliyet,
+    baslamaGunu: state.gun,
+  };
+  state.projects.push(proje);
+  notify(state, `${def.ad} bölümünde yeni araştırma projesi: "${baslik}"`, 'bilgi');
+  return true;
+}
+
+interface DeptArastirma {
+  akademisyenToplam: number;      // 'arastiriyor' akademisyenlerin arastirma toplamı
+  arastiranlar: Academic[];       // XP dağıtımı için
+  yl: number;                     // 'arastiriyor' YL öğrenci sayısı
+  doktora: number;                // 'arastiriyor' doktora öğrenci sayısı
 }
 
 export function updateResearch(state: GameState, dtMin: number): void {
-  // TODO(workflow)
-  void state; void dtMin;
+  if (state.projects.length === 0) return;
+
+  // Bölüm başına araştırma katkısını TEK geçişte topla
+  const katki = new Map<number, DeptArastirma>();
+  const al = (deptId: number): DeptArastirma => {
+    let k = katki.get(deptId);
+    if (!k) {
+      k = { akademisyenToplam: 0, arastiranlar: [], yl: 0, doktora: 0 };
+      katki.set(deptId, k);
+    }
+    return k;
+  };
+  for (const a of state.agents) {
+    if (!a.onCampus || a.activity !== 'arastiriyor') continue;
+    if (a.kind === 'akademisyen') {
+      const k = al(a.deptId);
+      k.akademisyenToplam += a.arastirma;
+      k.arastiranlar.push(a);
+    } else if (a.kind === 'ogrenci') {
+      if (a.level === 'yl') al(a.deptId).yl++;
+      else if (a.level === 'doktora') al(a.deptId).doktora++;
+    }
+  }
+
+  // Paylaşılan çarpanlar — çağrı başına bir kez
+  const kutCarpan = 1 + libraryLevel(state) * BALANCE.KUTUPHANE_ARASTIRMA_BONUS;
+  let stratCarpan = 1;
+  if (state.strategies.includes('tubitak')) stratCarpan *= 1.25;
+  if (state.strategies.includes('arastirma_universitesi')) stratCarpan *= 1.30;
+
+  // Geçerli lab + kütüphanedeki bilgisayarlar araştırmayı hızlandırır
+  const bilgisayarOdalar = new Set<number>();
+  for (const r of validRooms(state, 'laboratuvar')) bilgisayarOdalar.add(r.id);
+  for (const r of validRooms(state, 'kutuphane')) bilgisayarOdalar.add(r.id);
+  let labBilgisayar = 0;
+  for (const o of state.objects) {
+    if (o.type === 'bilgisayar' && bilgisayarOdalar.has(o.roomId)) labBilgisayar++;
+  }
+  const labCarpan = 1 + Math.min(0.15, 0.03 * labBilgisayar);
+
+  for (const proje of [...state.projects]) {
+    const dept = state.departments.find((d) => d.id === proje.deptId);
+    if (!dept) continue;
+    const def = deptDef(dept.defId);
+    const k = katki.get(proje.deptId);
+    const taban = k
+      ? k.akademisyenToplam * 0.01 + k.yl * 0.05 + k.doktora * 0.12
+      : 0;
+    if (taban <= 0) continue;
+
+    const puanDk = taban * def.arastirmaCarpani * kutCarpan * stratCarpan * labCarpan;
+    const uretilen = puanDk * dtMin;
+    proje.birikenPuan += uretilen;
+    proje.ilerleme = clamp((100 * proje.birikenPuan) / proje.hedefPuan, 0, 100);
+
+    // XP: araştıran akademisyenlere eşit paylaştır
+    if (k && k.arastiranlar.length > 0) {
+      const pay = (uretilen * BALANCE.XP_ARASTIRMA_CARPAN) / k.arastiranlar.length;
+      for (const a of k.arastiranlar) a.xp += pay;
+    }
+
+    if (proje.birikenPuan >= proje.hedefPuan) completeProject(state, proje);
+  }
+}
+
+function completeProject(state: GameState, proje: ResearchProject): void {
+  const dept = state.departments.find((d) => d.id === proje.deptId);
+  const bolumAdi = dept ? deptDef(dept.defId).ad : 'Bölüm';
+
+  let hibe = Math.round(BALANCE.ARASTIRMA_HIBE * randRange(state, 0.8, 1.5));
+
+  // Yazar: araştırma becerisiyle ağırlıklı rastgele seçim — böylece araştırma
+  // görevlileri de zamanla makale yazıp terfi edebilir.
+  const kadro: Academic[] = [];
+  let agirlikToplam = 0;
+  for (const a of state.agents) {
+    if (a.kind !== 'akademisyen' || a.deptId !== proje.deptId) continue;
+    kadro.push(a);
+    agirlikToplam += a.arastirma + 10;
+  }
+  const yazarSec = (): Academic | null => {
+    if (kadro.length === 0) return null;
+    let r = randRange(state, 0, agirlikToplam);
+    for (const a of kadro) {
+      r -= a.arastirma + 10;
+      if (r <= 0) return a;
+    }
+    return kadro[kadro.length - 1];
+  };
+  const yazar = yazarSec();
+  const ikinci = yazarSec();
+
+  let anaYayin: Publication | null = null;
+  if (yazar) {
+    anaYayin = publishPaper(state, proje, yazar);
+    if (anaYayin.uluslararasi) hibe *= BALANCE.ULUSLARARASI_HIBE_CARPAN;
+
+    // Akademik teşvik: %20 olasılıkla ikinci makale (ikinci yazar ya da aynı yazar)
+    if (state.strategies.includes('tesvik') && chance(state, 0.2)) {
+      publishPaper(state, proje, ikinci ?? yazar);
+    }
+  }
+
+  earn(state, hibe);
+  notify(state, `Araştırma tamamlandı: "${proje.baslik}" — hibe ${formatMoney(hibe)}.`, 'iyi');
+
+  // Çığır açan buluş (yazar yoksa buluş da yok)
+  if (yazar) {
+    const bulusOlasilik = BALANCE.BULUS_OLASILIK + (yazar.arastirma > 80 ? 0.05 : 0);
+    if (chance(state, bulusOlasilik)) {
+      if (anaYayin) anaYayin.cigirAcici = true;
+      let gelir = BALANCE.BULUS_GELIR;
+      if (state.strategies.includes('teknokent')) gelir *= 2;
+      earn(state, gelir);
+      addPrestij(state, BALANCE.PRESTIJ.bulus);
+      notify(
+        state,
+        `ÇIĞIR AÇAN BULUŞ: "${proje.baslik}"! Patent geliri ${formatMoney(gelir)}.`,
+        'odul',
+      );
+
+      // Buluş sonrası ödül şansı — aynı gün aynı ödül tekrarlanmasın
+      if (chance(state, BALANCE.ODUL_OLASILIK)) {
+        const adaylar = ODUL_ADLARI.filter(
+          (ad) => !state.awards.some((o) => o.ad === ad && o.gun === state.gun),
+        );
+        if (adaylar.length > 0) {
+          const odulAd = pick(state, adaylar);
+          state.awards.push({
+            id: newId(state),
+            ad: odulAd,
+            aciklama: `${bolumAdi} bölümünün "${proje.baslik}" buluşu ödüle layık görüldü.`,
+            gun: state.gun,
+          });
+          addPrestij(state, BALANCE.PRESTIJ.odul);
+          notify(state, `${odulAd} kazanıldı! (${bolumAdi})`, 'odul');
+        }
+      }
+    }
+  }
+
+  const idx = state.projects.indexOf(proje);
+  if (idx >= 0) state.projects.splice(idx, 1);
+
+  // Araştırma sürekliliği: bütçe yetiyorsa aynı bölümde otomatik yeni proje başlat
+  // (istemeyen oyuncu projeyi panelden iptal edebilir).
+  if (dept && state.para >= BALANCE.PROJE_MALIYET_TABAN * 1.5) {
+    startProject(state, dept.id);
+  }
+}
+
+/** Yayın kaydı oluşturur, yazar sayaçlarını ve prestiji işler. */
+function publishPaper(state: GameState, proje: ResearchProject, yazar: Academic): Publication {
+  let olasilik = BALANCE.ULUSLARARASI_OLASILIK + yazar.arastirma / 400;
+  if (state.strategies.includes('erasmus')) olasilik += 0.3;
+  const uluslararasi = chance(state, Math.min(0.9, olasilik));
+
+  const yayin: Publication = {
+    id: newId(state),
+    baslik: proje.baslik,
+    yazarId: yazar.id,
+    deptId: proje.deptId,
+    uluslararasi,
+    cigirAcici: false,
+    gun: state.gun,
+  };
+  state.publications.push(yayin);
+
+  yazar.makale += 1;
+  if (uluslararasi) yazar.uluslararasiMakale += 1;
+  addPrestij(state, uluslararasi ? BALANCE.PRESTIJ.uluslararasiMakale : BALANCE.PRESTIJ.makale);
+  notify(
+    state,
+    `Yeni ${uluslararasi ? 'uluslararası ' : ''}makale: "${proje.baslik}" — ${RANK_LABEL[yazar.rank]} ${yazar.ad}`,
+    'iyi',
+  );
+  return yayin;
 }
 
 export function cancelProject(state: GameState, projectId: number): void {
-  // TODO(workflow)
-  void state; void projectId;
+  const idx = state.projects.findIndex((p) => p.id === projectId);
+  if (idx < 0) return;
+  const proje = state.projects[idx];
+  state.projects.splice(idx, 1);
+  notify(state, `Araştırma projesi iptal edildi: "${proje.baslik}" (iade yok).`, 'kotu');
 }

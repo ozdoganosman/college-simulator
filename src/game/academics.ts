@@ -27,36 +27,150 @@
  *    egitim+arastirma küçük artış (+2..+5), notify(iyi) + addPrestij(PRESTIJ.terfi).
  *  - Araştırma XP'si research.ts içinde ekleniyor; burada sadece eşik kontrolü.
  */
-import { Candidate, GameState } from '../core/types';
+import { AcademicRank, Candidate, GameState, RANK_LABEL } from '../core/types';
+import { clamp, formatMoney, newId, pick, randInt, randRange } from '../core/util';
+import { BALANCE } from '../data/balance';
+import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
+import { removeAgent, spawnAcademic } from './agents';
+import { addPrestij, notify, spend } from './state';
+
+type UstRank = 'dr' | 'docent' | 'prof';
+
+/** Terfi merdiveni: bir üst rütbe (prof için yok). */
+const SONRAKI_RANK: Record<AcademicRank, UstRank | null> = {
+  arsgor: 'dr',
+  dr: 'docent',
+  docent: 'prof',
+  prof: null,
+};
+
+/** Transfer imza bonusu aralıkları (₺) — rütbe ile artar. */
+const BONUS_ARALIK: Record<UstRank, [number, number]> = {
+  dr: [80_000, 160_000],
+  docent: [150_000, 280_000],
+  prof: [260_000, 400_000],
+};
+
+function rastgeleAd(state: GameState): string {
+  return pick(state, AD) + ' ' + pick(state, SOYAD);
+}
 
 export function refreshCandidatePools(state: GameState): void {
-  // TODO(workflow)
-  void state;
+  // KPSS havuzu: hepsi araştırma görevlisi
+  const kpss: Candidate[] = [];
+  const kpssSayi = randInt(state, 6, 9);
+  for (let i = 0; i < kpssSayi; i++) {
+    kpss.push({
+      id: newId(state),
+      ad: rastgeleAd(state),
+      rank: 'arsgor',
+      egitim: randInt(state, 20, 55),
+      arastirma: randInt(state, 20, 55),
+      maas: Math.round(BALANCE.MAAS.arsgor * randRange(state, 0.85, 1.15)),
+      bonus: 0,
+      kurum: '',
+    });
+  }
+  state.kpssPool = kpss;
+
+  // Transfer havuzu: deneyimli adaylar, imza bonusu ister
+  const transfer: Candidate[] = [];
+  const transferSayi = randInt(state, 4, 6);
+  for (let i = 0; i < transferSayi; i++) {
+    const rank = pick(state, ['dr', 'docent', 'prof'] as const);
+    const [bonusMin, bonusMax] = BONUS_ARALIK[rank];
+    transfer.push({
+      id: newId(state),
+      ad: rastgeleAd(state),
+      rank,
+      egitim: randInt(state, 50, 95),
+      arastirma: randInt(state, 50, 95),
+      maas: Math.round(BALANCE.MAAS[rank] * randRange(state, 1.1, 1.5)),
+      bonus: Math.round(randRange(state, bonusMin, bonusMax) / 1000) * 1000,
+      kurum: pick(state, RAKIP_UNILER),
+    });
+  }
+  state.transferPool = transfer;
 }
 
 export function officeCapacity(state: GameState): number {
-  // TODO(workflow)
-  return 0;
+  const gecerliOfisler = new Set<number>();
+  for (const r of state.rooms) {
+    if (r.type === 'ofis' && r.valid) gecerliOfisler.add(r.id); // rektörlük masası yönetime aittir
+  }
+  let masa = 0;
+  for (const o of state.objects) {
+    if (o.type === 'calisma_masasi' && gecerliOfisler.has(o.roomId)) masa++;
+  }
+  return masa;
 }
 
 export function hireFromPool(
   state: GameState, pool: 'kpss' | 'transfer', candidateId: number, deptId: number,
 ): boolean {
-  // TODO(workflow)
-  return false;
+  const havuz = pool === 'kpss' ? state.kpssPool : state.transferPool;
+  const idx = havuz.findIndex((c) => c.id === candidateId);
+  if (idx < 0) return false;
+  const aday = havuz[idx];
+
+  const akademisyenSayisi = state.agents.filter((a) => a.kind === 'akademisyen').length;
+  if (akademisyenSayisi >= officeCapacity(state)) {
+    notify(state, 'Ofis masası yetersiz — yeni çalışma masası kurun.', 'kotu');
+    return false;
+  }
+
+  if (pool === 'transfer' && aday.bonus > 0) {
+    if (!spend(state, aday.bonus, 'transfer imza bonusu')) return false;
+  }
+
+  spawnAcademic(state, aday.ad, deptId, aday.rank, aday.egitim, aday.arastirma, aday.maas);
+  havuz.splice(idx, 1);
+
+  if (pool === 'transfer') {
+    notify(
+      state,
+      `${RANK_LABEL[aday.rank]} ${aday.ad} kadroya katıldı (${aday.kurum}'nden transfer).`,
+      'iyi',
+    );
+    addPrestij(state, BALANCE.PRESTIJ.terfi);
+  } else {
+    notify(state, `${RANK_LABEL[aday.rank]} ${aday.ad} kadroya katıldı (KPSS ataması).`, 'iyi');
+  }
+  return true;
 }
 
 export function assignAcademicDept(state: GameState, academicId: number, deptId: number): void {
-  // TODO(workflow)
-  void state; void academicId; void deptId;
+  const a = state.agents.find((ag) => ag.id === academicId);
+  if (!a || a.kind !== 'akademisyen') return;
+  a.deptId = deptId;
 }
 
 export function fireAcademic(state: GameState, academicId: number): boolean {
-  // TODO(workflow)
-  return false;
+  const a = state.agents.find((ag) => ag.id === academicId);
+  if (!a || a.kind !== 'akademisyen') return false;
+  const tazminat = 30 * a.maas;
+  if (!spend(state, tazminat, 'işten çıkarma tazminatı')) return false;
+  const etiket = `${RANK_LABEL[a.rank]} ${a.ad}`;
+  removeAgent(state, academicId);
+  notify(state, `${etiket} işten çıkarıldı (tazminat ${formatMoney(tazminat)}).`, 'kotu');
+  return true;
 }
 
 export function dailyAcademicUpdate(state: GameState): void {
-  // TODO(workflow)
-  void state;
+  for (const a of state.agents) {
+    if (a.kind !== 'akademisyen') continue;
+    const yeni = SONRAKI_RANK[a.rank];
+    if (yeni === null) continue;
+    const esik = BALANCE.TERFI[yeni];
+    const uluslararasiGerek = 'uluslararasi' in esik ? esik.uluslararasi : 0;
+    if (a.xp < esik.xp || a.makale < esik.makale || a.uluslararasiMakale < uluslararasiGerek) {
+      continue;
+    }
+    a.rank = yeni;
+    a.maas = Math.max(a.maas, BALANCE.MAAS[yeni]);
+    a.egitim = clamp(a.egitim + randInt(state, 2, 5), 0, 100);
+    a.arastirma = clamp(a.arastirma + randInt(state, 2, 5), 0, 100);
+    addPrestij(state, BALANCE.PRESTIJ.terfi);
+    notify(state, `${a.ad}, ${RANK_LABEL[yeni]} unvanına terfi etti!`, 'iyi');
+  }
 }

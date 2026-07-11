@@ -40,6 +40,9 @@ export function clampCamera(cam: Camera, canvas: HTMLCanvasElement): void {
   const viewW = canvas.width / cam.zoom;
   const viewH = canvas.height / cam.zoom;
   const pad = 6 * TILE;
-  cam.x = Math.max(-pad, Math.min(worldW + pad - viewW, cam.x));
-  cam.y = Math.max(-pad, Math.min(worldH + pad - viewH, cam.y));
+  // görünüm dünyadan büyükse ortala (min>max kilitlenmesin)
+  if (viewW >= worldW + 2 * pad) cam.x = (worldW - viewW) / 2;
+  else cam.x = Math.max(-pad, Math.min(worldW + pad - viewW, cam.x));
+  if (viewH >= worldH + 2 * pad) cam.y = (worldH - viewH) / 2;
+  else cam.y = Math.max(-pad, Math.min(worldH + pad - viewH, cam.y));
 }

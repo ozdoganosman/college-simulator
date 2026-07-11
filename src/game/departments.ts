@@ -47,59 +47,327 @@
  *  - 'yemek_subvansiyon' stratejisi: tüm öğrencilere mutluluk +2 (gider economy'de).
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
-import { GameState } from '../core/types';
+import { Department, GameState, Room, Student, donemIndex } from '../core/types';
+import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
+import { BALANCE } from '../data/balance';
+import { deptDef } from '../data/departments';
+import { addPrestij, earn, notify, spend } from './state';
+import { removeAgent, spawnStudent } from './agents';
+
+function sinifMi(r: Room): boolean {
+  return r.type === 'derslik' || r.type === 'amfi';
+}
 
 export function canOpenDepartment(state: GameState, defId: string): { ok: boolean; eksik: string[] } {
-  // TODO(workflow)
-  return { ok: false, eksik: ['uygulanmadı'] };
+  if (state.departments.some((d) => d.defId === defId)) {
+    return { ok: false, eksik: ['Bölüm zaten açık'] };
+  }
+  const def = deptDef(defId);
+  const eksik: string[] = [];
+
+  const bosDerslik = state.rooms.filter((r) => sinifMi(r) && r.valid && r.deptId === null).length;
+  if (bosDerslik < def.minDerslik) {
+    eksik.push(`${def.minDerslik} boş geçerli derslik gerekli (mevcut ${bosDerslik})`);
+  }
+  if (def.labGerekli && !state.rooms.some((r) => r.type === 'laboratuvar' && r.valid)) {
+    eksik.push('Geçerli laboratuvar yok');
+  }
+  if (state.para < def.acilisMaliyeti) {
+    eksik.push(`Bütçe yetersiz (${formatMoney(def.acilisMaliyeti)} gerekli)`);
+  }
+  return { ok: eksik.length === 0, eksik };
 }
 
 export function openDepartment(state: GameState, defId: string): boolean {
-  // TODO(workflow)
-  return false;
+  if (!canOpenDepartment(state, defId).ok) return false;
+  const def = deptDef(defId);
+  if (!spend(state, def.acilisMaliyeti, `${def.ad} açılışı`)) return false;
+
+  const dept: Department = {
+    id: newId(state),
+    defId,
+    kontenjan: 40,
+    ylKontenjan: 8,
+    doktoraKontenjan: 4,
+    ylAcik: false,
+    doktoraAcik: false,
+    sonTalep: 0,
+    sonKayit: 0,
+    acilisDonemi: donemIndex(state.gun),
+    mezunSayisi: 0,
+  };
+  state.departments.push(dept);
+  addPrestij(state, 5);
+  notify(state, `🎉 ${def.ad} bölümü açıldı!`, 'iyi');
+  assignClassrooms(state);
+  return true;
 }
 
 export function setQuota(state: GameState, deptId: number, kontenjan: number): void {
-  // TODO(workflow)
-  void state; void deptId; void kontenjan;
+  const dept = state.departments.find((d) => d.id === deptId);
+  if (dept) dept.kontenjan = clamp(Math.round(kontenjan), 0, 300);
 }
 
 export function setYlQuota(state: GameState, deptId: number, kontenjan: number): void {
-  // TODO(workflow)
-  void state; void deptId; void kontenjan;
+  const dept = state.departments.find((d) => d.id === deptId);
+  if (dept) dept.ylKontenjan = clamp(Math.round(kontenjan), 0, 40);
 }
 
 export function setDoktoraQuota(state: GameState, deptId: number, kontenjan: number): void {
-  // TODO(workflow)
-  void state; void deptId; void kontenjan;
+  const dept = state.departments.find((d) => d.id === deptId);
+  if (dept) dept.doktoraKontenjan = clamp(Math.round(kontenjan), 0, 40);
 }
 
 export function toggleGradProgram(state: GameState, deptId: number, level: 'yl' | 'doktora'): boolean {
-  // TODO(workflow)
-  return false;
+  const dept = state.departments.find((d) => d.id === deptId);
+  if (!dept) return false;
+  const def = deptDef(dept.defId);
+
+  if (level === 'yl') {
+    if (dept.ylAcik) {
+      dept.ylAcik = false;
+      dept.doktoraAcik = false; // doktora YL'ye bağlı
+      return true;
+    }
+    const uyeVar = state.agents.some((a) =>
+      a.kind === 'akademisyen' && a.deptId === dept.id && (a.rank === 'docent' || a.rank === 'prof'));
+    if (!uyeVar) {
+      notify(state, `${def.ad}: yüksek lisans için en az 1 Doçent/Profesör gerekli`, 'kotu');
+      return false;
+    }
+    dept.ylAcik = true;
+    notify(state, `🎓 ${def.ad} yüksek lisans programı açıldı!`, 'iyi');
+    return true;
+  }
+
+  if (dept.doktoraAcik) {
+    dept.doktoraAcik = false;
+    return true;
+  }
+  if (!dept.ylAcik) {
+    notify(state, `${def.ad}: doktora için önce yüksek lisans programı açılmalı`, 'kotu');
+    return false;
+  }
+  const profVar = state.agents.some((a) =>
+    a.kind === 'akademisyen' && a.deptId === dept.id && a.rank === 'prof');
+  if (!profVar) {
+    notify(state, `${def.ad}: doktora için en az 1 Profesör gerekli`, 'kotu');
+    return false;
+  }
+  dept.doktoraAcik = true;
+  notify(state, `🎓 ${def.ad} doktora programı açıldı!`, 'iyi');
+  return true;
 }
 
 export function assignClassrooms(state: GameState): void {
-  // TODO(workflow)
-  void state;
+  const deptIds = new Set(state.departments.map((d) => d.id));
+
+  // Geçersiz odaların ve kalkmış bölümlerin atamalarını temizle
+  for (const r of state.rooms) {
+    if (r.deptId !== null && (!r.valid || !deptIds.has(r.deptId))) r.deptId = null;
+  }
+  if (state.departments.length === 0) return;
+
+  // oda -> sıra sayısı (tek geçiş)
+  const odaSira = new Map<number, number>();
+  for (const o of state.objects) {
+    if (o.type === 'sira') odaSira.set(o.roomId, (odaSira.get(o.roomId) ?? 0) + 1);
+  }
+
+  // bölüm -> lisans öğrenci sayısı
+  const ogrenci = new Map<number, number>();
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci' && a.level === 'lisans') {
+      ogrenci.set(a.deptId, (ogrenci.get(a.deptId) ?? 0) + 1);
+    }
+  }
+
+  // bölüm -> mevcut atanmış sıra kapasitesi
+  const koltuk = new Map<number, number>();
+  for (const d of state.departments) koltuk.set(d.id, 0);
+  for (const r of state.rooms) {
+    if (sinifMi(r) && r.valid && r.deptId !== null) {
+      koltuk.set(r.deptId, (koltuk.get(r.deptId) ?? 0) + (odaSira.get(r.id) ?? 0));
+    }
+  }
+
+  // Bölümsüz geçerli derslik/amfileri sıra-başına-öğrenci oranı en kötü bölüme ver.
+  // ÖNEMLİ: bir bölüm ihtiyacından (öğrenci + kontenjan) fazla koltuk KAPATMAZ —
+  // artan derslikler bölümsüz kalır ki yeni bölüm açılabilsin.
+  for (const r of state.rooms) {
+    if (!sinifMi(r) || !r.valid || r.deptId !== null) continue;
+    let secilen: Department | null = null;
+    let enKotu = Infinity;
+    for (const d of state.departments) {
+      const ihtiyac = (ogrenci.get(d.id) ?? 0) + d.kontenjan;
+      const mevcut = koltuk.get(d.id) ?? 0;
+      if (mevcut >= ihtiyac) continue; // bu bölümün yeterli koltuğu var
+      const oran = mevcut / Math.max(1, ihtiyac);
+      if (oran < enKotu) {
+        enKotu = oran;
+        secilen = d;
+      }
+    }
+    if (secilen) {
+      r.deptId = secilen.id;
+      koltuk.set(secilen.id, (koltuk.get(secilen.id) ?? 0) + (odaSira.get(r.id) ?? 0));
+    }
+  }
+
+  // Lablar: lab gerektiren bölümlere sırayla dağıt (ortak kullanım — atama kozmetik)
+  const labBolumler = state.departments.filter((d) => deptDef(d.defId).labGerekli);
+  if (labBolumler.length > 0) {
+    let i = 0;
+    for (const r of state.rooms) {
+      if (r.type !== 'laboratuvar' || !r.valid) continue;
+      r.deptId = labBolumler[i % labBolumler.length].id;
+      i++;
+    }
+  }
 }
 
 export function seatCapacity(state: GameState, deptId: number): number {
-  // TODO(workflow)
-  return 0;
+  const odalar = new Set<number>();
+  for (const r of state.rooms) {
+    if (sinifMi(r) && r.valid && r.deptId === deptId) odalar.add(r.id);
+  }
+  if (odalar.size === 0) return 0;
+  let sira = 0;
+  for (const o of state.objects) {
+    if (o.type === 'sira' && odalar.has(o.roomId)) sira++;
+  }
+  return sira;
 }
 
 export function semesterStart(state: GameState): void {
-  // TODO(workflow)
-  void state;
+  if (state.departments.length === 0) return;
+
+  // bölüm -> akademisyen ve lisans öğrenci sayıları (tek geçiş)
+  const akademisyen = new Map<number, number>();
+  const lisans = new Map<number, number>();
+  for (const a of state.agents) {
+    if (a.kind === 'akademisyen') {
+      akademisyen.set(a.deptId, (akademisyen.get(a.deptId) ?? 0) + 1);
+    } else if (a.kind === 'ogrenci' && a.level === 'lisans') {
+      lisans.set(a.deptId, (lisans.get(a.deptId) ?? 0) + 1);
+    }
+  }
+
+  let odenek = 0;
+  let toplamYeni = 0;
+
+  for (const dept of state.departments) {
+    const def = deptDef(dept.defId);
+
+    if ((akademisyen.get(dept.id) ?? 0) < def.minAkademisyen) {
+      dept.sonTalep = 0;
+      dept.sonKayit = 0;
+      notify(state, `${def.ad}: öğretim üyesi yetersiz, YÖK kontenjan vermedi`, 'kotu');
+      continue;
+    }
+
+    let talep = def.tabanTalep * Math.pow(state.prestij / 100, 0.7);
+    if (state.strategies.includes('tanitim')) talep *= 1.25;
+    if (state.strategies.includes('uluslararasi_ofis')) talep *= 1.15;
+    talep *= randRange(state, 0.8, 1.2);
+
+    const bosKoltuk = seatCapacity(state, dept.id) - (lisans.get(dept.id) ?? 0);
+    const yeniKayit = Math.max(0, Math.min(dept.kontenjan, Math.floor(talep), bosKoltuk));
+    for (let i = 0; i < yeniKayit; i++) spawnStudent(state, dept.id, 'lisans');
+    dept.sonTalep = Math.floor(talep);
+    dept.sonKayit = yeniKayit;
+    odenek += yeniKayit * BALANCE.OGRENCI_ODENEK;
+    toplamYeni += yeniKayit;
+
+    if (dept.ylAcik) {
+      const ylKayit = Math.max(0, Math.min(dept.ylKontenjan, Math.floor(talep * 0.15)));
+      for (let i = 0; i < ylKayit; i++) spawnStudent(state, dept.id, 'yl');
+      odenek += ylKayit * BALANCE.YL_ODENEK;
+      toplamYeni += ylKayit;
+    }
+    if (dept.doktoraAcik) {
+      const dokKayit = Math.max(0, Math.min(dept.doktoraKontenjan, Math.floor(talep * 0.08)));
+      for (let i = 0; i < dokKayit; i++) spawnStudent(state, dept.id, 'doktora');
+      odenek += dokKayit * BALANCE.DOKTORA_ODENEK;
+      toplamYeni += dokKayit;
+    }
+
+    if (yeniKayit < dept.kontenjan) {
+      notify(state, `${def.ad} bölümünde ${dept.kontenjan - yeniKayit} kontenjan boş kaldı`, 'bilgi');
+    }
+  }
+
+  if (state.strategies.includes('arastirma_universitesi')) odenek *= 1.25;
+  if (toplamYeni > 0) {
+    odenek = Math.round(odenek);
+    earn(state, odenek);
+    notify(state, `📥 Dönem ödeneği: ${formatMoney(odenek)}  (${toplamYeni} yeni öğrenci)`, 'iyi');
+  }
 }
 
 export function semesterEnd(state: GameState): void {
-  // TODO(workflow)
-  void state;
+  const deptMap = new Map<number, Department>();
+  for (const d of state.departments) deptMap.set(d.id, d);
+
+  // önce topla (removeAgent diziyi değiştirir), sonra çıkar
+  const mezunlar: Student[] = [];
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci' && a.ilerleme >= BALANCE.MEZUNIYET_ESIK) mezunlar.push(a);
+  }
+  if (mezunlar.length === 0) return;
+
+  const bolumMezun = new Map<number, number>();
+  for (const s of mezunlar) {
+    removeAgent(state, s.id);
+    state.toplamMezun++;
+    const dept = deptMap.get(s.deptId);
+    if (dept) dept.mezunSayisi++;
+    earn(state, BALANCE.MEZUN_BONUS);
+    addPrestij(state, BALANCE.PRESTIJ.mezun);
+    if (s.level === 'doktora') addPrestij(state, 1); // doktora mezunu ekstra prestij
+    bolumMezun.set(s.deptId, (bolumMezun.get(s.deptId) ?? 0) + 1);
+  }
+
+  for (const [deptId, n] of bolumMezun) {
+    const dept = deptMap.get(deptId);
+    if (!dept) continue;
+    notify(state, `🎓 ${deptDef(dept.defId).ad} bölümünden ${n} öğrenci mezun oldu`, 'iyi');
+  }
 }
 
 export function dailyDepartmentUpdate(state: GameState): void {
-  // TODO(workflow)
-  void state;
+  // Bırakma — mutluluk desteğinden ÖNCE değerlendirilir
+  const birakanlar: number[] = [];
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci' && a.mutluluk < BALANCE.MUTLULUK_BIRAKMA_ESIK
+        && chance(state, BALANCE.BIRAKMA_OLASILIK)) {
+      birakanlar.push(a.id);
+    }
+  }
+  for (const id of birakanlar) {
+    removeAgent(state, id);
+    state.toplamBirakan++;
+    addPrestij(state, BALANCE.PRESTIJ.birakan);
+  }
+  if (birakanlar.length > 0) {
+    notify(state, `😞 ${birakanlar.length} öğrenci okulu bıraktı`, 'kotu');
+  }
+
+  // Yemekhane sübvansiyonu: mutluluk +2 (gider economy.ts'te)
+  const subvansiyon = state.strategies.includes('yemek_subvansiyon');
+  let toplamMutluluk = 0;
+  let ogrenciSayisi = 0;
+  for (const a of state.agents) {
+    if (a.kind !== 'ogrenci') continue;
+    if (subvansiyon) a.mutluluk = clamp(a.mutluluk + 2, 0, 100);
+    toplamMutluluk += a.mutluluk;
+    ogrenciSayisi++;
+  }
+
+  // Prestij doğal sürüklenme
+  if (ogrenciSayisi > 0) {
+    const ortalama = toplamMutluluk / ogrenciSayisi;
+    if (ortalama > 70) addPrestij(state, 0.3);
+    else if (ortalama < 40) addPrestij(state, -0.5);
+  }
 }

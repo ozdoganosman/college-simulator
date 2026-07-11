@@ -20,7 +20,31 @@ export function initHud(getState: () => GameState, ui: UIState): void {
   subbarEl = document.getElementById('hud-subbar')!;
   noticesEl = document.getElementById('hud-notifications')!;
 
+  // Üst bar BİR kez kurulur; refreshHud yalnızca metinleri günceller —
+  // böylece hız/duraklat butonlarına tıklama asla yutulmaz.
+  topEl.innerHTML = `
+    <span class="stat para" data-st="para"></span>
+    <span class="stat" data-st="prestij"></span>
+    <span class="stat" data-st="ogrenci" title="Öğrenci"></span>
+    <span class="stat" data-st="akademisyen" title="Akademisyen"></span>
+    <span class="stat" data-st="kutuphane" title="Kütüphane seviyesi"></span>
+    <span class="stat tarih" data-st="tarih"></span>
+    <span class="hiz-grup">
+      <button class="hiz" data-hiz="0">⏸</button>
+      <button class="hiz" data-hiz="1">▶</button>
+      <button class="hiz" data-hiz="2">▶▶</button>
+      <button class="hiz" data-hiz="4">▶▶▶</button>
+    </span>
+  `;
+  for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
+    b.addEventListener('click', () => {
+      getState().hiz = Number(b.dataset.hiz);
+      refreshHud(getState(), ui);
+    });
+  }
+
   buildToolbar(getState, ui);
+  renderSubbarRef = () => renderSubbar(getState, ui);
   document.addEventListener('tool-changed', () => {
     acikKategori = null;
     renderSubbar(getState, ui);
@@ -126,33 +150,52 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
   }
 }
 
+function setStat(anahtar: string, metin: string): void {
+  const el = topEl.querySelector<HTMLElement>(`[data-st="${anahtar}"]`);
+  if (el && el.textContent !== metin) el.textContent = metin;
+}
+
+let sonBildirimHtml = '';
+
 /** Her karede çağrılır ama içerik ~saniyede 4 kez güncellenir (main.ts ayarlar). */
 export function refreshHud(state: GameState, ui: UIState): void {
-  const ogrenci = state.agents.filter((a) => a.kind === 'ogrenci').length;
-  const akademisyen = state.agents.filter((a) => a.kind === 'akademisyen').length;
-  const kutSev = libraryLevel(state);
-
-  topEl.innerHTML = `
-    <span class="stat para">${formatMoney(state.para)}</span>
-    <span class="stat">⭐ ${Math.round(state.prestij)}</span>
-    <span class="stat">🎓 ${ogrenci}</span>
-    <span class="stat">👩‍🏫 ${akademisyen}</span>
-    <span class="stat">📚 Ktp. Sv. ${kutSev}</span>
-    <span class="stat tarih">Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}</span>
-    <span class="hiz-grup">
-      <button class="hiz ${state.hiz === 0 ? 'active' : ''}" data-hiz="0">⏸</button>
-      <button class="hiz ${state.hiz === 1 ? 'active' : ''}" data-hiz="1">▶</button>
-      <button class="hiz ${state.hiz === 2 ? 'active' : ''}" data-hiz="2">▶▶</button>
-      <button class="hiz ${state.hiz === 4 ? 'active' : ''}" data-hiz="4">▶▶▶</button>
-    </span>
-  `;
-  for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
-    b.addEventListener('click', () => { state.hiz = Number(b.dataset.hiz); });
+  let ogrenci = 0, akademisyen = 0;
+  for (const a of state.agents) {
+    if (a.kind === 'ogrenci') ogrenci++;
+    else if (a.kind === 'akademisyen') akademisyen++;
   }
 
-  // bildirimler (son 6)
+  setStat('para', formatMoney(state.para));
+  setStat('prestij', `⭐ ${Math.round(state.prestij)}`);
+  setStat('ogrenci', `🎓 ${ogrenci}`);
+  setStat('akademisyen', `👩‍🏫 ${akademisyen}`);
+  setStat('kutuphane', `📚 Ktp. Sv. ${libraryLevel(state)}`);
+  setStat('tarih', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}`);
+  for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
+    b.classList.toggle('active', Number(b.dataset.hiz) === state.hiz);
+  }
+
+  // bildirimler (son 6) — değişmediyse DOM'a dokunma
   const son = state.notices.slice(-6);
-  noticesEl.innerHTML = son
-    .map((n) => `<div class="notice ${n.kind}">${n.metin}</div>`)
-    .join('');
+  const html = son.map((n) => `<div class="notice ${n.kind}">${escapeHtml(n.metin)}</div>`).join('');
+  if (html !== sonBildirimHtml) {
+    sonBildirimHtml = html;
+    noticesEl.innerHTML = html;
+  }
+
+  // seçili oda bilgisi açıkken (kategori kapalı) durumu tazele — butonsuz içerik,
+  // yeniden çizim tıklama yutmaz
+  if (ui.selectedRoomId !== -1 && subbarKategoriYok()) {
+    renderSubbarRef?.();
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+let renderSubbarRef: (() => void) | null = null;
+
+function subbarKategoriYok(): boolean {
+  return acikKategori === null;
 }

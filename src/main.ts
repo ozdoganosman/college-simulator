@@ -36,6 +36,18 @@ attachInput(canvas, () => state, cam, ui);
 initHud(() => state, ui);
 initPanels(() => state);
 
+// Konsoldan / otomatik testlerden erişim için debug kancası
+import * as build from './game/build';
+import * as departments from './game/departments';
+import * as academics from './game/academics';
+import * as research from './game/research';
+import * as agents from './game/agents';
+(window as unknown as Record<string, unknown>).__sim = {
+  state: () => state,
+  advance: (dk: number) => advance(state, dk),
+  build, departments, academics, research, agents,
+};
+
 let sonZaman = performance.now();
 let hudSayac = 0;
 
