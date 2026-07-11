@@ -13,6 +13,7 @@
 import { GameState, Student } from '../core/types';
 import { formatMoney } from '../core/util';
 import { BALANCE } from '../data/balance';
+import { strategyDef } from '../data/strategies';
 import { addPrestij, earn, notify } from './state';
 
 /**
@@ -23,6 +24,7 @@ export function ogrenciGunlukKazanc(state: GameState, s: Student): number {
   const n = s.nitelik;
   let kazanc = n.pratik * 6 + n.influencer * 5 + (n.muhendis + n.artist + n.filozof) * 2;
   if (state.strategies.includes('teknokent')) kazanc *= 1.5;
+  if (state.vizyon === 'girisim') kazanc *= 1.35;
   return Math.round(kazanc);
 }
 
@@ -41,7 +43,9 @@ export function dailyEconomy(state: GameState): void {
   for (const f of state.floor) if (f !== null) doseliKare++;
   const bakim = doseliKare * BALANCE.BAKIM_GIDERI_TILE;
 
-  const subvansiyon = state.strategies.includes('yemek_subvansiyon') ? 2000 : 0;
+  // aktif politikaların günlük bakım giderleri (yemek sübvansiyonu dahil)
+  let politikaGideri = 0;
+  for (const id of state.strategies) politikaGideri += strategyDef(id).gunlukGider;
   const mentorlukGider = state.mentorluk ? BALANCE.MENTORLUK_GIDER : 0;
   const malzeme = Math.round(state.gunlukUretim * BALANCE.YEMEK_MALZEME);
   state.gunlukUretim = 0;
@@ -67,7 +71,7 @@ export function dailyEconomy(state: GameState): void {
     }
   }
 
-  const toplam = maas + bakim + subvansiyon + mentorlukGider + malzeme;
+  const toplam = maas + bakim + politikaGideri + mentorlukGider + malzeme;
   if (toplam <= 0) return;
 
   state.para -= toplam; // borca girebilir — spend kullanma

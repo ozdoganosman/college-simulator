@@ -28,11 +28,12 @@
  *  - Araştırma XP'si research.ts içinde ekleniyor; burada sadece eşik kontrolü.
  */
 import { AcademicRank, Candidate, GameState, RANK_LABEL } from '../core/types';
-import { clamp, formatMoney, newId, pick, randInt, randRange } from '../core/util';
+import { chance, clamp, formatMoney, newId, pick, randInt, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
 import { removeAgent, spawnAcademic } from './agents';
-import { ASISTAN_LIMIT, asistanlari, otoDersSec, rebuildDersProgrami } from './schedule';
+import { ASISTAN_LIMIT, asistanlari, dersYukuVerimi, otoDersSec, rebuildDersProgrami } from './schedule';
+import { siralama } from './rivals';
 import { transferBonusCarpani } from './rivals';
 
 const ALANLAR = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
@@ -76,6 +77,7 @@ export function refreshCandidatePools(state: GameState): void {
       maas: Math.round(BALANCE.MAAS.arsgor * randRange(state, 0.85, 1.15)),
       bonus: 0,
       kurum: '',
+      yas: randInt(state, 27, 38),
     });
   }
   state.kpssPool = [...mezunlarimiz, ...kpss];
@@ -104,6 +106,7 @@ export function refreshCandidatePools(state: GameState): void {
       maas: Math.round(BALANCE.MAAS[rank] * randRange(state, 1.1, 1.5)),
       bonus: Math.round((randRange(state, bonusMin, bonusMax) * carpan) / 1000) * 1000,
       kurum,
+      yas: randInt(state, 38, 58),
     });
   }
   state.transferPool = transfer;
@@ -139,7 +142,7 @@ export function hireFromPool(
     if (!spend(state, aday.bonus, 'transfer imza bonusu')) return false;
   }
 
-  const yeni = spawnAcademic(state, aday.ad, deptId, aday.rank, aday.alan, aday.egitim, aday.arastirma, aday.maas);
+  const yeni = spawnAcademic(state, aday.ad, deptId, aday.rank, aday.alan, aday.egitim, aday.arastirma, aday.maas, aday.yas);
   if (aday.mezunumuz) {
     // akademik soyağacı: kendi mezunumuz kadroya döndü — döngü tamamlandı
     yeni.mezunumuz = true;
@@ -214,9 +217,79 @@ export function fireAcademic(state: GameState, academicId: number): boolean {
   return true;
 }
 
-export function dailyAcademicUpdate(state: GameState): void {
+/** Hocanın kıdemine göre beklediği günlük maaş. */
+export function beklenenMaas(a: { rank: AcademicRank; xp: number }): number {
+  return Math.round(BALANCE.MAAS[a.rank] * (1 + Math.min(0.5, a.xp / 800)));
+}
+
+/** Zam ver: maaş ×ZAM_ORANI, memnuniyet sıçrar. */
+export function zamVer(state: GameState, academicId: number): boolean {
+  const a = state.agents.find((x) => x.id === academicId);
+  if (!a || a.kind !== 'akademisyen') return false;
+  a.maas = Math.round(a.maas * BALANCE.ZAM_ORANI);
+  a.memnuniyet = clamp(a.memnuniyet + 18, 0, 100);
+  notify(state, `💰 ${a.ad}'a zam verildi: günlük ${formatMoney(a.maas)} — morali yükseldi.`, 'iyi');
+  return true;
+}
+
+/**
+ * Dönem başı memnuniyet kontrolü: çok mutsuz hocalar istifa edip
+ * sıralamadaki güçlü bir rakibe transfer olur (game.ts çağırır).
+ */
+export function donemIstifaKontrol(state: GameState): void {
+  const mutsuzlar = state.agents.filter(
+    (a) => a.kind === 'akademisyen' && a.memnuniyet < BALANCE.ISTIFA_ESIK,
+  );
+  for (const a of mutsuzlar) {
+    if (a.kind !== 'akademisyen') continue;
+    if (!chance(state, BALANCE.ISTIFA_OLASILIK)) continue;
+    const rakipler = siralama(state).filter((s) => !s.oyuncu).slice(0, 6);
+    const kurum = rakipler.length > 0 ? pick(state, rakipler).ad : 'rakip bir üniversite';
+    const hedef = state.rakipler.find((r) => r.ad === kurum);
+    if (hedef) hedef.prestij = Math.min(1000, hedef.prestij + 5);
+    const etiket = `${RANK_LABEL[a.rank]} ${a.ad}`;
+    removeAgent(state, a.id);
+    rebuildDersProgrami(state);
+    addPrestij(state, -3);
+    notify(state, `📤 ${etiket} İSTİFA ETTİ — ${kurum}'a transfer oldu! (düşük memnuniyet; prestij -3)`, 'kotu');
+  }
+}
+
+/** Yıl dönümü: herkes 1 yaş alır; emeklilik yaşına gelen onurla ayrılır. */
+export function yillikYaslanma(state: GameState): void {
+  const emekliler: string[] = [];
   for (const a of state.agents) {
     if (a.kind !== 'akademisyen') continue;
+    a.yas++;
+    if (a.yas >= BALANCE.EMEKLILIK_YASI) emekliler.push(`${RANK_LABEL[a.rank]} ${a.ad}`);
+  }
+  for (const ad of emekliler) {
+    const a = state.agents.find(
+      (x) => x.kind === 'akademisyen' && `${RANK_LABEL[x.rank]} ${x.ad}` === ad,
+    );
+    if (!a || a.kind !== 'akademisyen') continue;
+    if (a.yetistirdigi > 0) addPrestij(state, 2); // onurlu bir kariyer
+    removeAgent(state, a.id);
+    rebuildDersProgrami(state);
+    notify(state, `👋 ${ad} ${BALANCE.EMEKLILIK_YASI} yaşında emekliye ayrıldı — kampüs kendisine minnettar.`, 'bilgi');
+  }
+}
+
+export function dailyAcademicUpdate(state: GameState): void {
+  const zorCarpan = state.zorluk === 'zor' ? 1.3 : 1;
+  for (const a of state.agents) {
+    if (a.kind !== 'akademisyen') continue;
+    // --- memnuniyet sürüklenmesi: maaş beklentisi + ders yükü + okulun hali ---
+    let d = 0;
+    const oran = a.maas / beklenenMaas(a);
+    if (oran < 0.95) d -= (0.95 - oran) * 4;      // maaş beklentinin altında
+    else if (oran > 1.1) d += 0.15;               // cömert maaş
+    if (dersYukuVerimi(state, a) < 0.7) d -= 0.25; // aşırı ders yükü
+    if (asistanlari(state, a.id).length > 0) d += 0.1;
+    if (state.para < 0) d -= 0.4;                  // batan gemide kimse kalmaz
+    if (state.prestij >= 200) d += 0.1;
+    if (d < 0) d *= zorCarpan;
+    a.memnuniyet = clamp(a.memnuniyet + d, 0, 100);
     const yeni = SONRAKI_RANK[a.rank];
     if (yeni === null) continue;
     const esik = BALANCE.TERFI[yeni];
@@ -226,6 +299,7 @@ export function dailyAcademicUpdate(state: GameState): void {
     }
     a.rank = yeni;
     a.maas = Math.max(a.maas, BALANCE.MAAS[yeni]);
+    a.memnuniyet = clamp(a.memnuniyet + 15, 0, 100); // terfi moral kaynağıdır
     a.egitim = clamp(a.egitim + randInt(state, 2, 5), 0, 100);
     a.arastirma = clamp(a.arastirma + randInt(state, 2, 5), 0, 100);
     addPrestij(state, BALANCE.PRESTIJ.terfi);

@@ -1,5 +1,5 @@
 import {
-  Academic, AcademicRank, Alan, GameState, GUN_DAKIKA, MAP_H, donemGunu, donemIndex,
+  Academic, AcademicRank, Alan, GameState, GUN_DAKIKA, MAP_H, donemGunu, donemIndex, yil,
 } from '../core/types';
 import { AYARLAR } from '../core/settings';
 import { validateRooms } from '../core/grid';
@@ -16,6 +16,8 @@ import { rebuildDersProgrami, tumunuOtoSec } from './schedule';
 import { dailyEconomy } from './economy';
 import { kurRakipler, rakipleriGelistir, yilSonuHesapla } from './rivals';
 import { yillikMezunGuncelle } from './alumni';
+import { donemIstifaKontrol, yillikYaslanma } from './academics';
+import { kontrolBasarimlar } from './goals';
 import { addPrestij, notify, saveGame } from './state';
 
 /** Simülasyonu dtMin oyun-dakikası ilerletir (büyük adımları böler). */
@@ -63,6 +65,7 @@ function endOfDay(state: GameState): void {
   // oyuncu hazır olunca 'Yerleştirmeyi Başlat' butonuna basar.
   if (donemGunu(state.gun) === 1) {
     semesterEnd(state);
+    donemIstifaKontrol(state); // mutsuz hocalar rakiplere gidebilir
     refreshCandidatePools(state);
     donemDestegi(state);
     if (donemIndex(state.gun) % 2 === 0) {
@@ -80,12 +83,28 @@ function endOfDay(state: GameState): void {
         state.yilBasi = { mezun: state.toplamMezun, yayin: state.publications.length };
         rakipleriGelistir(state); // rakipler de boş durmuyor
         yillikMezunGuncelle(state); // mezun kariyerleri + dernek bağışı + haberler
+        yillikYaslanma(state); // yaş +1; emeklilik yaşına gelen ayrılır
       }
       if (!state.yksBekliyor) {
         state.yksBekliyor = true;
         notify(state, '🎓 YKS dönemi açıldı! Hazırlıkların bitince yerleştirmeyi başlat.', 'odul');
       }
     }
+  }
+
+  // Başarımlar + iflas takibi
+  kontrolBasarimlar(state);
+  if (state.para < 0) {
+    state.borcGunleri++;
+    const limit = BALANCE.IFLAS_GUN[state.zorluk];
+    if (state.borcGunleri >= limit) {
+      state.oyunBitti = `Üniversite ${limit} gün boyunca borç içinde yüzdü — YÖK mali denetim sonunda KAYYUM ATADI. Rektörlük maceran ${yil(state.gun)}. yılda sona erdi.`;
+      state.hiz = 0;
+    } else if (state.borcGunleri === Math.ceil(limit / 2)) {
+      notify(state, `🚨 YÖK MALİ DENETİM UYARISI: ${limit - state.borcGunleri} gün içinde bütçeyi artıya çıkarmazsan üniversiteye kayyum atanacak!`, 'kotu');
+    }
+  } else {
+    state.borcGunleri = 0;
   }
 
   if (AYARLAR.otomatikKayit) saveGame(state);

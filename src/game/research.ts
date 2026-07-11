@@ -132,6 +132,10 @@ export function updateResearch(state: GameState, dtMin: number): void {
   let stratCarpan = 1;
   if (state.strategies.includes('tubitak')) stratCarpan *= 1.25;
   if (state.strategies.includes('arastirma_universitesi')) stratCarpan *= 1.30;
+  // üniversite vizyonu (birbirini dışlayan eksen)
+  if (state.vizyon === 'arastirma') stratCarpan *= 1.25;
+  else if (state.vizyon === 'egitim') stratCarpan *= 0.88;
+  else if (state.vizyon === 'girisim') stratCarpan *= 0.95;
 
   // Geçerli lab + kütüphanedeki bilgisayarlar araştırmayı hızlandırır
   const bilgisayarOdalar = new Set<number>();

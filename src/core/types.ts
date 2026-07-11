@@ -213,6 +213,10 @@ export interface Academic extends AgentBase {
   uluslararasiMakale: number;
   /** danışmanlığında doktorasını bitiren öğrenci sayısı (akademik soyağacı) */
   yetistirdigi: number;
+  /** 0-100 iş memnuniyeti — düşerse zam ister, istifa edip rakibe gidebilir */
+  memnuniyet: number;
+  /** yaş — her yıl artar, 67'de emekli olur */
+  yas: number;
   /** kendi doktora programımızdan yetişti mi */
   mezunumuz?: boolean;
   /** doktora danışmanının adı (soyağacı gösterimi) */
@@ -400,6 +404,8 @@ export interface Candidate {
   mezunumuz?: boolean;
   /** doktora danışmanının adı */
   danismanAd?: string;
+  /** aday yaşı */
+  yas?: number;
 }
 
 // --- Strateji ----------------------------------------------------------------
@@ -408,11 +414,16 @@ export interface StrategyDef {
   id: string;
   ad: string;
   aciklama: string;
-  maliyet: number;        // ₺
+  maliyet: number;        // ₺ (tek seferlik kurulum)
+  /** günlük bakım gideri ₺ — politika aktifken her gün düşer */
+  gunlukGider: number;
   prestijGereksinimi: number;
   /** ön koşul strateji id'leri */
   onkosul: string[];
 }
+
+/** Üniversite vizyonu — birbirini dışlayan eksen (Strateji panelinden seçilir). */
+export type Vizyon = 'arastirma' | 'egitim' | 'girisim';
 
 // --- Bildirim ----------------------------------------------------------------
 
@@ -482,6 +493,16 @@ export interface GameState {
   acKalanBugun: number;
   /** dün aç kalan (danışman uyarısı) */
   dunAcKalan: number;
+  /** zorluk seviyesi (yeni oyunda seçilir) */
+  zorluk: 'kolay' | 'normal' | 'zor';
+  /** üst üste borçta geçen gün — limit aşılırsa YÖK kayyum atar (oyun biter) */
+  borcGunleri: number;
+  /** oyun bitti mi (kayyum gerekçesi; null = devam) */
+  oyunBitti: string | null;
+  /** kazanılmış başarım id'leri */
+  basarimlar: string[];
+  /** üniversite vizyonu (birbirini dışlayan strateji ekseni) */
+  vizyon: Vizyon | null;
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */

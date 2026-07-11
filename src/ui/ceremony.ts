@@ -20,8 +20,43 @@ export function isCeremonyOpen(): boolean {
 /** main.ts her çeyrek saniyede çağırır; bekleyen tören varsa başlatır. */
 export function checkCeremony(state: GameState): void {
   if (acikMi) return;
-  if (state.yilSonu) openYilSonu(state);
+  if (state.oyunBitti) openGameOver(state);
+  else if (state.yilSonu) openYilSonu(state);
   else if (state.yerlestirme) open(state);
+}
+
+/** Oyun sonu (kayyum) ekranı — kapatılamaz, tek çıkış yeni oyun. */
+let gameOverAcik = false;
+function openGameOver(state: GameState): void {
+  if (!root || gameOverAcik) return;
+  acikMi = true;
+  gameOverAcik = true;
+
+  const mezun = state.toplamMezun;
+  const yilNo = Math.floor((state.gun - 1) / 40) + 1;
+  const basarim = state.basarimlar.length;
+  root.innerHTML = `
+    <div class="toren-perde" style="background:radial-gradient(ellipse at 50% 30%, rgba(70,20,20,0.96), rgba(12,6,6,0.98))">
+      <div class="toren-kart">
+        <div class="toren-ust" style="color:#f4a09c">⚖️ YÖK KAYYUM ATADI</div>
+        <div class="toren-yil" style="color:#f4a09c">OYUN BİTTİ</div>
+        <div class="toren-ozet" style="animation-delay:0.5s">
+          ${state.oyunBitti ?? ''}
+          <br><br>📊 <b>${yilNo}</b> yıl dayandın · 🎓 <b>${mezun}</b> mezun verdin ·
+          🏅 <b>${basarim}</b> başarım kazandın · sıralama geçmişi:
+          <b>${state.siraGecmisi.join(' → ') || '—'}</b>
+        </div>
+        <button class="menu-btn toren-btn" id="toren-yenioyun" style="animation-delay:1.2s">
+          🔄 Yeni Oyuna Başla
+        </button>
+      </div>
+    </div>`;
+  root.classList.add('acik');
+  document.getElementById('toren-yenioyun')?.addEventListener('click', () => {
+    // kaydı temizle ve baştan başla — kayyum sonrası dönüş yok
+    try { localStorage.removeItem('universite-simulatoru-save'); } catch { /* yoksay */ }
+    location.reload();
+  });
 }
 
 function sira(n: number): string {

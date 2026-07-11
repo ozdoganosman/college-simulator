@@ -56,8 +56,15 @@ initAdvisor();
 initCeremony();
 initMenu({
   getState: () => state,
-  yeniOyun: () => {
+  yeniOyun: (zorluk) => {
     const s = createInitialState();
+    s.zorluk = zorluk;
+    if (zorluk === 'kolay') {
+      s.para = 4_000_000;
+      s.prestij = 20;
+    } else if (zorluk === 'zor') {
+      s.para = 1_500_000;
+    }
     initNewGame(s);
     fastForwardTutorial(s);
     swapState(s);
@@ -90,7 +97,7 @@ function frame(t: number): void {
   const gecenSn = Math.min(0.25, (t - sonZaman) / 1000);
   sonZaman = t;
 
-  if (state.hiz > 0 && !isMenuOpen() && !isCeremonyOpen()) {
+  if (state.hiz > 0 && !state.oyunBitti && !isMenuOpen() && !isCeremonyOpen()) {
     advance(state, gecenSn * BALANCE.DAKIKA_SANIYE * state.hiz);
   }
 

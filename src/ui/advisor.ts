@@ -39,7 +39,15 @@ function onerileriHesapla(state: GameState): Oneri[] {
 
   // --- kritik ekonomi ---
   if (state.para < 0) {
-    ekle('borc', '💸 Bütçe AÇIKTA — prestij eriyor!', 'Para eksiye düştü: her gün prestij kaybı. Gider kalemlerini Raporlar panelinde incele; gerekirse personel azalt.', 'raporlar');
+    const limit = BALANCE.IFLAS_GUN[state.zorluk];
+    ekle('borc', `🚨 BORÇTASIN — kayyuma ${limit - state.borcGunleri} gün!`, `Bütçe ${state.borcGunleri} gündür açıkta. ${limit} güne ulaşırsa YÖK kayyum atar ve OYUN BİTER. Gideri kıs: politika durdur, personel azalt, YKS ödeneği bekle.`, 'raporlar');
+  }
+
+  const mutsuzHoca = state.agents.filter(
+    (a) => a.kind === 'akademisyen' && a.memnuniyet < 50,
+  ).length;
+  if (mutsuzHoca > 0) {
+    ekle('hoca-mutsuz', `😠 ${mutsuzHoca} hoca mutsuz — istifa riski!`, 'Memnuniyeti 35 altına düşen hoca dönem başında istifa edip RAKİBE transfer olabilir. Kadro panelinden Zam Ver ya da ders yükünü azalt (asistan ata).', 'kadro');
   }
 
   if (state.dunAcKalan > 0) {

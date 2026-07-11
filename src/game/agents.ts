@@ -294,7 +294,9 @@ function buildCtx(state: GameState, dk: number): Ctx {
 
   return {
     dk,
-    ogrenmeCarpan: 1 + libraryLevel(state) * BALANCE.KUTUPHANE_OGRENME_BONUS,
+    ogrenmeCarpan: (1 + libraryLevel(state) * BALANCE.KUTUPHANE_OGRENME_BONUS)
+      * (state.vizyon === 'egitim' ? 1.18 : state.vizyon === 'arastirma' ? 0.92
+        : state.vizyon === 'girisim' ? 0.95 : 1),
     mutfak,
     teacherRooms,
     teacherSkill,
@@ -1048,7 +1050,7 @@ export function gnoHesapla(s: Student): number | null {
 
 export function spawnAcademic(
   state: GameState, ad: string, deptId: number, rank: AcademicRank, alan: Academic['alan'],
-  egitim: number, arastirma: number, maas: number,
+  egitim: number, arastirma: number, maas: number, yas?: number,
 ): Academic {
   const a: Academic = {
     id: newId(state),
@@ -1072,6 +1074,8 @@ export function spawnAcademic(
     makale: 0,
     uluslararasiMakale: 0,
     yetistirdigi: 0,
+    memnuniyet: randInt(state, 62, 80),
+    yas: yas ?? randInt(state, 30, 45),
   };
   state.agents.push(a);
   return a;

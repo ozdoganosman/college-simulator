@@ -10,11 +10,11 @@ import { loadGame } from '../game/state';
 import { invalidateGround } from './renderer';
 import { closePanel } from './panels';
 
-type MenuMode = 'ana' | 'oyunici' | 'yukle' | 'kaydet' | 'secenekler';
+type MenuMode = 'ana' | 'oyunici' | 'yukle' | 'kaydet' | 'secenekler' | 'zorluk';
 
 interface MenuCtx {
   getState: () => GameState;
-  yeniOyun: () => void;
+  yeniOyun: (zorluk: GameState['zorluk']) => void;
   yukleState: (s: GameState) => void;
 }
 
@@ -80,7 +80,13 @@ function onClick(e: Event): void {
       if (geriMode === 'oyunici' || ilerlemeVar) {
         if (!confirm('Yeni oyun başlatılsın mı? Kaydedilmemiş ilerleme kaybolur (slot kayıtları durur).')) break;
       }
-      ctx.yeniOyun();
+      mode = 'zorluk'; // önce zorluk seçilir
+      render();
+      break;
+    }
+    case 'zorluk-sec': {
+      const zorluk = (hedef.dataset.zorluk ?? 'normal') as GameState['zorluk'];
+      ctx.yeniOyun(zorluk);
       kapat();
       break;
     }
@@ -185,6 +191,19 @@ function render(): void {
       ${buton('⚙️ Seçenekler', 'secenekler')}
       ${buton('✨ Yeni Oyun', 'yeni-oyun')}
       ${buton('🏠 Ana Menü', 'ana-menu')}
+    `;
+  } else if (mode === 'zorluk') {
+    const kart = (z: string, ad: string, detay: string) => `
+      <button class="menu-btn" data-menu="zorluk-sec" data-zorluk="${z}" style="text-align:left">
+        <b>${ad}</b><br><small style="font-weight:400;opacity:0.85">${detay}</small>
+      </button>`;
+    icerik = `
+      <div class="menu-baslik kucuk">Zorluk Seç</div>
+      <div class="menu-alt">İflas limiti: bütçe bu kadar gün üst üste borçta kalırsa YÖK kayyum atar — oyun biter!</div>
+      ${kart('kolay', '🟢 Kolay — Vakıf Desteği', '₺4.000.000 başlangıç · 20 prestij · iflas limiti 45 gün')}
+      ${kart('normal', '🟡 Normal — Devlet Üniversitesi', '₺2.500.000 başlangıç · 0 prestij · iflas limiti 30 gün')}
+      ${kart('zor', '🔴 Zor — Taşra Kampüsü', '₺1.500.000 başlangıç · 0 prestij · iflas limiti 20 gün · hocalar daha çabuk küser')}
+      ${buton('← Geri', 'geri', false)}
     `;
   } else if (mode === 'kaydet' || mode === 'yukle') {
     const kaydetMi = mode === 'kaydet';

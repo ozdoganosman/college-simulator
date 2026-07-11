@@ -48,6 +48,11 @@ export function createInitialState(): GameState {
     gunlukUretim: 0,
     acKalanBugun: 0,
     dunAcKalan: 0,
+    zorluk: 'normal',
+    borcGunleri: 0,
+    oyunBitti: null,
+    basarimlar: [],
+    vizyon: null,
 
     nextId: 1,
     insaatSurumu: 0,
@@ -136,6 +141,11 @@ export function eskiKayitUyumu(s: GameState): void {
   if (typeof s.gunlukUretim !== 'number') s.gunlukUretim = 0;
   if (typeof s.acKalanBugun !== 'number') s.acKalanBugun = 0;
   if (typeof s.dunAcKalan !== 'number') s.dunAcKalan = 0;
+  if (s.zorluk !== 'kolay' && s.zorluk !== 'zor') s.zorluk = 'normal';
+  if (typeof s.borcGunleri !== 'number') s.borcGunleri = 0;
+  if (s.oyunBitti === undefined) s.oyunBitti = null;
+  if (!Array.isArray(s.basarimlar)) s.basarimlar = [];
+  if (s.vizyon === undefined) s.vizyon = null;
   for (const r of s.rakipler) {
     if (typeof r.istihdam !== 'number') r.istihdam = 60 + (r.ad.length % 20);
     if (!r.sehir) r.sehir = 'Ankara';
@@ -165,6 +175,8 @@ export function eskiKayitUyumu(s: GameState): void {
         dersSecimiEksik = true;
       }
       if (typeof a.yetistirdigi !== 'number') a.yetistirdigi = 0;
+      if (typeof a.memnuniyet !== 'number') a.memnuniyet = 70;
+      if (typeof a.yas !== 'number') a.yas = 35 + (a.id % 20);
     } else if (a.kind === 'ogrenci') {
       if (typeof a.egilim !== 'number') a.egilim = 70 + ((a.id * 37) % 61); // 70-130
       if (typeof a.kaliteToplam !== 'number') a.kaliteToplam = 0;

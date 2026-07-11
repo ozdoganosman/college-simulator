@@ -28,8 +28,10 @@ import {
   toggleGradProgram,
 } from '../game/departments';
 import {
-  asistanAta, asistanBirak, assignAcademicDept, fireAcademic, hireFromPool, officeCapacity,
+  asistanAta, asistanBirak, assignAcademicDept, beklenenMaas, fireAcademic, hireFromPool,
+  officeCapacity, zamVer,
 } from '../game/academics';
+import { BASARIMLAR } from '../game/goals';
 import { cancelProject, startProject } from '../game/research';
 import { ogrenciGunlukKazanc } from '../game/economy';
 import { rakipBilgi, siralama } from '../game/rivals';
@@ -43,7 +45,9 @@ import { BALANCE } from '../data/balance';
 import { DEPT_DEFS, bolumBaskinAlan, deptDef } from '../data/departments';
 import { ROOM_DEFS, ROOM_LIST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
-import { STRATEGY_DEFS, strategyDef } from '../data/strategies';
+import {
+  STRATEGY_DEFS, VIZYONLAR, VIZYON_DEGISIM_MALIYET, VIZYON_MALIYET, strategyDef,
+} from '../data/strategies';
 
 export type PanelName = 'bolumler' | 'kadro' | 'program' | 'arastirma' | 'kutuphane' | 'mezunlar' | 'strateji' | 'raporlar' | 'yardim';
 
@@ -273,6 +277,21 @@ function onPanelClick(e: Event): void {
     }
     case 'akademisyen-cikar':
       fireAcademic(state, Number(id));
+      break;
+    case 'zam-ver':
+      zamVer(state, Number(id));
+      break;
+    case 'vizyon-sec': {
+      const maliyet = state.vizyon === null ? VIZYON_MALIYET : VIZYON_DEGISIM_MALIYET;
+      if (state.vizyon === id) break;
+      if (!spend(state, maliyet, 'üniversite vizyonu')) break;
+      state.vizyon = id as GameState['vizyon'];
+      notify(state, `🧭 Üniversite vizyonu belirlendi: ${VIZYONLAR.find((v) => v.id === id)?.ad ?? id}`, 'odul');
+      break;
+    }
+    case 'strateji-durdur':
+      state.strategies = state.strategies.filter((s) => s !== id);
+      notify(state, `⏹️ ${strategyDef(id).ad} durduruldu — günlük gideri kesildi (yeniden başlatmak tam maliyet ister).`, 'bilgi');
       break;
     case 'personel-al':
       hireStaff(state, id as 'asci' | 'temizlikci');
@@ -522,8 +541,17 @@ function kadroGovde(state: GameState): string {
       const verimRenk = verim >= 90 ? '#9fd3a8' : verim >= 75 ? '#f0c674' : '#f4a09c';
       const soyagaci = (a.mezunumuz ? `<span class="rozet" style="color:#ffd166" title="Kendi doktora programımızdan yetişti${a.danismanAd ? ` — danışmanı: ${esc(a.danismanAd)}` : ''}">🎓 mezunumuz</span>` : '')
         + (a.yetistirdigi > 0 ? `<span class="rozet" style="color:#9fd3a8" title="Danışmanlığında ${a.yetistirdigi} doktora öğrencisi mezun oldu — akademik soyağacı">🌳 ${a.yetistirdigi}</span>` : '');
+      const m = Math.round(a.memnuniyet);
+      const mEmoji = m >= 65 ? '😊' : m >= 45 ? '😐' : '😠';
+      const mRenk = m >= 65 ? '#9fd3a8' : m >= 45 ? '#f0c674' : '#f4a09c';
+      const beklenen = beklenenMaas(a);
+      const zamGerek = a.maas < beklenen;
+      const memnuniyetHucre = `<span title="Memnuniyet %${m} · yaş ${a.yas} (${BALANCE.EMEKLILIK_YASI}'de emekli)&#10;Beklediği maaş: ${formatMoney(beklenen)}/gün${zamGerek ? ' — beklentinin ALTINDA!' : ''}&#10;Düşük memnuniyet (<${BALANCE.ISTIFA_ESIK}) dönem başında İSTİFA riskidir: rakibe transfer olur!">
+        <b style="color:${mRenk}">${mEmoji} %${m}</b></span>
+        ${m < 55 ? `<br><button class="eylem" data-action="zam-ver" data-id="${a.id}" title="Maaş ×${BALANCE.ZAM_ORANI} (yeni: ${formatMoney(Math.round(a.maas * BALANCE.ZAM_ORANI))}/gün) — memnuniyet +18">Zam Ver</button>` : ''}`;
       return `<tr>
-        <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b> <span class="rozet" title="${ALAN_META[a.alan].tanim}">${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>${soyagaci}</td>
+        <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b> <small style="color:#8f9ab0">(${a.yas})</small> <span class="rozet" title="${ALAN_META[a.alan].tanim}">${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>${soyagaci}</td>
+        <td>${memnuniyetHucre}</td>
         <td><select data-action="bolum-sec" data-id="${a.id}">${bolumSecenekleri(state, a.deptId)}</select></td>
         <td title="${dersSayisi} ders, ${asistan} asistan — ders kalitesi ve araştırma hızı çarpanı (📅 Program panelinden yönetilir)">
           <b style="color:${verimRenk}">⚡ %${verim}</b><br><small>${dersSayisi}📚 ${asistan}👥</small></td>
@@ -537,7 +565,7 @@ function kadroGovde(state: GameState): string {
       </tr>`;
     }).join('');
     kadroTablo = `<table>
-      <tr><th>Akademisyen</th><th>Bölüm</th><th>Yük</th><th>Eğitim</th><th>Arş.</th><th>XP</th>
+      <tr><th>Akademisyen</th><th>Moral</th><th>Bölüm</th><th>Yük</th><th>Eğitim</th><th>Arş.</th><th>XP</th>
         <th>Makale</th><th>Maaş/gün</th><th></th></tr>
       ${satirlar}
     </table>`;
@@ -927,30 +955,61 @@ function stratejiGovde(state: GameState): string {
     : '<p class="aciklama" style="color:#f4a09c">⚠ Strateji için Rektörlük kurmalısınız'
       + ' (geçerli bir Rektörlük odası gerekir).</p>';
 
+  // --- Vizyon ekseni: birbirini dışlayan kalıcı yön ---
+  const vizyonKartlari = VIZYONLAR.map((v) => {
+    const secili = state.vizyon === v.id;
+    const maliyet = state.vizyon === null ? VIZYON_MALIYET : VIZYON_DEGISIM_MALIYET;
+    return `<tr${secili ? ' style="background:rgba(255,209,102,0.1)"' : ''}>
+      <td><b>${esc(v.ad)}</b><div class="aciklama" style="margin:2px 0 0">${esc(v.etki)}</div></td>
+      <td><small style="color:#9fd3a8">✚ ${esc(v.artilar)}</small><br><small style="color:#f4a09c">− ${esc(v.eksiler)}</small></td>
+      <td>${secili
+    ? '<span class="rozet" style="background:#6b5a1f;color:#ffe9b3">🧭 SEÇİLİ</span>'
+    : `<button class="eylem" data-action="vizyon-sec" data-id="${v.id}"
+        ${!rektorlukVar || state.para < maliyet ? `disabled title="${!rektorlukVar ? 'Rektörlük gerekli' : 'Bütçe yetersiz'}"` : ''}>
+        Seç (${formatMoney(maliyet)})</button>`}</td>
+    </tr>`;
+  }).join('');
+
   const satirlar = STRATEGY_DEFS.map((def) => {
     const onkosul = def.onkosul.length === 0
       ? '—'
       : def.onkosul.map((o) => esc(strategyDef(o).ad)).join(', ');
     let islem: string;
     if (state.strategies.includes(def.id)) {
-      islem = '<span class="rozet" style="background:#2e5d3a">✔ Alındı</span>';
+      islem = `<span class="rozet" style="background:#2e5d3a">✔ AKTİF</span>
+        <button class="eylem tehlike" data-action="strateji-durdur" data-id="${def.id}"
+          title="Politikayı durdur: günlük gideri kesilir, etkisi kalkar. Yeniden başlatmak tam kurulum maliyeti ister.">Durdur</button>`;
     } else {
       const eksik = stratejiEksikleri(state, def);
       islem = `<button class="eylem" data-action="strateji-al" data-id="${def.id}"
-        ${eksik.length > 0 ? `disabled title="${esc(eksik.join(', '))}"` : ''}>Satın Al</button>`;
+        ${eksik.length > 0 ? `disabled title="${esc(eksik.join(', '))}"` : ''}>Başlat</button>`;
     }
     return `<tr>
       <td><b>${esc(def.ad)}</b><div class="aciklama" style="margin:2px 0 0">${esc(def.aciklama)}</div></td>
       <td>${formatMoney(def.maliyet)}</td>
+      <td>${def.gunlukGider > 0 ? `${formatMoney(def.gunlukGider)}/gün` : '—'}</td>
       <td>${def.prestijGereksinimi > 0 ? `⭐ ${def.prestijGereksinimi}` : '—'}</td>
       <td>${onkosul}</td>
       <td>${islem}</td>
     </tr>`;
   }).join('');
 
+  const aktifGider = state.strategies.reduce((t2, id) => t2 + strategyDef(id).gunlukGider, 0);
+
   return `${uyari}
+    <h3>🧭 Üniversite Vizyonu</h3>
+    <div class="aciklama">Kalıcı yön — <b>yalnızca biri</b> seçilebilir; sonradan değiştirmek
+    ${formatMoney(VIZYON_DEGISIM_MALIYET)} tutar. Artı ve eksileriyle bir kimlik seç.</div>
     <table>
-      <tr><th>Strateji</th><th>Maliyet</th><th>Prestij</th><th>Ön Koşul</th><th></th></tr>
+      <tr><th>Vizyon</th><th>Artı / Eksi</th><th></th></tr>
+      ${vizyonKartlari}
+    </table>
+    <h3>♟️ Politikalar</h3>
+    <div class="aciklama">Politikalar artık <b>günlük bakım gideri</b> ister ve istediğin an
+    durdurulabilir (etkisi kalkar, gider kesilir). Aktif politika gideri:
+    <b>${formatMoney(aktifGider)}/gün</b>.</div>
+    <table>
+      <tr><th>Politika</th><th>Kurulum</th><th>Günlük</th><th>Prestij</th><th>Ön Koşul</th><th></th></tr>
       ${satirlar}
     </table>`;
 }
@@ -1049,6 +1108,22 @@ function siralamaBolumu(state: GameState): string {
     </table>`;
 }
 
+/** Raporlar: başarım merdiveni — nihai hedef 1 numara olmak. */
+function basarimBolumu(state: GameState): string {
+  const satirlar = BASARIMLAR.map((b) => {
+    const tamam = state.basarimlar.includes(b.id);
+    return `<span class="rozet" style="margin:2px 4px 2px 0;${tamam ? 'background:#1f6b39;color:#b8f5cd' : 'opacity:0.55'}"
+      title="${esc(b.aciklama)}${b.prestij > 0 ? ` · +${b.prestij} prestij` : ''}${b.para > 0 ? ` · ${formatMoney(b.para)}` : ''}">
+      ${tamam ? '🏅' : '▫️'} ${esc(b.ad)}</span>`;
+  }).join('');
+  return `<h3>🏅 Başarımlar (${state.basarimlar.length}/${BASARIMLAR.length})</h3>
+    <div class="aciklama">Hedef merdiveni: her başarım prestij/para ödülü verir.
+    Nihai hedef: <b>👑 1 NUMARA</b> olmak! ⚠ Dikkat: bütçe
+    ${BALANCE.IFLAS_GUN[state.zorluk]} gün üst üste borçta kalırsa YÖK kayyum atar — oyun biter.
+    ${state.borcGunleri > 0 ? `<b style="color:#f4a09c">Şu an ${state.borcGunleri} gündür borçtasın!</b>` : ''}</div>
+    <div>${satirlar}</div>`;
+}
+
 function raporlarGovde(state: GameState): string {
   // Tek geçişte tüm ajan istatistikleri — gider hesabı economy.ts ile AYNI kurallarla
   // (teşvik çarpanı, asistan maaşları, mentorluk) yapılır ki rapor gerçeği yansıtsın
@@ -1083,7 +1158,7 @@ function raporlarGovde(state: GameState): string {
   for (const f of state.floor) if (f !== null) doseliKare++;
   const bakim = doseliKare * BALANCE.BAKIM_GIDERI_TILE;
   const programGider = (state.mentorluk ? BALANCE.MENTORLUK_GIDER : 0)
-    + (state.strategies.includes('yemek_subvansiyon') ? 2000 : 0);
+    + state.strategies.reduce((t2, id) => t2 + strategyDef(id).gunlukGider, 0);
   const okulPayi = Math.round(ekosistemGelir * BALANCE.GIRISIM_OKUL_PAYI);
   const gunlukNet = okulPayi - maasYuku - bakim - programGider;
   let uluslararasi = 0, bulus = 0;
@@ -1131,6 +1206,7 @@ function raporlarGovde(state: GameState): string {
       ${satir('Toplam mezun / bırakan', `${state.toplamMezun} / ${state.toplamBirakan}`)}
       ${satir('Mezun istihdamı', istihdamOrani(state) === null ? '— (🤝 Mezunlar paneli)' : `%${istihdamOrani(state)} (🤝 Mezunlar panelinde kıyas)`)}
     </table>
+    ${basarimBolumu(state)}
     ${ekosistemBolumu(state)}
     <h3>👩‍🏫 Kadro</h3>
     <table>
@@ -1196,7 +1272,13 @@ function yardimGovde(): string {
       imza bonusu ister, prestij getirir. Her akademisyeni <b>Bölüm</b> seçicisinden bir bölüme ata.
       Hocalar ders verip araştırma yaparak XP toplar; makale şartlarını sağlayınca
       Arş. Gör. → Dr. Öğr. Üyesi → Doçent → Profesör yükselir. Aşçı (yemekhane servisi) ve
-      temizlikçi (kir) almayı unutma.
+      temizlikçi (kir) almayı unutma. 😊 <b>Memnuniyet:</b> hocalar kıdemlerine göre maaş bekler;
+      düşük maaş, aşırı ders yükü ve borçtaki okul morali bozar. Memnuniyeti 35 altına düşen
+      hoca dönem başında <b>istifa edip rakibe gidebilir</b> — Kadro panelinden <b>Zam Ver</b>.
+      Hocalar ${BALANCE.EMEKLILIK_YASI} yaşında emekli olur; kadroyu genç tutmayı planla.
+      ⚠ Bütçe uzun süre borçta kalırsa <b>YÖK kayyum atar ve oyun biter</b> (limit zorluğa göre
+      20-45 gün). ♟️ Strateji panelinde artık <b>vizyon seçimi</b> (tek seçim, artı/eksili) ve
+      <b>günlük giderli, durdurulabilir politikalar</b> var.
     </div>
 
     <h3>4) Bölüm, kontenjan ve öğrenci</h3>

@@ -61,6 +61,15 @@ export const BALANCE = {
   // İhtiyaç artış hızları (dakika başına)
   NEED_RATE: { aclik: 0.09, tuvalet: 0.11, enerji: 0.05, eglence: 0.06 },
 
+  // Hoca memnuniyeti ve emeklilik
+  EMEKLILIK_YASI: 67,
+  ISTIFA_ESIK: 35,             // memnuniyet altındaysa dönem başında istifa riski
+  ISTIFA_OLASILIK: 0.35,
+  ZAM_ORANI: 1.15,             // "Zam Ver" butonu maaşı bu çarpanla artırır
+
+  // İflas: üst üste borçta kalınabilecek gün (zorluğa göre)
+  IFLAS_GUN: { kolay: 45, normal: 30, zor: 20 },
+
   // Akademik gelişim
   XP_DERS: 2,                  // ders periyodu başına
   XP_ARASTIRMA_CARPAN: 0.02,   // üretilen araştırma puanı başına

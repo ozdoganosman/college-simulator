@@ -334,7 +334,9 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     const verim = Math.round(dersYukuVerimi(state, a) * 100);
     const asistan = asistanlari(state, a.id).length;
     const ders = (a.verdigiDersler ?? []).length;
-    let html = `<span class="baslik">${RANK_LABEL[a.rank]} ${a.ad} · ${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>`;
+    let html = `<span class="baslik">${RANK_LABEL[a.rank]} ${a.ad} (${a.yas}) · ${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span>`;
+    const m = Math.round(a.memnuniyet);
+    html += cip(`${m >= 65 ? '😊' : m >= 45 ? '😐' : '😠'} Memnuniyet ${miniBar(m / 100, m >= 65 ? '#46b45e' : m >= 45 ? '#e8b931' : '#d9534f')} %${m}`, m < 45);
     html += cip(`📚 Ders: ${ders}/${DERS_LIMIT} · 👥 Asistan: ${asistan}`);
     html += cip(`⚡ Yük verimi ${miniBar(verim / 100, verim >= 90 ? '#46b45e' : verim >= 75 ? '#e8b931' : '#d9534f')} %${verim} — kalite ve araştırma çarpanı`, verim < 75);
     html += cip(`🎓 Eğitim: ${Math.round(a.egitim)} · 🔬 Araştırma: ${Math.round(a.arastirma)}`);
