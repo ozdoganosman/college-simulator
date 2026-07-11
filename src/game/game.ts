@@ -18,6 +18,9 @@ import { kurRakipler, rakipleriGelistir, siralama, yilSonuHesapla } from './riva
 import { yillikMezunGuncelle } from './alumni';
 import { donemIstifaKontrol, yillikYaslanma } from './academics';
 import { kontrolBasarimlar } from './goals';
+import { denetimUygula } from './accreditation';
+import { olayGuncelle } from './events';
+import { gunlukYipranma } from './maintenance';
 import { addPrestij, notify, saveGame } from './state';
 
 /** Simülasyonu dtMin oyun-dakikası ilerletir (büyük adımları böler). */
@@ -52,6 +55,7 @@ function endOfDay(state: GameState): void {
   dailyEconomy(state);
   dailyAcademicUpdate(state);
   dailyDepartmentUpdate(state);
+  gunlukYipranma(state); // eşyalar eskir; bozulanlar tamirci bekler
 
   state.gun += 1;
 
@@ -85,6 +89,8 @@ function endOfDay(state: GameState): void {
         rakipleriGelistir(state); // rakipler de boş durmuyor
         yillikMezunGuncelle(state); // mezun kariyerleri + dernek bağışı + haberler
         yillikYaslanma(state); // yaş +1; emeklilik yaşına gelen ayrılır
+        // YÖK akreditasyon denetimi: 3. yıldan itibaren 2 yılda bir
+        if (yil(state.gun) > 1 && (yil(state.gun) - 1) % 2 === 0) denetimUygula(state);
       }
       if (!state.yksBekliyor) {
         state.yksBekliyor = true;
@@ -92,6 +98,9 @@ function endOfDay(state: GameState): void {
       }
     }
   }
+
+  // Kampüs olay kartları: süresi dolanı kapat, sırası geldiyse yenisini çıkar
+  olayGuncelle(state);
 
   // Başarımlar + iflas takibi
   kontrolBasarimlar(state);
@@ -189,6 +198,7 @@ function kurHazirKampus(state: GameState): void {
   // personel + 5 akademisyen (tüm alanlardan)
   hireStaff(state, 'asci');
   hireStaff(state, 'temizlikci');
+  hireStaff(state, 'tamirci');
   const kadro: [AcademicRank, Alan][] = [
     ['dr', 'muhendis'], ['arsgor', 'muhendis'], ['arsgor', 'artist'],
     ['arsgor', 'filozof'], ['arsgor', 'pratik'],

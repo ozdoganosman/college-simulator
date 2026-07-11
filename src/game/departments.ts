@@ -128,6 +128,7 @@ export function openDepartment(state: GameState, defId: string): boolean {
     acilisDonemi: donemIndex(state.gun),
     mezunSayisi: 0,
     ucret: null,
+    sonGeriCevrilen: 0,
   };
   state.departments.push(dept);
   addPrestij(state, 5);
@@ -269,7 +270,7 @@ export function seatCapacity(state: GameState, deptId: number): number {
   if (odalar.size === 0) return 0;
   let sira = 0;
   for (const o of state.objects) {
-    if (o.type === 'sira' && odalar.has(o.roomId)) sira++;
+    if (o.type === 'sira' && odalar.has(o.roomId) && (o.yipranma ?? 0) < 100) sira++;
   }
   return sira;
 }
@@ -312,6 +313,7 @@ export function runYerlestirme(state: GameState): boolean {
       dept.sonKayit = 0;
       dept.sonTavanSira = 0;
       dept.sonTabanSira = 0;
+      dept.sonGeriCevrilen = 0;
       notify(state, `${def.ad}: öğretim üyesi yetersiz, YÖK kontenjan vermedi`, 'kotu');
       torenSatirlari.push({
         bolumAd: def.ad, kisa: def.kisa, renk: def.renk,
@@ -378,6 +380,7 @@ export function runYerlestirme(state: GameState): boolean {
     const geriCevrilen = istekliToplam - yeniKayit; // koltuk yetmedi — kayıt yapılamadı
     dept.sonTalep = tAday;
     dept.sonKayit = yeniKayit;
+    dept.sonGeriCevrilen = geriCevrilen;
     // önlisans öğrencisi için ödenek daha düşük
     const birimOdenek = def.tur === 'onlisans'
       ? Math.round(BALANCE.OGRENCI_ODENEK * 0.65)

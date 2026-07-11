@@ -27,7 +27,10 @@ export function ogrenciGunlukKazanc(state: GameState, s: Student): number {
   if (state.strategies.includes('teknokent')) kazanc *= 1.5;
   if (state.vizyon === 'girisim') kazanc *= 1.35;
   kazanc *= 1 + 0.05 * mutevelliBonusu(state, 'girisim'); // heyetteki girişimci mezunlar
-  return Math.round(kazanc);
+  // azalan getiri: küçük kazançlarda ~doğrusal, tavana yumuşak yaklaşır —
+  // nitelikler 100'e dayandığında öğrenci başına gelir enflasyonunu keser
+  const tavan = BALANCE.GIRISIM_KAZANC_TAVAN;
+  return Math.round(tavan * Math.tanh(kazanc / tavan));
 }
 
 /**
@@ -62,7 +65,7 @@ export function dailyEconomy(state: GameState): void {
   let maas = 0;
   for (const a of state.agents) {
     if (a.kind === 'akademisyen') maas += a.maas * (tesvik ? 1.10 : 1);
-    else if (a.kind === 'asci' || a.kind === 'temizlikci') maas += a.maas;
+    else if (a.kind === 'asci' || a.kind === 'temizlikci' || a.kind === 'tamirci') maas += a.maas;
     else if (a.kind === 'ogrenci' && a.asistani !== -1) maas += BALANCE.ASISTAN_MAAS;
   }
   maas = Math.round(maas);

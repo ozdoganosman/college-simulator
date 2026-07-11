@@ -11,6 +11,7 @@ import { initHud, refreshHud } from './ui/hud';
 import { initPanels, refreshOpenPanel } from './ui/panels';
 import { fastForwardTutorial, initTutorial, refreshTutorial } from './ui/tutorial';
 import { initAdvisor, refreshAdvisor } from './ui/advisor';
+import { initEventCard, refreshEventCard } from './ui/eventcard';
 import { initMenu, isMenuOpen, openMainMenu } from './ui/menu';
 import { checkCeremony, initCeremony, isCeremonyOpen } from './ui/ceremony';
 import { invalidateGround } from './ui/renderer';
@@ -53,6 +54,7 @@ initHud(() => state, ui);
 initPanels(() => state);
 initTutorial();
 initAdvisor();
+initEventCard(() => state);
 initCeremony();
 initMenu({
   getState: () => state,
@@ -86,11 +88,14 @@ import * as alumni from './game/alumni';
 import * as campus from './game/campus';
 import * as economy from './game/economy';
 import * as schedule from './game/schedule';
+import * as events from './game/events';
+import * as accreditation from './game/accreditation';
+import * as maintenance from './game/maintenance';
 (window as unknown as Record<string, unknown>).__sim = {
   state: () => state,
   advance: (dk: number) => advance(state, dk),
   build, departments, academics, research, agents, library, prefab, rivals, alumni, campus,
-  economy, schedule,
+  economy, schedule, events, accreditation, maintenance,
   ui, cam,
 };
 
@@ -114,6 +119,7 @@ function frame(t: number): void {
     refreshOpenPanel(state);
     refreshTutorial(state);
     refreshAdvisor(state);
+    refreshEventCard(state);
     if (!isMenuOpen()) checkCeremony(state);
   }
 

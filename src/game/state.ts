@@ -59,6 +59,9 @@ export function createInitialState(): GameState {
     krediBorcu: 0,
     mutevelli: [],
     sonrakiTalepCarpan: 1,
+    sonDenetim: null,
+    aktifOlay: null,
+    sonOlayGunu: 0,
 
     nextId: 1,
     insaatSurumu: 0,
@@ -162,8 +165,15 @@ export function eskiKayitUyumu(s: GameState): void {
   if (typeof s.krediBorcu !== 'number') s.krediBorcu = 0;
   if (!Array.isArray(s.mutevelli)) s.mutevelli = [];
   if (typeof s.sonrakiTalepCarpan !== 'number') s.sonrakiTalepCarpan = 1;
+  if (s.sonDenetim === undefined) s.sonDenetim = null;
+  if (s.aktifOlay === undefined) s.aktifOlay = null;
+  if (typeof s.sonOlayGunu !== 'number') s.sonOlayGunu = 0;
+  for (const o of s.objects) {
+    if (typeof o.yipranma !== 'number') o.yipranma = 0; // eskime sonradan eklendi
+  }
   for (const d of s.departments) {
     if (d.ucret === undefined) d.ucret = null; // bölüm bazlı ücret sonradan eklendi
+    if (typeof d.sonGeriCevrilen !== 'number') d.sonGeriCevrilen = 0;
   }
   for (const pr of s.projects) {
     if (pr.tip !== 'uygulamali' && pr.tip !== 'atilim') pr.tip = 'temel';

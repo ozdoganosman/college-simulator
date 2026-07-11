@@ -18,10 +18,15 @@ export interface PrefabDef {
   id: string;
   ad: string;
   room: RoomType;
-  /** dış boyut (duvarlar dahil) */
+  /** varsayılan dış boyut (duvarlar dahil) — sürükleyerek büyütülüp küçültülebilir */
   w: number;
   h: number;
 }
+
+/** Sürüklemeyle seçilebilen dış boyut sınırları (duvarlar dahil). */
+export const PREFAB_MIN = 5;
+export const PREFAB_MAX_W = 24;
+export const PREFAB_MAX_H = 18;
 
 export const PREFABS: PrefabDef[] = [
   { id: 'p_derslik', ad: 'Derslik Binası', room: 'derslik', w: 8, h: 7 },
@@ -131,10 +136,10 @@ function planMaliyet(plan: PlanItem[]): number {
 
 // --- Prefab yerleştirme ----------------------------------------------------------
 
-function icTiles(def: PrefabDef, x0: number, y0: number): number[] {
+function icTiles(x0: number, y0: number, w: number, h: number): number[] {
   const tiles: number[] = [];
-  for (let y = y0 + 1; y < y0 + def.h - 1; y++) {
-    for (let x = x0 + 1; x < x0 + def.w - 1; x++) tiles.push(tileIndex(x, y));
+  for (let y = y0 + 1; y < y0 + h - 1; y++) {
+    for (let x = x0 + 1; x < x0 + w - 1; x++) tiles.push(tileIndex(x, y));
   }
   return tiles;
 }
@@ -144,19 +149,42 @@ export function prefabOrigin(def: PrefabDef, hover: Point): Point {
   return { x: hover.x - Math.floor(def.w / 2), y: hover.y - Math.floor(def.h / 2) };
 }
 
+/**
+ * Sürükleme dikdörtgeninden prefab yerleşimi: iki köşe noktasından
+ * min/max sınırlarına oturtulmuş {x, y, w, h} üretir (kapı payı için min 5).
+ * İç alan oda minBoyut'unun altındaysa da en az o kadar büyütülür.
+ */
+export function prefabRect(def: PrefabDef, a: Point, b: Point): { x: number; y: number; w: number; h: number } {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  let w = Math.abs(a.x - b.x) + 1;
+  let h = Math.abs(a.y - b.y) + 1;
+  w = Math.max(PREFAB_MIN, Math.min(PREFAB_MAX_W, w));
+  h = Math.max(PREFAB_MIN, Math.min(PREFAB_MAX_H, h));
+  // iç alan (duvarlar hariç) oda minimumunu karşılasın — genişliği önce büyüt
+  const minAlan = ROOM_DEFS[def.room].minBoyut;
+  let emniyet = 0;
+  while ((w - 2) * (h - 2) < minAlan && emniyet++ < 40) {
+    if (w <= h && w < PREFAB_MAX_W) w++;
+    else if (h < PREFAB_MAX_H) h++;
+    else break;
+  }
+  return { x, y, w, h };
+}
+
 const ZEMIN_MALIYET = FLOOR_DEFS.find((f) => f.id === 'beton')!.maliyet;
 
-/** Toplam maliyet: zemin + duvar + kapı + eşya planı (boş alan varsayımıyla sabit). */
-export function prefabCost(def: PrefabDef): number {
-  const alan = def.w * def.h;
-  const cevre = alan - Math.max(0, def.w - 2) * Math.max(0, def.h - 2);
-  const plan = furnishPlan(def.room, icTiles(def, 0, 0), new Set());
+/** Toplam maliyet: zemin + duvar + kapı + eşya planı (boyuta göre). */
+export function prefabCost(def: PrefabDef, w = def.w, h = def.h): number {
+  const alan = w * h;
+  const cevre = alan - Math.max(0, w - 2) * Math.max(0, h - 2);
+  const plan = furnishPlan(def.room, icTiles(0, 0, w, h), new Set());
   return alan * ZEMIN_MALIYET + (cevre - 1) * WALL_COST + DOOR_COST + planMaliyet(plan);
 }
 
 /** Prefabın kaç ana eşya içerdiği (buton etiketi için): ör. '12 sıra'. */
-export function prefabOzet(def: PrefabDef): string {
-  const plan = furnishPlan(def.room, icTiles(def, 0, 0), new Set());
+export function prefabOzet(def: PrefabDef, w = def.w, h = def.h): string {
+  const plan = furnishPlan(def.room, icTiles(0, 0, w, h), new Set());
   const sayim = new Map<ObjectTypeId, number>();
   for (const p of plan) sayim.set(p.type, (sayim.get(p.type) ?? 0) + 1);
   return [...sayim.entries()]
@@ -164,17 +192,19 @@ export function prefabOzet(def: PrefabDef): string {
     .join(', ');
 }
 
-export function canPlacePrefab(state: GameState, def: PrefabDef, x0: number, y0: number): boolean {
-  if (!inBounds(x0, y0) || !inBounds(x0 + def.w - 1, y0 + def.h - 1)) return false;
+export function canPlacePrefab(
+  state: GameState, def: PrefabDef, x0: number, y0: number, w = def.w, h = def.h,
+): boolean {
+  if (!inBounds(x0, y0) || !inBounds(x0 + w - 1, y0 + h - 1)) return false;
 
   // giriş kapısının önünü kapatma
-  if (GATE.x >= x0 - 1 && GATE.x <= x0 + def.w && GATE.y >= y0 - 1 && GATE.y <= y0 + def.h) return false;
+  if (GATE.x >= x0 - 1 && GATE.x <= x0 + w && GATE.y >= y0 - 1 && GATE.y <= y0 + h) return false;
 
   const dolu = new Set<number>();
   for (const o of state.objects) dolu.add(tileIndex(o.x, o.y));
 
-  for (let y = y0; y < y0 + def.h; y++) {
-    for (let x = x0; x < x0 + def.w; x++) {
+  for (let y = y0; y < y0 + h; y++) {
+    for (let x = x0; x < x0 + w; x++) {
       const t = tileIndex(x, y);
       if (state.wall[t] !== WALL_NONE) return false;
       if (state.roomAt[t] !== -1) return false;
@@ -184,28 +214,30 @@ export function canPlacePrefab(state: GameState, def: PrefabDef, x0: number, y0:
   return true;
 }
 
-export function placePrefab(state: GameState, def: PrefabDef, x0: number, y0: number): boolean {
-  if (!canPlacePrefab(state, def, x0, y0)) {
+export function placePrefab(
+  state: GameState, def: PrefabDef, x0: number, y0: number, w = def.w, h = def.h,
+): boolean {
+  if (!canPlacePrefab(state, def, x0, y0, w, h)) {
     notify(state, 'Buraya yerleştirilemez: alan dolu ya da harita dışında.', 'kotu');
     return false;
   }
-  const toplam = prefabCost(def);
+  const toplam = prefabCost(def, w, h);
   if (state.para < toplam) {
     notify(state, `Yetersiz bütçe: ${def.ad} için ${Math.round(toplam).toLocaleString('tr-TR')} ₺ gerekli.`, 'kotu');
     return false;
   }
 
-  const x1 = x0 + def.w - 1, y1 = y0 + def.h - 1;
+  const x1 = x0 + w - 1, y1 = y0 + h - 1;
   buildFloor(state, x0, y0, x1, y1, 'beton');
   buildWallRect(state, x0, y0, x1, y1);
   buildDoor(state, Math.floor((x0 + x1) / 2), y1);
   designateRoom(state, def.room, x0 + 1, y0 + 1, x1 - 1, y1 - 1);
 
-  const plan = furnishPlan(def.room, icTiles(def, x0, y0), new Set());
+  const plan = furnishPlan(def.room, icTiles(x0, y0, w, h), new Set());
   for (const p of plan) placeObject(state, p.type, p.x, p.y);
 
   validateRooms(state);
-  notify(state, `🏗️ ${def.ad} kuruldu (${ROOM_DEFS[def.room].ad}).`, 'iyi');
+  notify(state, `🏗️ ${def.ad} kuruldu (${ROOM_DEFS[def.room].ad}, ${w}×${h}).`, 'iyi');
   return true;
 }
 

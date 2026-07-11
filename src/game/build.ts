@@ -126,7 +126,7 @@ export function placeObject(state: GameState, type: PlacedObject['type'], x: num
     }
   }
   if (!spend(state, def.maliyet, def.ad)) return;
-  state.objects.push({ id: newId(state), type, x, y, roomId: rid, reservedBy: -1 });
+  state.objects.push({ id: newId(state), type, x, y, roomId: rid, reservedBy: -1, yipranma: 0 });
   validateRooms(state);
 }
 

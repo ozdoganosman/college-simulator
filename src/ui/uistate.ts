@@ -11,6 +11,9 @@ export type Tool =
   | { kind: 'esya'; obj: ObjectTypeId }
   | { kind: 'hazir'; prefab: string };
 
+/** Isı haritası katmanları — haritanın üstüne renk kaplaması basar. */
+export type Katman = 'yok' | 'mutluluk' | 'aclik' | 'kir' | 'yipranma';
+
 export interface UIState {
   tool: Tool;
   /** sürükleme başlangıç karesi (dikdörtgen araçları için) */
@@ -21,6 +24,8 @@ export interface UIState {
   /** seçili kişi (öğrenci/hoca kartı göstermek için), yoksa -1 */
   selectedAgentId: number;
   paused: boolean;
+  /** aktif ısı haritası katmanı */
+  katman: Katman;
 }
 
 export function createUIState(): UIState {
@@ -31,5 +36,6 @@ export function createUIState(): UIState {
     selectedRoomId: -1,
     selectedAgentId: -1,
     paused: false,
+    katman: 'yok',
   };
 }

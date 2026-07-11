@@ -14,8 +14,12 @@ export const BALANCE = {
   MEZUN_BONUS: 4000,           // mezun başına tek seferlik ₺
 
   // Maaşlar (günlük ₺)
-  MAAS: { arsgor: 1200, dr: 2000, docent: 3000, prof: 4500, asci: 900, temizlikci: 700 },
-  PERSONEL_ALIM: { asci: 5000, temizlikci: 3000 }, // ilan maliyeti
+  MAAS: { arsgor: 1200, dr: 2000, docent: 3000, prof: 4500, asci: 900, temizlikci: 700, tamirci: 800 },
+  PERSONEL_ALIM: { asci: 5000, temizlikci: 3000, tamirci: 4000 }, // ilan maliyeti
+
+  // Eşya eskimesi: her gün yıpranır, 100'de BOZULUR (tamirci onarır)
+  YIPRANMA_GUN: [0.6, 1.4] as [number, number], // günlük yıpranma aralığı
+  TAMIR_HIZ: 8,               // tamircinin dakikada azalttığı yıpranma
   ASISTAN_MAAS: 500,           // asistan atanan YL/doktora öğrencisinin günlük maaşı ₺
 
   // Mali politikalar — kayıt ücreti + burs kontenjanları (vakıf üniversitesi modeli)
@@ -28,6 +32,12 @@ export const BALANCE = {
   BURS_EGILIM_TAM: 12,        // tam burslu öğrenci eğilim bonusu (yüksek sıradan gelir)
   BURS_EGILIM_YARI: 6,
   BURS_GNO_SART: 2.0,         // dönem sonunda GNO bunun altındaysa burs bir kademe düşer
+  GIRISIM_KAZANC_TAVAN: 600,  // öğrenci başına günlük girişim geliri yumuşak tavanı ₺
+
+  // YÖK akreditasyon denetimi (2 yılda bir)
+  DENETIM_GECME: 70,          // karne puanı eşiği
+  DENETIM_KOSULLU: 45,        // altı = KALDI: kontenjan kesintisi
+  DENETIM_ODUL_PRESTIJ: 10,
   KREDI_FAIZ: 1.25,           // çekilen tutarın geri ödeme çarpanı
   KREDI_TAKSIT: 6000,         // günlük geri ödeme ₺
 

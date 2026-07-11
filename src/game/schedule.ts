@@ -292,6 +292,15 @@ export function rebuildDersProgrami(state: GameState): void {
     }
   }
   state.dersProgrami = slots;
+
+  // Aidiyet güvencesi: müfredat çakışması olmayan ama bugünkü programda fiilen
+  // ders veren bölümsüz hoca, ders verdiği bölüme bağlanır (araştırma/danışmanlık
+  // katkısı boşa gitmesin).
+  for (const s of slots) {
+    if (s.academicId === -1) continue;
+    const a = tumHocalar.find((h) => h.id === s.academicId);
+    if (a && a.deptId === -1) a.deptId = s.deptId;
+  }
 }
 
 /** Bölümün belirli bloktaki dersi (panel ve simülasyon için). */

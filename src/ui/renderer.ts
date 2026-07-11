@@ -8,7 +8,7 @@ import { FLOOR_DEFS, ROOM_DEFS, WALL_COST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { bushSprite, gateSprite, objectSprite, treeSprite } from './sprites';
-import { canPlacePrefab, prefabCost, prefabDef, prefabOrigin } from '../game/prefab';
+import { canPlacePrefab, prefabCost, prefabDef, prefabOrigin, prefabRect } from '../game/prefab';
 import type { Camera } from './camera';
 import type { UIState } from './uistate';
 
@@ -238,7 +238,8 @@ const SAC = ['#2b2118', '#4a3220', '#8a5a2b', '#1c1c22', '#6e4a1e', '#3d2c1c'];
 
 function drawPerson(
   c: CanvasRenderingContext2D, px: number, py: number, renk: string,
-  id: number, yuruyor: boolean, zaman: number, tip: 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci',
+  id: number, yuruyor: boolean, zaman: number,
+  tip: 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci' | 'tamirci',
 ): void {
   const bob = yuruyor ? Math.sin(zaman / 90 + id) * 1.2 : 0;
   const r = TILE * 0.26;
@@ -294,6 +295,13 @@ function drawPerson(
     c.beginPath();
     c.arc(px, gy - r * 0.85, r * 0.5, Math.PI, 0);
     c.fill();
+  } else if (tip === 'tamirci') {
+    // turuncu baret
+    c.fillStyle = '#f0a030';
+    c.beginPath();
+    c.arc(px, gy - r * 0.9, r * 0.48, Math.PI, 0);
+    c.fill();
+    c.fillRect(px - r * 0.55, gy - r * 0.92, r * 1.1, r * 0.14);
   } else {
     c.fillStyle = SAC[id % SAC.length];
     c.beginPath();
@@ -437,6 +445,17 @@ export function render(
   for (const o of state.objects) {
     if (o.x < x0 - 1 || o.x > x1 + 1 || o.y < y0 - 1 || o.y > y1 + 1) continue;
     ctx.drawImage(objectSprite(o.type), o.x * TILE, o.y * TILE, TILE, TILE);
+    // BOZUK eşya: kırmızı ton + tamir işareti (tamirci onarana dek işlev görmez)
+    if ((o.yipranma ?? 0) >= 100) {
+      ctx.fillStyle = 'rgba(200,50,40,0.3)';
+      ctx.fillRect(o.x * TILE + 1, o.y * TILE + 1, TILE - 2, TILE - 2);
+      if (cam.zoom >= 0.55) {
+        ctx.font = `${Math.round(TILE * 0.5)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🔧', o.x * TILE + TILE * 0.68, o.y * TILE + TILE * 0.3);
+      }
+    }
   }
 
   // --- ajanlar ---
@@ -452,8 +471,41 @@ export function render(
       renk = dept ? deptDef(dept.defId).renk : '#9aa4b0';
     } else if (a.kind === 'akademisyen') renk = '#2c3444';
     else if (a.kind === 'asci') renk = '#c9cdd3';
+    else if (a.kind === 'tamirci') renk = '#d97b3c';
     else renk = '#c9a227';
     drawPerson(ctx, px, py, renk, a.id, a.path.length > 0, zaman, a.kind);
+  }
+
+  // --- ısı haritası katmanı (yeşil iyi → kırmızı kötü) ---
+  if (ui.katman !== 'yok') {
+    if (ui.katman === 'kir') {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const kir = state.dirt[tileIndex(x, y)];
+          if (kir > 3) {
+            ctx.fillStyle = isiRenk(kir / 100, Math.min(0.55, 0.18 + kir / 160));
+            ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+          }
+        }
+      }
+    } else if (ui.katman === 'yipranma') {
+      for (const o of state.objects) {
+        if (o.x < x0 || o.x > x1 || o.y < y0 || o.y > y1) continue;
+        ctx.fillStyle = isiRenk((o.yipranma ?? 0) / 100, 0.55);
+        ctx.fillRect(o.x * TILE + 1, o.y * TILE + 1, TILE - 2, TILE - 2);
+      }
+    } else {
+      // mutluluk / açlık: öğrenci başına renkli halka
+      for (const a of state.agents) {
+        if (a.kind !== 'ogrenci' || !a.onCampus) continue;
+        if (a.x < x0 - 1 || a.x > x1 + 1 || a.y < y0 - 1 || a.y > y1 + 1) continue;
+        const oran = ui.katman === 'mutluluk' ? 1 - a.mutluluk / 100 : a.needs.aclik / 100;
+        ctx.fillStyle = isiRenk(oran, 0.5);
+        ctx.beginPath();
+        ctx.arc(a.x * TILE + TILE / 2, a.y * TILE + TILE / 2, TILE * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   // --- oda etiketleri ---
@@ -511,6 +563,37 @@ export function render(
   }
 
   ctx.restore();
+
+  // --- katman lejantı (ekran uzayı, sol alt) ---
+  if (ui.katman !== 'yok') {
+    const adlar: Record<string, string> = {
+      mutluluk: '😊 Öğrenci Mutluluğu', aclik: '🍽️ Açlık', kir: '🧹 Kampüs Kiri', yipranma: '🔧 Eşya Eskimesi',
+    };
+    const lx = 12, ly = canvas.height - 152, lw = 190, lh = 46;
+    ctx.fillStyle = 'rgba(12,16,22,0.85)';
+    roundRectPath(ctx, lx, ly, lw, lh, 6);
+    ctx.fill();
+    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#f2f5fa';
+    ctx.fillText(adlar[ui.katman] ?? '', lx + 10, ly + 13);
+    for (let i = 0; i < 24; i++) {
+      ctx.fillStyle = isiRenk(i / 23, 0.95);
+      ctx.fillRect(lx + 10 + i * 6, ly + 26, 6, 8);
+    }
+    ctx.font = '500 10px system-ui, sans-serif';
+    ctx.fillStyle = '#aab4c6';
+    ctx.fillText('iyi', lx + 10, ly + 40);
+    ctx.textAlign = 'right';
+    ctx.fillText('kötü', lx + 10 + 24 * 6, ly + 40);
+  }
+}
+
+/** Isı rengi: 0 iyi (yeşil) → 1 kötü (kırmızı). */
+function isiRenk(oran: number, alpha: number): string {
+  const t = Math.max(0, Math.min(1, oran));
+  return `hsla(${Math.round(120 * (1 - t))},85%,50%,${alpha})`;
 }
 
 function roundRectPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -528,12 +611,19 @@ function drawToolPreview(ctx: CanvasRenderingContext2D, state: GameState, ui: UI
   if (!hover) return;
   const t = ui.tool;
 
-  // hazır bina hayaleti
+  // hazır bina hayaleti — sürüklenirken seçilen boyutu gösterir
   if (t.kind === 'hazir') {
     const def = prefabDef(t.prefab);
-    const o = prefabOrigin(def, hover);
-    const ok = canPlacePrefab(state, def, o.x, o.y);
-    const px = o.x * TILE, py = o.y * TILE, pw = def.w * TILE, ph = def.h * TILE;
+    let gx: number, gy: number, gw: number, gh: number;
+    if (ui.dragStart) {
+      const r = prefabRect(def, ui.dragStart, hover);
+      gx = r.x; gy = r.y; gw = r.w; gh = r.h;
+    } else {
+      const o = prefabOrigin(def, hover);
+      gx = o.x; gy = o.y; gw = def.w; gh = def.h;
+    }
+    const ok = canPlacePrefab(state, def, gx, gy, gw, gh);
+    const px = gx * TILE, py = gy * TILE, pw = gw * TILE, ph = gh * TILE;
 
     // iç dolgu (oda rengi) + duvar çerçevesi
     ctx.fillStyle = ok ? hexA(ROOM_DEFS[def.room].renk, 0.4) : 'rgba(220,60,60,0.3)';
@@ -545,19 +635,19 @@ function drawToolPreview(ctx: CanvasRenderingContext2D, state: GameState, ui: UI
     ctx.fillRect(px + pw - TILE, py, TILE, ph);
     // kapı işareti (alt orta)
     ctx.fillStyle = ok ? 'rgba(165,113,58,0.95)' : 'rgba(120,60,60,0.9)';
-    const kapiX = Math.floor((o.x + o.x + def.w - 1) / 2) * TILE;
+    const kapiX = Math.floor((gx + gx + gw - 1) / 2) * TILE;
     ctx.fillRect(kapiX + 3, py + ph - TILE + 3, TILE - 6, TILE - 6);
     ctx.strokeStyle = ok ? 'rgba(255,255,255,0.9)' : 'rgba(255,120,110,0.95)';
     ctx.lineWidth = 2;
     ctx.strokeRect(px, py, pw, ph);
 
-    // etiket
+    // etiket — boyut + o boyuttaki maliyet (sürüklerken canlı değişir)
     const fs = Math.max(10, TILE * 0.45);
     ctx.font = `700 ${fs}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const etiket = ok
-      ? `${def.ad} · ${formatMoney(prefabCost(def))}`
+      ? `${def.ad} ${gw}×${gh} · ${formatMoney(prefabCost(def, gw, gh))}${ui.dragStart ? '' : ' · sürükle = boyutlandır'}`
       : `${def.ad} — alan uygun değil`;
     const tw = ctx.measureText(etiket).width;
     const ex = px + pw / 2, ey = py - fs;

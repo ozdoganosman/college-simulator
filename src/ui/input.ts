@@ -2,7 +2,7 @@ import { GameState, tileIndex, inBounds } from '../core/types';
 import {
   buildDoor, buildFloor, buildWallRect, demolish, designateRoom, placeObject, unassignRoom,
 } from '../game/build';
-import { placePrefab, prefabDef, prefabOrigin } from '../game/prefab';
+import { placePrefab, prefabDef, prefabOrigin, prefabRect } from '../game/prefab';
 import { Camera, clampCamera, screenToTile, zoomAt } from './camera';
 import { isCeremonyOpen } from './ceremony';
 import type { UIState } from './uistate';
@@ -33,14 +33,10 @@ export function attachInput(
         buildDoor(state(), tile.x, tile.y);
       } else if (t.kind === 'esya') {
         placeObject(state(), t.obj, tile.x, tile.y);
-      } else if (t.kind === 'hazir') {
-        const def = prefabDef(t.prefab);
-        const o = prefabOrigin(def, tile);
-        placePrefab(state(), def, o.x, o.y);
       } else if (t.kind === 'sec') {
         selectAt(state(), ui, tile.x, tile.y);
       } else {
-        ui.dragStart = tile;
+        ui.dragStart = tile; // hazır bina dahil: sürükleyerek boyutlandırılır
       }
     }
   });
@@ -78,6 +74,17 @@ export function attachInput(
       else if (t.kind === 'yikim') demolish(st, s.x, s.y, h.x, h.y);
       else if (t.kind === 'oda') designateRoom(st, t.room, s.x, s.y, h.x, h.y);
       else if (t.kind === 'oda_kaldir') unassignRoom(st, s.x, s.y, h.x, h.y);
+      else if (t.kind === 'hazir') {
+        // tek tık = varsayılan boyut (imleç merkezli); sürükleme = seçilen boyut
+        const def = prefabDef(t.prefab);
+        if (s.x === h.x && s.y === h.y) {
+          const o = prefabOrigin(def, h);
+          placePrefab(st, def, o.x, o.y);
+        } else {
+          const r = prefabRect(def, s, h);
+          placePrefab(st, def, r.x, r.y, r.w, r.h);
+        }
+      }
       ui.dragStart = null;
     }
   });

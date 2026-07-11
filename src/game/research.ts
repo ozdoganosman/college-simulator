@@ -196,7 +196,7 @@ export function updateResearch(state: GameState, dtMin: number): void {
   for (const r of validRooms(state, 'kutuphane')) bilgisayarOdalar.add(r.id);
   let labBilgisayar = 0;
   for (const o of state.objects) {
-    if (o.type === 'bilgisayar' && bilgisayarOdalar.has(o.roomId)) labBilgisayar++;
+    if (o.type === 'bilgisayar' && bilgisayarOdalar.has(o.roomId) && (o.yipranma ?? 0) < 100) labBilgisayar++;
   }
   const labCarpan = 1 + Math.min(0.15, 0.03 * labBilgisayar);
 

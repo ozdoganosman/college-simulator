@@ -76,11 +76,13 @@ export interface PlacedObject {
   roomId: number;
   /** objeyi şu an kullanan/rezerve eden ajan id'si, yoksa -1 */
   reservedBy: number;
+  /** eskime (0-130): 100 ve üstü BOZUK — kullanılamaz, tamirci onarır */
+  yipranma: number;
 }
 
 // --- Ajanlar -----------------------------------------------------------------
 
-export type AgentKind = 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci';
+export type AgentKind = 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci' | 'tamirci';
 
 export type StudentLevel = 'lisans' | 'yl' | 'doktora';
 
@@ -232,7 +234,7 @@ export interface Academic extends AgentBase {
 }
 
 export interface StaffAgent extends AgentBase {
-  kind: 'asci' | 'temizlikci';
+  kind: 'asci' | 'temizlikci' | 'tamirci';
   maas: number;
 }
 
@@ -279,6 +281,8 @@ export interface Department {
   mezunSayisi: number;
   /** bölüme özel yıllık kayıt ücreti ₺ (null = okul geneli ücret geçerli) */
   ucret: number | null;
+  /** son yerleştirmede koltuk yetmediği için geri çevrilen istekli aday */
+  sonGeriCevrilen: number;
 }
 
 /** Yıllık YKS yerleştirme töreni verisi (açıklanınca null'a çekilir). */
@@ -543,6 +547,12 @@ export interface GameState {
   mutevelli: number[];
   /** rakip olaylarının bir sonraki YKS talebine çarpanı (uygulanınca 1'e döner) */
   sonrakiTalepCarpan: number;
+  /** son YÖK akreditasyon denetimi sonucu (hiç olmadıysa null) */
+  sonDenetim: { gun: number; puan: number; sonuc: string } | null;
+  /** aktif kampüs olay kartı (cevaplanınca null) */
+  aktifOlay: { id: string; gun: number } | null;
+  /** son olayın günü — art arda olay yağmasın */
+  sonOlayGunu: number;
 
   nextId: number;         // tüm id'ler için tek sayaç
   /** inşaat değişiklik sayacı (render önbelleği geçersizleme) */

@@ -13,6 +13,8 @@ import { officeCapacity } from '../game/academics';
 import { toplamKoleksiyon } from '../game/library';
 import { seatCapacity } from '../game/departments';
 import { cazibePuani, yurtKapasitesi } from '../game/campus';
+import { denetimPuani, sonrakiDenetimGunu } from '../game/accreditation';
+import { bozukSayisi } from '../game/maintenance';
 import { openPanel, PanelName } from './panels';
 
 interface Oneri {
@@ -37,6 +39,24 @@ function onerileriHesapla(state: GameState): Oneri[] {
   const ekle = (id: string, metin: string, detay: string, panel: PanelName | null) => {
     o.push({ id, metin, detay, panel });
   };
+
+  // --- YÖK denetimi yaklaşıyor ve karne zayıf ---
+  const denetimKalan = sonrakiDenetimGunu(state) - state.gun;
+  if (denetimKalan <= 20 && state.gun > 40) {
+    const puan = denetimPuani(state);
+    if (puan < BALANCE.DENETIM_GECME) {
+      ekle('denetim', `🏛️ YÖK denetimi ${denetimKalan} gün sonra — karne ${puan}/100!`, `Denetimden geçmek için ${BALANCE.DENETIM_GECME} puan gerek. Raporlar > Akreditasyon Karnesi'nden zayıf kriterleri gör: hoca al, asistan ata, kitap koleksiyonu kur, cazibeyi artır. Kalırsan kontenjanlar %20 kesilir!`, 'raporlar');
+    }
+  }
+
+  // --- bozuk eşyalar birikiyor ---
+  const bozuk = bozukSayisi(state);
+  const tamirciSayisi = state.agents.filter((a) => a.kind === 'tamirci').length;
+  if (bozuk > 0 && tamirciSayisi === 0) {
+    ekle('tamirci-yok', `🔧 ${bozuk} bozuk eşya — tamirci yok!`, 'Bozuk eşya işlev görmez: sıra koltuk sayılmaz, bilgisayar araştırmayı hızlandırmaz, ranza barındırmaz. Kadro panelinin altından tamirci al.', 'kadro');
+  } else if (bozuk > 10) {
+    ekle('tamirci-az', `🔧 ${bozuk} bozuk eşya birikti — tamirci yetişemiyor`, 'Kampüs büyüdükçe eskiyen eşya artar. İkinci bir tamirci almayı düşün (Kadro > Destek Personeli).', 'kadro');
+  }
 
   // --- kritik ekonomi ---
   if (state.para < 0) {
@@ -71,6 +91,14 @@ function onerileriHesapla(state: GameState): Oneri[] {
     }
     if (state.yksBekliyor) {
       ekle('yks', '🎓 YKS dönemi açık — hazırsan başlat!', 'Üstteki altın butona basınca yerleştirme yapılır, öğrenciler ve devlet ödeneği gelir. Önce derslik/kadro hazırlığını bitir; ♟️ Strateji > Mali Politikalar\'dan kayıt ücreti ve burs kontenjanlarını ayarla.', 'strateji');
+    }
+    // koltuk planı: geçen YKS'de aday geri çevrildiyse ya da kontenjan koltuğu aşıyorsa
+    const geriCevrilen = state.departments.reduce((t, d) => t + (d.sonGeriCevrilen ?? 0), 0);
+    const koltukEksik = state.departments.filter((d) => seatCapacity(state, d.id) < d.kontenjan);
+    if (geriCevrilen > 0) {
+      ekle('koltuk-yetmedi', `🪑 Geçen YKS'de ${geriCevrilen} istekli aday koltuk yetmediği için kaçtı!`, 'Talep var ama derslik koltuğu yok — kayıp öğrenci = kayıp ödenek ve ücret geliri. Derslik kur (Hazır Bina), sıra ekle ya da kontenjanı koltuğa göre ayarla (🎓 Bölümler).', 'bolumler');
+    } else if (state.yksBekliyor && koltukEksik.length > 0) {
+      ekle('koltuk-plani', `🪑 ${koltukEksik.length} bölümde koltuk < kontenjan`, 'YKS öncesi koltuk planı yap: kontenjan kadar sıra yoksa istekli adaylar geri çevrilir. Derslik/sıra ekle ya da kontenjanı düşür (🎓 Bölümler panelindeki Derslik sütununa bak).', 'bolumler');
     }
   }
 

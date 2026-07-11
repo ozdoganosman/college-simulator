@@ -63,6 +63,7 @@ const SPEED: Record<AgentKind, number> = {
   akademisyen: 0.45,
   asci: 0.42,
   temizlikci: 0.42,
+  tamirci: 0.42,
 };
 
 const DERS_BLOKLARI: number[] = [T.DERS1, T.DERS2, T.DERS3, T.DERS4];
@@ -207,6 +208,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
 
   for (const o of state.objects) {
     objById.set(o.id, o);
+    if ((o.yipranma ?? 0) >= 100) continue; // BOZUK eşya kullanılamaz — tamirci onarana dek
     if (o.type === 'tahta' && o.roomId >= 0 && !tahtaByRoom.has(o.roomId)) {
       tahtaByRoom.set(o.roomId, o);
     }
@@ -943,6 +945,53 @@ function updateJanitor(state: GameState, a: StaffAgent, dtMin: number): void {
   idleWander(state, a, dtMin);
 }
 
+/** Tamirci: en yakın bozuk eşyaya gidip başında onarır (yıpranma 0'a inene dek). */
+function updateRepairman(state: GameState, a: StaffAgent, dtMin: number): void {
+  if (a.activity === 'calisiyor') {
+    const o = state.objects.find((x) => x.id === a.usingObject);
+    if (!o) {
+      a.usingObject = -1;
+      a.activity = 'bosta';
+      return;
+    }
+    o.yipranma = Math.max(0, (o.yipranma ?? 0) - BALANCE.TAMIR_HIZ * dtMin);
+    if (o.yipranma <= 0) {
+      if (o.reservedBy === a.id) o.reservedBy = -1;
+      a.usingObject = -1;
+      a.activity = 'bosta';
+    }
+    return;
+  }
+  if (a.activity === 'geliyor' && a.path.length > 0) return;
+  if (a.usingObject !== -1 && a.path.length === 0) {
+    a.activity = 'calisiyor'; // bozuk eşyanın başına vardı
+    return;
+  }
+
+  // en yakın, başka tamircinin üstlenmediği bozuk eşya
+  let hedef: PlacedObject | null = null;
+  let enYakin = Infinity;
+  for (const o of state.objects) {
+    if ((o.yipranma ?? 0) < 100 || o.reservedBy !== -1) continue;
+    const d = Math.hypot(o.x - a.x, o.y - a.y);
+    if (d < enYakin) {
+      enYakin = d;
+      hedef = o;
+    }
+  }
+  if (hedef) {
+    const yan = adjacentWalkable(state, hedef) ?? { x: hedef.x, y: hedef.y };
+    if (goTo(state, a, yan)) {
+      hedef.reservedBy = a.id;
+      a.usingObject = hedef.id;
+      a.activity = a.path.length > 0 ? 'geliyor' : 'calisiyor';
+      return;
+    }
+  }
+  a.activity = 'bosta';
+  idleWander(state, a, dtMin);
+}
+
 // --- Ana güncelleme --------------------------------------------------------------
 
 export function updateAgents(state: GameState, dtMin: number): void {
@@ -1031,6 +1080,9 @@ export function updateAgents(state: GameState, dtMin: number): void {
         break;
       case 'temizlikci':
         updateJanitor(state, a, dtMin);
+        break;
+      case 'tamirci':
+        updateRepairman(state, a, dtMin);
         break;
     }
   }
@@ -1149,8 +1201,8 @@ export function spawnAcademic(
   return a;
 }
 
-export function hireStaff(state: GameState, kind: 'asci' | 'temizlikci'): StaffAgent | null {
-  const unvan = kind === 'asci' ? 'Aşçı' : 'Temizlikçi';
+export function hireStaff(state: GameState, kind: 'asci' | 'temizlikci' | 'tamirci'): StaffAgent | null {
+  const unvan = kind === 'asci' ? 'Aşçı' : kind === 'temizlikci' ? 'Temizlikçi' : 'Tamirci';
   if (!spend(state, BALANCE.PERSONEL_ALIM[kind], `${unvan} alımı`)) return null;
   const p: StaffAgent = {
     id: newId(state),

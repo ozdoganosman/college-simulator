@@ -119,6 +119,19 @@ function buildToolbar(getState: () => GameState, ui: UIState): void {
     'Kapalı alanı oda olarak işaretle (derslik, ofis, tuvalet...)');
   btn('🪑 Eşyalar', 'esya', () => toggleKategori('esya', getState, ui),
     'Odalara eşya yerleştir — her odanın zorunlu eşyaları vardır');
+  const katmanlar: { id: UIState['katman']; ad: string }[] = [
+    { id: 'yok', ad: '🌡️ Katman' },
+    { id: 'mutluluk', ad: '🌡️ Mutluluk' },
+    { id: 'aclik', ad: '🌡️ Açlık' },
+    { id: 'kir', ad: '🌡️ Kir' },
+    { id: 'yipranma', ad: '🌡️ Eskime' },
+  ];
+  const katmanBtn = btn('🌡️ Katman', 'katman', () => {
+    const idx = katmanlar.findIndex((k) => k.id === ui.katman);
+    ui.katman = katmanlar[(idx + 1) % katmanlar.length].id;
+    katmanBtn.textContent = katmanlar[(idx + 1) % katmanlar.length].ad;
+    katmanBtn.classList.toggle('katman-acik', ui.katman !== 'yok');
+  }, 'Isı haritası: tıkladıkça katman değişir — öğrenci mutluluğu / açlık / kampüs kiri / eşya eskimesi. Yeşil iyi, kırmızı kötü.');
   btn('🎓 Bölümler', 'panel-bolumler', () => openPanel('bolumler'),
     'Açık bölümler, kontenjanlar, YL/doktora programları');
   btn('👩‍🏫 Kadro', 'panel-kadro', () => openPanel('kadro'),
@@ -177,12 +190,12 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         `${ROOM_DEFS[p.room].ad === p.ad ? '' : ''}${p.ad} <span class="fiyat">${p.w}×${p.h} · ${formatMoney(prefabCost(p))}</span>`,
         ui.tool.kind === 'hazir' && ui.tool.prefab === p.id,
         () => { ui.tool = { kind: 'hazir', prefab: p.id }; },
-        `Tek tıkla kurulur: zemin + duvar + kapı + oda + eşyalar\nİçerik: ${prefabOzet(p)}`,
+        `Tek tık = ${p.w}×${p.h} kurulur · SÜRÜKLE = istediğin boyutta kur (eşyalar boyuta göre döşenir)\nVarsayılan içerik: ${prefabOzet(p)}`,
       );
     }
     const div = document.createElement('div');
     div.className = 'oda-bilgi';
-    div.innerHTML = 'Bina imlecin altında önizlenir; <b>yeşilse</b> tıklayıp kur. Alan tamamen boş olmalı.';
+    div.innerHTML = 'Tek tık: varsayılan boyut. <b>Sürükle: büyüt/küçült</b> — eşyalar boyuta göre döşenir, maliyet canlı görünür. Alan tamamen boş olmalı.';
     subbarEl.appendChild(div);
   } else if (acikKategori === 'insaat') {
     for (const f of FLOOR_DEFS) {

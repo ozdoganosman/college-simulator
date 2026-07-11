@@ -17,7 +17,7 @@ export function yurtKapasitesi(state: GameState): number {
   if (odalar.size === 0) return 0;
   let ranza = 0;
   for (const o of state.objects) {
-    if (o.type === 'ranza' && odalar.has(o.roomId)) ranza++;
+    if (o.type === 'ranza' && odalar.has(o.roomId) && (o.yipranma ?? 0) < 100) ranza++;
   }
   return ranza * 2;
 }
@@ -37,6 +37,7 @@ export function faaliyetPuani(state: GameState): number {
   const sosyalTurler = ['bank', 'otomat', 'basket_potasi', 'satranc_masasi', 'muzik_sahnesi'] as const;
   const adet = new Map<string, number>();
   for (const o of state.objects) {
+    if ((o.yipranma ?? 0) >= 100) continue; // bozuk eşya kampüs yaşamına katkı vermez
     if ((sosyalTurler as readonly string[]).includes(o.type)) {
       adet.set(o.type, (adet.get(o.type) ?? 0) + 1);
     }

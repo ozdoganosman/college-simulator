@@ -603,3 +603,63 @@ html, body, #app {
   pointer-events: none;
   z-index: 30;
 }
+
+/* --- Kampüs olay kartı ----------------------------------------------------- */
+#olay-kart {
+  position: absolute;
+  top: 148px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 24;
+  display: none;
+  pointer-events: none;
+}
+#olay-kart.acik { display: block; }
+.olay-govde {
+  pointer-events: auto;
+  width: min(480px, 92vw);
+  background: linear-gradient(180deg, #2a2432, #221d28);
+  border: 1px solid #8a6ad8;
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55), 0 0 14px rgba(138, 106, 216, 0.25);
+  animation: olayGel 0.4s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes olayGel { from { transform: translateY(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.olay-baslik {
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  color: #c9b8f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.olay-baslik b { color: #f2ecff; font-size: 13px; }
+.olay-sure {
+  margin-left: auto;
+  font-size: 11px;
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.12);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.olay-metin { font-size: 12.5px; color: #d8d2e6; margin: 7px 0 9px; line-height: 1.45; }
+.olay-secenekler { display: flex; gap: 8px; flex-wrap: wrap; }
+.olay-btn {
+  flex: 1;
+  min-width: 150px;
+  background: #3a3346;
+  color: #f2ecff;
+  border: 1px solid #5d5375;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.olay-btn:hover { background: #4c4260; transform: translateY(-1px); }
+.olay-btn.varsayilan { border-style: dashed; opacity: 0.92; }
+
+/* Katman düğmesi aktifken turuncu vurgu */
+.tb-btn.katman-acik { background: #7a4a1f; border-color: #d97b3c; color: #ffe3c8; }

@@ -41,6 +41,8 @@ import {
 } from '../game/alumni';
 import { krediCek } from '../game/economy';
 import { cazibePuani, faaliyetPuani, ulasimSeviyesi, yurtKapasitesi } from '../game/campus';
+import { denetimKarnesi, sonrakiDenetimGunu } from '../game/accreditation';
+import { bozukSayisi } from '../game/maintenance';
 import {
   KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
   toplamKoleksiyon,
@@ -324,10 +326,10 @@ function onPanelClick(e: Event): void {
       notify(state, `⏹️ ${strategyDef(id).ad} durduruldu — günlük gideri kesildi (yeniden başlatmak tam maliyet ister).`, 'bilgi');
       break;
     case 'personel-al':
-      hireStaff(state, id as 'asci' | 'temizlikci');
+      hireStaff(state, id as 'asci' | 'temizlikci' | 'tamirci');
       break;
     case 'personel-cikar': {
-      const kind = id as 'asci' | 'temizlikci';
+      const kind = id as 'asci' | 'temizlikci' | 'tamirci';
       for (let i = state.agents.length - 1; i >= 0; i--) {
         const p = state.agents[i];
         if (p.kind === kind) {
@@ -581,7 +583,9 @@ function bolumlerGovde(state: GameState): string {
           ${state.ucret === 0 ? 'disabled' : ''}
           title="${state.ucret === 0 ? 'Okul geneli ücretsiz (devlet modeli) — bölüm ücreti uygulanmaz' : `Bölüme özel yıllık kayıt ücreti ₺ — boş bırak: okul geneli (${formatMoney(state.ucret)}) geçerli. Popüler bölümü pahalıya satabilirsin; ödeme gücünü aşarsa ücretli kademe boş kalır.`}"></td>
         <td>${d.sonTalep} / ${d.sonKayit}</td>
-        <td>${derslikSayisi.get(d.id) ?? 0} derslik · ${seatCapacity(state, d.id)} koltuk</td>
+        <td>${derslikSayisi.get(d.id) ?? 0} derslik · ${seatCapacity(state, d.id)} koltuk
+          ${seatCapacity(state, d.id) < d.kontenjan ? `<br><span class="rozet" style="background:#8f3535" title="Kontenjan ${d.kontenjan} ama koltuk ${seatCapacity(state, d.id)} — YKS'de istekli adaylar geri çevrilir! Derslik kur / sıra ekle ya da kontenjanı düşür.">koltuk &lt; kontenjan</span>` : ''}
+          ${(d.sonGeriCevrilen ?? 0) > 0 ? `<br><span class="rozet" style="background:#8f5a35" title="Geçen YKS'de ${d.sonGeriCevrilen} istekli aday koltuk yetmediği için kayıt yapamadı — kaçan ödenek ve ücret geliri!">geçen YKS: ${d.sonGeriCevrilen} aday çevrildi</span>` : ''}</td>
         <td>${k.n} / ${def.minAkademisyen}${uyeRozet}</td>
         <td>${prestijHucre}<br>${mezunHucre}</td>
         <td>${yl} ${dok}</td>
@@ -739,12 +743,13 @@ function kadroGovde(state: GameState): string {
       </table>`;
 
   // Destek personeli
-  let asci = 0, temizlikci = 0;
+  let asci = 0, temizlikci = 0, tamirci = 0;
   for (const a of state.agents) {
     if (a.kind === 'asci') asci++;
     else if (a.kind === 'temizlikci') temizlikci++;
+    else if (a.kind === 'tamirci') tamirci++;
   }
-  const personelSatir = (kind: 'asci' | 'temizlikci', ad: string, adet: number): string => {
+  const personelSatir = (kind: 'asci' | 'temizlikci' | 'tamirci', ad: string, adet: number): string => {
     const alim = BALANCE.PERSONEL_ALIM[kind];
     return `<tr>
       <td><b>${ad}</b></td>
@@ -769,11 +774,14 @@ function kadroGovde(state: GameState): string {
     <p class="aciklama">Deneyimli akademisyenler imza bonusu ister; transfer prestij kazandırır.</p>
     ${transferTablo}
     <h3>Destek Personeli</h3>
-    <p class="aciklama">Aşçı olmadan yemekhane servis yapamaz; temizlikçiler kampüs kirini temizler.</p>
+    <p class="aciklama">Aşçı olmadan yemekhane servis yapamaz; temizlikçiler kampüs kirini temizler;
+      tamirciler bozulan eşyaları onarır (bozuk eşya işlev görmez!).
+      ${bozukSayisi(state) > 0 ? `<span class="rozet" style="background:#8f3535">🔧 ${bozukSayisi(state)} bozuk eşya</span>` : ''}</p>
     <table>
       <tr><th>Personel</th><th>Sayı</th><th>Maaş/gün</th><th></th></tr>
       ${personelSatir('asci', 'Aşçı', asci)}
       ${personelSatir('temizlikci', 'Temizlikçi', temizlikci)}
+      ${personelSatir('tamirci', '🔧 Tamirci', tamirci)}
     </table>`;
 }
 
@@ -1356,6 +1364,33 @@ function basarimBolumu(state: GameState): string {
     <div>${satirlar}</div>`;
 }
 
+/** Raporlar: YÖK akreditasyon karnesi — canlı puan + sonraki denetim. */
+function denetimBolumu(state: GameState): string {
+  const karne = denetimKarnesi(state);
+  const puan = karne.reduce((t, k) => t + k.puan, 0);
+  const kalanGun = sonrakiDenetimGunu(state) - state.gun;
+  const renk = puan >= BALANCE.DENETIM_GECME ? '#7ee08a' : puan >= BALANCE.DENETIM_KOSULLU ? '#f0c674' : '#f4a09c';
+  const satirlar = karne.map((k) => `<tr>
+      <td>${k.ad}</td>
+      <td><b style="color:${k.puan >= k.max ? '#7ee08a' : k.puan > 0 ? '#f0c674' : '#f4a09c'}">${k.puan}</b> / ${k.max}</td>
+      <td class="aciklama">${esc(k.detay)}</td>
+    </tr>`).join('');
+  const son = state.sonDenetim
+    ? `Son denetim (gün ${state.sonDenetim.gun}): <b>${state.sonDenetim.puan}/100 — ${esc(state.sonDenetim.sonuc)}</b>`
+    : 'Henüz denetim yapılmadı.';
+  return `<h3>🏛️ YÖK Akreditasyon Karnesi</h3>
+    <div class="aciklama">Her 2 yılda bir denetim (sonraki: <b>gün ${sonrakiDenetimGunu(state)}, ${kalanGun} gün kaldı</b>).
+    ≥ ${BALANCE.DENETIM_GECME} GEÇER (+${BALANCE.DENETIM_ODUL_PRESTIJ} prestij) ·
+    ${BALANCE.DENETIM_KOSULLU}-${BALANCE.DENETIM_GECME - 1} KOŞULLU (-5) ·
+    &lt; ${BALANCE.DENETIM_KOSULLU} KALIR: <b>-15 prestij + tüm kontenjanlar %20 kesilir!</b>
+    ${son}</div>
+    <div class="aciklama">Şu anki canlı puan: <b style="color:${renk};font-size:15px">${puan} / 100</b></div>
+    <table>
+      <tr><th>Kriter</th><th>Puan</th><th>Durum</th></tr>
+      ${satirlar}
+    </table>`;
+}
+
 function raporlarGovde(state: GameState): string {
   // Tek geçişte tüm ajan istatistikleri — gider hesabı economy.ts ile AYNI kurallarla
   // (teşvik çarpanı, asistan maaşları, mentorluk) yapılır ki rapor gerçeği yansıtsın
@@ -1433,6 +1468,7 @@ function raporlarGovde(state: GameState): string {
       ${state.krediBorcu > 0 ? satir('🏦 Kalan kredi borcu', `<b style="color:#f4a09c">${formatMoney(state.krediBorcu)}</b> (günlük ${formatMoney(BALANCE.KREDI_TAKSIT)})`) : ''}
       ${satir('Günlük net (ödenekler hariç)', `<b style="color:${gunlukNet >= 0 ? '#9fd3a8' : '#f4a09c'}">${gunlukNet >= 0 ? '+' : ''}${formatMoney(gunlukNet)}</b> <small>· YKS ödeneği ve dönem destekleri ayrıca gelir</small>`)}
     </table>
+    ${denetimBolumu(state)}
     ${siralamaBolumu(state)}
     <h3>🎓 Öğrenciler</h3>
     <table>
