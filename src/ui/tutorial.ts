@@ -37,7 +37,7 @@ const STEPS: TutorialStep[] = [
   },
   {
     baslik: 'Derslik bölgesi ata',
-    detay: '<b>🏷️ Odalar → Derslik</b> seç ve duvarların İÇİNDEKİ alanı sürükleyerek işaretle (en az 12 kare). Oda şimdilik ⚠ geçersiz görünecek — sonraki adımda tamamlayacağız.',
+    detay: '<b>🏷️ Odalar → Derslik</b> seç ve duvarların İÇİNDEKİ alanı sürükleyerek işaretle (en az 12 kare). Oda şimdilik ⚠ geçersiz görünecek — sonraki adımda tamamlayacağız. 💡 Kestirme: <b>🏗️ Hazır Bina → Derslik Binası</b> ile her şey tek tıkla da kurulur!',
     kontrol: (s) => ({ tamam: s.rooms.some((r) => r.type === 'derslik') }),
   },
   {

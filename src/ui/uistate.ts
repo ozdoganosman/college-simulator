@@ -8,7 +8,8 @@ export type Tool =
   | { kind: 'yikim' }
   | { kind: 'oda'; room: RoomType }
   | { kind: 'oda_kaldir' }
-  | { kind: 'esya'; obj: ObjectTypeId };
+  | { kind: 'esya'; obj: ObjectTypeId }
+  | { kind: 'hazir'; prefab: string };
 
 export interface UIState {
   tool: Tool;

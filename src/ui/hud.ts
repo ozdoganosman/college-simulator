@@ -3,6 +3,9 @@ import { formatClock, formatMoney } from '../core/util';
 import { FLOOR_DEFS, ROOM_DEFS, ROOM_LIST, WALL_COST, DOOR_COST } from '../data/rooms';
 import { OBJECT_DEFS, OBJECT_LIST } from '../data/objects';
 import { isEnclosed, libraryLevel } from '../core/grid';
+import {
+  PREFABS, autoFurnishCost, autoFurnishRoom, prefabCost, prefabOzet, roomFurnishPlan,
+} from '../game/prefab';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
 
@@ -11,7 +14,7 @@ let toolbarEl: HTMLElement;
 let subbarEl: HTMLElement;
 let noticesEl: HTMLElement;
 
-type Kategori = 'insaat' | 'oda' | 'esya' | null;
+type Kategori = 'insaat' | 'oda' | 'esya' | 'hazir' | null;
 let acikKategori: Kategori = null;
 
 export function initHud(getState: () => GameState, ui: UIState): void {
@@ -70,6 +73,7 @@ function buildToolbar(getState: () => GameState, ui: UIState): void {
   };
 
   btn('🖱️ Seç', 'sec', () => setTool(ui, { kind: 'sec' }, getState));
+  btn('🏗️ Hazır Bina', 'hazir', () => toggleKategori('hazir', getState, ui));
   btn('🧱 İnşaat', 'insaat', () => toggleKategori('insaat', getState, ui));
   btn('🏷️ Odalar', 'oda', () => toggleKategori('oda', getState, ui));
   btn('🪑 Eşyalar', 'esya', () => toggleKategori('esya', getState, ui));
@@ -113,7 +117,20 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
     subbarEl.appendChild(b);
   };
 
-  if (acikKategori === 'insaat') {
+  if (acikKategori === 'hazir') {
+    for (const p of PREFABS) {
+      item(
+        `${ROOM_DEFS[p.room].ad === p.ad ? '' : ''}${p.ad} <span class="fiyat">${p.w}×${p.h} · ${formatMoney(prefabCost(p))}</span>`,
+        ui.tool.kind === 'hazir' && ui.tool.prefab === p.id,
+        () => { ui.tool = { kind: 'hazir', prefab: p.id }; },
+        `Tek tıkla kurulur: zemin + duvar + kapı + oda + eşyalar\nİçerik: ${prefabOzet(p)}`,
+      );
+    }
+    const div = document.createElement('div');
+    div.className = 'oda-bilgi';
+    div.innerHTML = 'Bina imlecin altında önizlenir; <b>yeşilse</b> tıklayıp kur. Alan tamamen boş olmalı.';
+    subbarEl.appendChild(div);
+  } else if (acikKategori === 'insaat') {
     for (const f of FLOOR_DEFS) {
       item(`${f.ad}<span class="fiyat">${formatMoney(f.maliyet)}</span>`,
         ui.tool.kind === 'zemin' && ui.tool.floor === f.id,
@@ -180,6 +197,20 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         ? '<span class="gerek">✔ Oda kullanıma hazır</span>'
         : '';
       div.innerHTML = html;
+
+      // otomatik döşeme: eksik eşyaları boyuta göre desenle yerleştir
+      const plan = roomFurnishPlan(state, room);
+      if (plan.length > 0) {
+        const b = document.createElement('button');
+        b.className = 'sub-btn';
+        b.innerHTML = `🪄 Otomatik Döşe (${plan.length} eşya) <span class="fiyat">${formatMoney(autoFurnishCost(state, room))}</span>`;
+        b.title = 'Odayı türüne uygun desenle döşer — oda büyüdükçe eşya (ve kapasite) artar';
+        b.addEventListener('click', () => {
+          autoFurnishRoom(state, room.id);
+          renderSubbar(getState, ui);
+        });
+        div.appendChild(b);
+      }
       subbarEl.appendChild(div);
     }
   }

@@ -8,6 +8,7 @@ import { FLOOR_DEFS, ROOM_DEFS, WALL_COST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { bushSprite, gateSprite, objectSprite, treeSprite } from './sprites';
+import { canPlacePrefab, prefabCost, prefabDef, prefabOrigin } from '../game/prefab';
 import type { Camera } from './camera';
 import type { UIState } from './uistate';
 
@@ -512,6 +513,47 @@ function drawToolPreview(ctx: CanvasRenderingContext2D, state: GameState, ui: UI
   const hover = ui.hoverTile;
   if (!hover) return;
   const t = ui.tool;
+
+  // hazır bina hayaleti
+  if (t.kind === 'hazir') {
+    const def = prefabDef(t.prefab);
+    const o = prefabOrigin(def, hover);
+    const ok = canPlacePrefab(state, def, o.x, o.y);
+    const px = o.x * TILE, py = o.y * TILE, pw = def.w * TILE, ph = def.h * TILE;
+
+    // iç dolgu (oda rengi) + duvar çerçevesi
+    ctx.fillStyle = ok ? hexA(ROOM_DEFS[def.room].renk, 0.4) : 'rgba(220,60,60,0.3)';
+    ctx.fillRect(px + TILE, py + TILE, pw - 2 * TILE, ph - 2 * TILE);
+    ctx.fillStyle = ok ? 'rgba(77,69,60,0.75)' : 'rgba(160,40,40,0.6)';
+    ctx.fillRect(px, py, pw, TILE);
+    ctx.fillRect(px, py + ph - TILE, pw, TILE);
+    ctx.fillRect(px, py, TILE, ph);
+    ctx.fillRect(px + pw - TILE, py, TILE, ph);
+    // kapı işareti (alt orta)
+    ctx.fillStyle = ok ? 'rgba(165,113,58,0.95)' : 'rgba(120,60,60,0.9)';
+    const kapiX = Math.floor((o.x + o.x + def.w - 1) / 2) * TILE;
+    ctx.fillRect(kapiX + 3, py + ph - TILE + 3, TILE - 6, TILE - 6);
+    ctx.strokeStyle = ok ? 'rgba(255,255,255,0.9)' : 'rgba(255,120,110,0.95)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px, py, pw, ph);
+
+    // etiket
+    const fs = Math.max(10, TILE * 0.45);
+    ctx.font = `700 ${fs}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const etiket = ok
+      ? `${def.ad} · ${formatMoney(prefabCost(def))}`
+      : `${def.ad} — alan uygun değil`;
+    const tw = ctx.measureText(etiket).width;
+    const ex = px + pw / 2, ey = py - fs;
+    ctx.fillStyle = ok ? 'rgba(12,16,22,0.85)' : 'rgba(140,35,30,0.9)';
+    roundRectPath(ctx, ex - tw / 2 - 6, ey - fs * 0.75, tw + 12, fs * 1.5, 4);
+    ctx.fill();
+    ctx.fillStyle = '#f2f5fa';
+    ctx.fillText(etiket, ex, ey);
+    return;
+  }
 
   const rectTools = ['zemin', 'duvar', 'yikim', 'oda', 'oda_kaldir'];
   if (ui.dragStart && rectTools.includes(t.kind)) {
