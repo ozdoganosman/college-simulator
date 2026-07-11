@@ -57,7 +57,7 @@ const STEPS: TutorialStep[] = [
   },
   {
     baslik: 'KPSS ile 2 akademisyen al',
-    detay: '<b>👩‍🏫 Kadro</b> panelini aç → <b>KPSS / İlan Havuzu</b> tablosundan iki adayı <b>İşe Al</b>. Ucuz ama tecrübesizler; sonra rakip üniversitelerden yıldız <b>transfer</b> de edebilirsin.',
+    detay: '<b>👩‍🏫 Kadro</b> panelini aç → <b>KPSS / İlan Havuzu</b>ndan iki adayı <b>İşe Al</b>. Dikkat: her hocanın bir <b>alanı</b> var (🔬 Mühendis, 🎨 Artist, 📜 Filozof, 💼 Pratik) ve bölümler ancak derslerini verebilecek alanlarda hocan varsa açılır — İşletme için <b>💼 Pratik + 🎨 Artist + 🔬 Mühendis</b> birer kişi ideal.',
     kontrol: (s) => {
       const n = s.agents.filter((a) => a.kind === 'akademisyen').length;
       return { tamam: n >= 2, ilerleme: `${Math.min(n, 2)}/2 akademisyen` };

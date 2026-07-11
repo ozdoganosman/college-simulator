@@ -11,8 +11,10 @@
  *   (styles.css'te hazır).
  */
 import {
-  AcademicRank, GameState, RANK_LABEL, RoomType, StrategyDef, StudentLevel,
+  ALAN_META, AcademicRank, Alan, GameState, RANK_LABEL, RoomType, StrategyDef, StudentLevel,
 } from '../core/types';
+import { courseDef, dersEtki } from '../data/courses';
+import { blokDersi, verilemeyenDersler } from '../game/schedule';
 import { formatMoney } from '../core/util';
 import { libraryLevel, validRooms } from '../core/grid';
 import { clearSave, notify, spend } from '../game/state';
@@ -29,7 +31,7 @@ import { ROOM_DEFS, ROOM_LIST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
 import { STRATEGY_DEFS, strategyDef } from '../data/strategies';
 
-export type PanelName = 'bolumler' | 'kadro' | 'arastirma' | 'strateji' | 'raporlar' | 'yardim';
+export type PanelName = 'bolumler' | 'kadro' | 'program' | 'arastirma' | 'strateji' | 'raporlar' | 'yardim';
 
 let getStateRef: (() => GameState) | null = null;
 let acik: { name: PanelName; el: HTMLDivElement } | null = null;
@@ -37,6 +39,7 @@ let acik: { name: PanelName; el: HTMLDivElement } | null = null;
 const PANEL_BASLIK: Record<PanelName, string> = {
   bolumler: '🎓 Bölümler',
   kadro: '👩‍🏫 Kadro',
+  program: '📅 Ders Programı',
   arastirma: '🔬 Araştırma',
   strateji: '♟️ Strateji',
   raporlar: '📊 Raporlar',
@@ -111,6 +114,7 @@ function render(state: GameState): void {
   switch (acik.name) {
     case 'bolumler': govde = bolumlerGovde(state); break;
     case 'kadro': govde = kadroGovde(state); break;
+    case 'program': govde = programGovde(state); break;
     case 'arastirma': govde = arastirmaGovde(state); break;
     case 'strateji': govde = stratejiGovde(state); break;
     case 'raporlar': govde = raporlarGovde(state); break;
@@ -357,7 +361,7 @@ function kadroGovde(state: GameState): string {
     const satirlar = akademisyenler.map((a) => {
       const tazminat = 30 * a.maas;
       return `<tr>
-        <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b></td>
+        <td><b>${RANK_LABEL[a.rank]} ${esc(a.ad)}</b> <span class="rozet" title="${ALAN_META[a.alan].tanim}">${ALAN_META[a.alan].emoji} ${ALAN_META[a.alan].ad}</span></td>
         <td><select data-action="bolum-sec" data-id="${a.id}">${bolumSecenekleri(state, a.deptId)}</select></td>
         <td>${Math.round(a.egitim)}</td>
         <td>${Math.round(a.arastirma)}</td>
@@ -377,7 +381,7 @@ function kadroGovde(state: GameState): string {
 
   // KPSS havuzu
   const kpssSatir = state.kpssPool.map((c) => `<tr>
-      <td>${RANK_LABEL[c.rank]} ${esc(c.ad)}</td>
+      <td>${RANK_LABEL[c.rank]} ${esc(c.ad)} <span class="rozet" title="${ALAN_META[c.alan].tanim}">${ALAN_META[c.alan].emoji} ${ALAN_META[c.alan].ad}</span></td>
       <td>${c.egitim}</td>
       <td>${c.arastirma}</td>
       <td>${formatMoney(c.maas)}</td>
@@ -398,7 +402,7 @@ function kadroGovde(state: GameState): string {
     if (kadroDolu) nedenler.push('Ofis masası yetersiz');
     if (state.para < c.bonus) nedenler.push('Bütçe yetersiz (imza bonusu)');
     return `<tr>
-      <td>${RANK_LABEL[c.rank]} ${esc(c.ad)}</td>
+      <td>${RANK_LABEL[c.rank]} ${esc(c.ad)} <span class="rozet" title="${ALAN_META[c.alan].tanim}">${ALAN_META[c.alan].emoji} ${ALAN_META[c.alan].ad}</span></td>
       <td>${esc(c.kurum)}</td>
       <td>${c.egitim}</td>
       <td>${c.arastirma}</td>
@@ -755,4 +759,75 @@ function yardimGovde(): string {
     <div class="aciklama" style="margin-top:8px">Oyun her gün sonunda otomatik kaydedilir.
     📊 Raporlar panelinden yeni oyun başlatabilirsin.</div>
   `;
+}
+
+// --- Ders Programı ---------------------------------------------------------------
+
+const BLOK_SAAT = ['08:00-10:00', '10:00-12:00', '13:00-15:00', '15:00-17:00'];
+
+function programGovde(state: GameState): string {
+  if (state.departments.length === 0) {
+    return '<div class="aciklama">Henüz bölüm açılmadı — program, bölüm açılınca oluşur.</div>';
+  }
+
+  const akademisyenAd = new Map<number, string>();
+  const akademisyenAlan = new Map<number, Alan>();
+  for (const a of state.agents) {
+    if (a.kind === 'akademisyen') {
+      akademisyenAd.set(a.id, a.ad);
+      akademisyenAlan.set(a.id, a.alan);
+    }
+  }
+
+  let html = `<div class="aciklama">Her blokta bölümün müfredatından bir ders işlenir; derse
+    <b>en uygun alandaki</b> hoca otomatik atanır (hoca başına günde en çok 2 blok).
+    Alan uyumu öğrenme hızını doğrudan etkiler: birincil alan %100, ikincil %76, alan dışı %44.</div>`;
+
+  // bugünün takvimi
+  html += '<table><tr><th>Bölüm</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';
+  for (const dept of state.departments) {
+    const def = deptDef(dept.defId);
+    html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`;
+    for (let blok = 0; blok < 4; blok++) {
+      const slot = blokDersi(state, dept.id, blok);
+      if (!slot) {
+        html += '<td>—</td>';
+        continue;
+      }
+      const ders = courseDef(slot.courseId);
+      let hoca = '<span class="hata" style="color:#f4a09c">hoca yok!</span>';
+      if (slot.academicId !== -1 && akademisyenAd.has(slot.academicId)) {
+        const alan = akademisyenAlan.get(slot.academicId)!;
+        const uyum = Math.round((dersEtki(slot.courseId, alan) / 1.25) * 100);
+        hoca = `${ALAN_META[alan].emoji} ${esc(akademisyenAd.get(slot.academicId)!)} <small>(%${uyum} uyum)</small>`;
+      }
+      html += `<td><b>${ders.kod}</b> ${ders.ad}<br><small>${hoca}</small></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+
+  // bölüm müfredatları + verilebilirlik
+  html += '<h3>Müfredatlar</h3><table><tr><th>Bölüm</th><th>Dersler</th></tr>';
+  for (const dept of state.departments) {
+    const def = deptDef(dept.defId);
+    const eksikler = new Set(verilemeyenDersler(state, def.id));
+    const liste = def.dersler.map((id) => {
+      const d = courseDef(id);
+      const alan = ALAN_META[d.birincil];
+      const durum = eksikler.has(id) ? ' style="color:#f4a09c"' : '';
+      return `<span class="rozet"${durum} title="${d.ad} — ${alan.ad}">${alan.emoji} ${d.kod}${eksikler.has(id) ? ' ✖' : ''}</span>`;
+    }).join(' ');
+    html += `<tr><td><b>${def.ad}</b></td><td>${liste}</td></tr>`;
+  }
+  html += '</table>';
+
+  // alan lejantı
+  html += '<h3>Akademisyen Alanları</h3><div class="aciklama">'
+    + (Object.keys(ALAN_META) as Alan[])
+      .map((a) => `<b>${ALAN_META[a].emoji} ${ALAN_META[a].ad}</b>: ${ALAN_META[a].tanim}`)
+      .join(' · ')
+    + '</div>';
+
+  return html;
 }

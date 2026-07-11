@@ -5,6 +5,7 @@ import { updateAgents } from './agents';
 import { updateResearch } from './research';
 import { dailyAcademicUpdate, refreshCandidatePools } from './academics';
 import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } from './departments';
+import { rebuildDersProgrami } from './schedule';
 import { dailyEconomy } from './economy';
 import { notify, saveGame } from './state';
 
@@ -38,6 +39,7 @@ function endOfDay(state: GameState): void {
   // Önce gün içinde yapılan inşaatı işle ki yerleştirme güncel kapasiteyi görsün
   validateRooms(state);
   assignClassrooms(state);
+  rebuildDersProgrami(state); // yeni günün ders programı ve hoca atamaları
 
   // Dönem geçişi: mezuniyet + aday havuzları + öğrenci desteği.
   // Yerleştirme OTOMATİK YAPILMAZ — yıl başında YKS dönemi açılır,
@@ -59,6 +61,7 @@ function endOfDay(state: GameState): void {
 export function initNewGame(state: GameState): void {
   refreshCandidatePools(state);
   assignClassrooms(state);
+  rebuildDersProgrami(state);
   notify(state, 'Üniversiteye hoş geldiniz, Rektörüm! Önce zemin döşeyip duvarlarla bir bina yapın.', 'bilgi');
   notify(state, 'Derslik + ofis + tuvalet kurup KPSS ile akademisyen alınca ilk bölümünüzü açabilirsiniz.', 'bilgi');
   notify(state, '🎓 Acele etme: kampüsün hazır olunca üstteki "YKS Yerleştirmeyi Başlat" butonuna bas — öğrenciler o zaman gelir.', 'odul');

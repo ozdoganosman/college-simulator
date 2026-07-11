@@ -1,5 +1,6 @@
 /** Slotlu kayıt sistemi (otomatik kayıttan bağımsız 5 manuel slot). */
 import { GameState, donemAdi, yil } from '../core/types';
+import { eskiKayitUyumu } from './state';
 
 export const SLOT_SAYISI = 5;
 
@@ -75,6 +76,7 @@ export function slottanYukle(slot: number): GameState | null {
     if (typeof s.tutorialAcik !== 'boolean') s.tutorialAcik = false;
     if (s.yerlestirme === undefined) s.yerlestirme = null;
     if (typeof s.yksBekliyor !== 'boolean') s.yksBekliyor = true;
+    eskiKayitUyumu(s);
     return s;
   } catch {
     return null;

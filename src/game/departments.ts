@@ -48,8 +48,9 @@
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
 import {
-  Department, GameState, Room, Student, YerlestirmeSatir, donemIndex, yil,
+  ALAN_META, Department, GameState, Room, Student, YerlestirmeSatir, donemIndex, yil,
 } from '../core/types';
+import { courseDef, rebuildDersProgrami, verilemeyenDersler } from './schedule';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { deptDef } from '../data/departments';
@@ -77,6 +78,12 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   }
   if (def.labGerekli && !state.rooms.some((r) => r.type === 'laboratuvar' && r.valid)) {
     eksik.push('Geçerli laboratuvar yok');
+  }
+  // Müfredat şartı: bölümün dersleri uygun alanda akademisyenle verilebilmeli
+  for (const dersId of verilemeyenDersler(state, defId)) {
+    const ders = courseDef(dersId);
+    const alan = ALAN_META[ders.birincil];
+    eksik.push(`${ders.kod} ${ders.ad} verilemiyor — ${alan.emoji} ${alan.ad} alanında akademisyen gerekli`);
   }
   if (state.para < def.acilisMaliyeti) {
     eksik.push(`Bütçe yetersiz (${formatMoney(def.acilisMaliyeti)} gerekli)`);
@@ -108,6 +115,7 @@ export function openDepartment(state: GameState, defId: string): boolean {
   addPrestij(state, 5);
   notify(state, `🎉 ${def.ad} bölümü açıldı!`, 'iyi');
   assignClassrooms(state);
+  rebuildDersProgrami(state);
   return true;
 }
 

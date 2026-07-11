@@ -37,6 +37,7 @@ export function createInitialState(): GameState {
     tutorialAcik: true,
     yerlestirme: null,
     yksBekliyor: true,
+    dersProgrami: [],
     toplamMezun: 0,
     toplamBirakan: 0,
   };
@@ -89,9 +90,24 @@ export function loadGame(): GameState | null {
     if (typeof s.tutorialAcik !== 'boolean') s.tutorialAcik = false;
     if (s.yerlestirme === undefined) s.yerlestirme = null;
     if (typeof s.yksBekliyor !== 'boolean') s.yksBekliyor = true;
+    eskiKayitUyumu(s);
     return s;
   } catch {
     return null;
+  }
+}
+
+/** Eski kayıtlara sonradan eklenen alanları tamamlar. */
+export function eskiKayitUyumu(s: GameState): void {
+  if (!Array.isArray(s.dersProgrami)) s.dersProgrami = [];
+  const alanlar = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
+  for (const a of s.agents) {
+    if (a.kind === 'akademisyen' && !(a as { alan?: string }).alan) {
+      a.alan = alanlar[a.id % alanlar.length];
+    }
+  }
+  for (const c of [...s.kpssPool, ...s.transferPool]) {
+    if (!(c as { alan?: string }).alan) c.alan = alanlar[c.id % alanlar.length];
   }
 }
 

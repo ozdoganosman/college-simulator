@@ -32,6 +32,9 @@ import { clamp, formatMoney, newId, pick, randInt, randRange } from '../core/uti
 import { BALANCE } from '../data/balance';
 import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
 import { removeAgent, spawnAcademic } from './agents';
+import { rebuildDersProgrami } from './schedule';
+
+const ALANLAR = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
 import { addPrestij, notify, spend } from './state';
 
 type UstRank = 'dr' | 'docent' | 'prof';
@@ -64,6 +67,7 @@ export function refreshCandidatePools(state: GameState): void {
       id: newId(state),
       ad: rastgeleAd(state),
       rank: 'arsgor',
+      alan: ALANLAR[i % ALANLAR.length], // havuzda her alandan aday bulunsun
       egitim: randInt(state, 20, 55),
       arastirma: randInt(state, 20, 55),
       maas: Math.round(BALANCE.MAAS.arsgor * randRange(state, 0.85, 1.15)),
@@ -83,6 +87,7 @@ export function refreshCandidatePools(state: GameState): void {
       id: newId(state),
       ad: rastgeleAd(state),
       rank,
+      alan: pick(state, ALANLAR),
       egitim: randInt(state, 50, 95),
       arastirma: randInt(state, 50, 95),
       maas: Math.round(BALANCE.MAAS[rank] * randRange(state, 1.1, 1.5)),
@@ -123,7 +128,8 @@ export function hireFromPool(
     if (!spend(state, aday.bonus, 'transfer imza bonusu')) return false;
   }
 
-  spawnAcademic(state, aday.ad, deptId, aday.rank, aday.egitim, aday.arastirma, aday.maas);
+  spawnAcademic(state, aday.ad, deptId, aday.rank, aday.alan, aday.egitim, aday.arastirma, aday.maas);
+  rebuildDersProgrami(state);
   havuz.splice(idx, 1);
 
   if (pool === 'transfer') {
@@ -143,6 +149,7 @@ export function assignAcademicDept(state: GameState, academicId: number, deptId:
   const a = state.agents.find((ag) => ag.id === academicId);
   if (!a || a.kind !== 'akademisyen') return;
   a.deptId = deptId;
+  rebuildDersProgrami(state);
 }
 
 export function fireAcademic(state: GameState, academicId: number): boolean {
@@ -152,6 +159,7 @@ export function fireAcademic(state: GameState, academicId: number): boolean {
   if (!spend(state, tazminat, 'işten çıkarma tazminatı')) return false;
   const etiket = `${RANK_LABEL[a.rank]} ${a.ad}`;
   removeAgent(state, academicId);
+  rebuildDersProgrami(state);
   notify(state, `${etiket} işten çıkarıldı (tazminat ${formatMoney(tazminat)}).`, 'kotu');
   return true;
 }

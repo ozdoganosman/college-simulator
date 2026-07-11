@@ -80,6 +80,26 @@ export type StudentLevel = 'lisans' | 'yl' | 'doktora';
 
 export type AcademicRank = 'arsgor' | 'dr' | 'docent' | 'prof';
 
+/** Akademisyen uzmanlık alanı — ders uygunluğunu belirler. */
+export type Alan = 'muhendis' | 'artist' | 'filozof' | 'pratik';
+
+export const ALAN_META: Record<Alan, { ad: string; emoji: string; renk: string; tanim: string }> = {
+  muhendis: { ad: 'Mühendis', emoji: '🔬', renk: '#4e79a7', tanim: 'Bilim ve fen dersleri' },
+  artist: { ad: 'Artist', emoji: '🎨', renk: '#e15759', tanim: 'Sanat, edebiyat ve dil dersleri' },
+  filozof: { ad: 'Filozof', emoji: '📜', renk: '#b07aa1', tanim: 'Tarih, sosyal bilimler ve felsefe' },
+  pratik: { ad: 'Pratik', emoji: '💼', renk: '#59a14f', tanim: 'İşletme, iktisat ve meslek dersleri' },
+};
+
+/** Günlük ders programı girdisi: bölümün o bloktaki dersi ve atanan hocası. */
+export interface DersSlot {
+  deptId: number;
+  /** 0-3: 08-10, 10-12, 13-15, 15-17 */
+  blok: number;
+  courseId: string;
+  /** atanan akademisyen (yoksa -1) */
+  academicId: number;
+}
+
 export const RANK_LABEL: Record<AcademicRank, string> = {
   arsgor: 'Arş. Gör.',
   dr: 'Dr. Öğr. Üyesi',
@@ -146,6 +166,8 @@ export interface Academic extends AgentBase {
   kind: 'akademisyen';
   deptId: number;
   rank: AcademicRank;
+  /** uzmanlık alanı — hangi dersleri iyi verebildiğini belirler */
+  alan: Alan;
   /** 0-100 eğitim becerisi */
   egitim: number;
   /** 0-100 araştırma becerisi */
@@ -181,6 +203,8 @@ export interface DeptDef {
   tabanTalep: number;
   /** araştırma üretkenlik çarpanı */
   arastirmaCarpani: number;
+  /** müfredat: bölümün verilmesi zorunlu dersleri (course id listesi) */
+  dersler: string[];
 }
 
 export interface Department {
@@ -263,6 +287,7 @@ export interface Candidate {
   id: number;
   ad: string;
   rank: AcademicRank;
+  alan: Alan;
   egitim: number;
   arastirma: number;
   maas: number;         // günlük maaş talebi
@@ -337,6 +362,8 @@ export interface GameState {
   yerlestirme: YerlestirmeSonuc | null;
   /** YKS dönemi açık mı — oyuncu 'Yerleştirmeyi Başlat'a basana dek bekler */
   yksBekliyor: boolean;
+  /** günlük ders programı (her gece ve kadro değişiminde yeniden kurulur) */
+  dersProgrami: DersSlot[];
   /** toplam mezun, toplam bırakan (istatistik) */
   toplamMezun: number;
   toplamBirakan: number;

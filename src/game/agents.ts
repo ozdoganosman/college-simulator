@@ -46,6 +46,7 @@ import {
   donemIndex, inBounds, tileIndex,
 } from '../core/types';
 import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
+import { dersEtki } from '../data/courses';
 import { findPath } from '../core/pathfinding';
 import { libraryLevel, roomCenter, walkable } from '../core/grid';
 import { BALANCE } from '../data/balance';
@@ -123,6 +124,8 @@ interface Ctx {
   teacherRooms: Map<number, Set<number>>;
   /** roomId -> odadaki en iyi hocanın eğitim becerisi */
   teacherSkill: Map<number, number>;
+  /** roomId -> bloktaki dersin hocaya alan uyumu (0.55-1.25) */
+  teacherEtki: Map<number, number>;
   objById: Map<number, PlacedObject>;
   /** deptId -> boş sıra yığını (geçerli, bölüme atanmış dersliklerde) */
   freeSira: Map<number, PlacedObject[]>;
@@ -226,17 +229,28 @@ function buildCtx(state: GameState, dk: number): Ctx {
   }
 
   // öğretmen mevcudu + akademisyen sınıf sırası + mutfak durumu (tek geçiş)
+  // güncel bloğun bölüm dersleri (ders programından)
+  const blokBaslangic = dersBlogu(dk);
+  const blokNo = blokBaslangic === -1 ? -1 : DERS_BLOKLARI.indexOf(blokBaslangic);
+  const blokDersleri = new Map<number, string>(); // deptId -> courseId
+  if (blokNo >= 0) {
+    for (const s of state.dersProgrami ?? []) {
+      if (s.blok === blokNo) blokDersleri.set(s.deptId, s.courseId);
+    }
+  }
+
   const teacherRooms = new Map<number, Set<number>>();
   const teacherSkill = new Map<number, number>();
+  const teacherEtki = new Map<number, number>();
   const academicIndex = new Map<number, number>();
-  const sayac = new Map<number, number>();
+  const deptAkademik = new Map<number, Academic[]>();
   let mutfak = false;
   for (const a of state.agents) {
     if (!a.onCampus) continue;
     if (a.kind === 'akademisyen') {
-      const i = sayac.get(a.deptId) ?? 0;
-      academicIndex.set(a.id, i);
-      sayac.set(a.deptId, i + 1);
+      const liste = deptAkademik.get(a.deptId);
+      if (liste) liste.push(a);
+      else deptAkademik.set(a.deptId, [a]);
       if (a.activity === 'ders_veriyor') {
         const rid = state.roomAt[tileIndex(Math.round(a.x), Math.round(a.y))];
         if (rid >= 0) {
@@ -244,11 +258,24 @@ function buildCtx(state: GameState, dk: number): Ctx {
           if (set) set.add(a.deptId);
           else teacherRooms.set(rid, new Set([a.deptId]));
           if ((teacherSkill.get(rid) ?? 0) < a.egitim) teacherSkill.set(rid, a.egitim);
+          // alan-ders uyumu: bu bloktaki dersin hocaya etkisi
+          const ders = blokDersleri.get(a.deptId);
+          const etki = ders ? dersEtki(ders, a.alan) : 1;
+          if ((teacherEtki.get(rid) ?? 0) < etki) teacherEtki.set(rid, etki);
         }
       }
     } else if (a.kind === 'asci' && a.activity === 'calisiyor') {
       mutfak = true;
     }
+  }
+  // sınıf sırası: bloktaki derse EN UYGUN hoca ilk dersliği alır (otomatik atama)
+  for (const [deptId, liste] of deptAkademik) {
+    const ders = blokDersleri.get(deptId);
+    if (ders) {
+      liste.sort((a, b) =>
+        dersEtki(ders, b.alan) * (0.5 + b.egitim / 100) - dersEtki(ders, a.alan) * (0.5 + a.egitim / 100));
+    }
+    liste.forEach((a, i) => academicIndex.set(a.id, i));
   }
 
   return {
@@ -257,6 +284,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     mutfak,
     teacherRooms,
     teacherSkill,
+    teacherEtki,
     objById,
     freeSira,
     freeKlozet,
@@ -538,8 +566,10 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       }
       const rid = state.roomAt[tileIndex(Math.round(s.x), Math.round(s.y))];
       const ogretmenli = rid >= 0 && ctx.teacherRooms.get(rid)?.has(s.deptId) === true;
-      // hocanın eğitim becerisi öğrenme hızını etkiler (50 -> 1.0x, 100 -> 1.4x)
-      const kalite = ogretmenli ? 0.6 + (ctx.teacherSkill.get(rid) ?? 50) / 125 : BALANCE.OGRETMENSIZ_CARPAN;
+      // hocanın eğitim becerisi VE dersin alanına uygunluğu öğrenme hızını etkiler
+      const kalite = ogretmenli
+        ? (0.6 + (ctx.teacherSkill.get(rid) ?? 50) / 125) * (ctx.teacherEtki.get(rid) ?? 1)
+        : BALANCE.OGRETMENSIZ_CARPAN;
       s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * kalite * ctx.ogrenmeCarpan, 0, 100);
       break;
     }
@@ -886,7 +916,7 @@ export function spawnStudent(state: GameState, deptId: number, level: StudentLev
 }
 
 export function spawnAcademic(
-  state: GameState, ad: string, deptId: number, rank: AcademicRank,
+  state: GameState, ad: string, deptId: number, rank: AcademicRank, alan: Academic['alan'],
   egitim: number, arastirma: number, maas: number,
 ): Academic {
   const a: Academic = {
@@ -902,6 +932,7 @@ export function spawnAcademic(
     activityUntil: -1,
     deptId,
     rank,
+    alan,
     egitim,
     arastirma,
     maas,
