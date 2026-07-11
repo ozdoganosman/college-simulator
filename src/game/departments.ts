@@ -47,7 +47,9 @@
  *  - 'yemek_subvansiyon' stratejisi: tüm öğrencilere mutluluk +2 (gider economy'de).
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
-import { Department, GameState, Room, Student, donemIndex } from '../core/types';
+import {
+  Department, GameState, Room, Student, YerlestirmeSatir, donemIndex, yil,
+} from '../core/types';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { deptDef } from '../data/departments';
@@ -97,6 +99,8 @@ export function openDepartment(state: GameState, defId: string): boolean {
     doktoraAcik: false,
     sonTalep: 0,
     sonKayit: 0,
+    sonTavanSira: 0,
+    sonTabanSira: 0,
     acilisDonemi: donemIndex(state.gun),
     mezunSayisi: 0,
   };
@@ -247,6 +251,9 @@ export function seatCapacity(state: GameState, deptId: number): number {
 export function semesterStart(state: GameState): void {
   if (state.departments.length === 0) return;
 
+  // üniversitenin ilk öğrenci alımı mı? (tören her yıl başında + ilk alımda yapılır)
+  const ilkYerlestirme = !state.agents.some((a) => a.kind === 'ogrenci');
+
   // bölüm -> akademisyen ve lisans öğrenci sayıları (tek geçiş)
   const akademisyen = new Map<number, number>();
   const lisans = new Map<number, number>();
@@ -260,6 +267,7 @@ export function semesterStart(state: GameState): void {
 
   let odenek = 0;
   let toplamYeni = 0;
+  const torenSatirlari: YerlestirmeSatir[] = [];
 
   for (const dept of state.departments) {
     const def = deptDef(dept.defId);
@@ -267,7 +275,14 @@ export function semesterStart(state: GameState): void {
     if ((akademisyen.get(dept.id) ?? 0) < def.minAkademisyen) {
       dept.sonTalep = 0;
       dept.sonKayit = 0;
+      dept.sonTavanSira = 0;
+      dept.sonTabanSira = 0;
       notify(state, `${def.ad}: öğretim üyesi yetersiz, YÖK kontenjan vermedi`, 'kotu');
+      torenSatirlari.push({
+        bolumAd: def.ad, kisa: def.kisa, renk: def.renk,
+        kontenjan: dept.kontenjan, yerlesen: 0, talep: 0,
+        tavanSira: 0, tabanSira: 0, doldu: false, iptal: true,
+      });
       continue;
     }
 
@@ -283,6 +298,24 @@ export function semesterStart(state: GameState): void {
     dept.sonKayit = yeniKayit;
     odenek += yeniKayit * BALANCE.OGRENCI_ODENEK;
     toplamYeni += yeniKayit;
+
+    // YKS başarı sıraları: çekicilik arttıkça tavan/taban sırası iyileşir (küçülür)
+    const cekicilik = Math.max(1, talep);
+    const doldu = yeniKayit >= dept.kontenjan && yeniKayit > 0;
+    if (yeniKayit > 0) {
+      dept.sonTavanSira = Math.max(850, Math.round(3_000_000 / (cekicilik * randRange(state, 10, 22))));
+      dept.sonTabanSira = doldu
+        ? Math.max(dept.sonTavanSira * 2, Math.round(3_000_000 / (cekicilik * randRange(state, 1.6, 2.6))))
+        : Math.round(randRange(state, 1_700_000, 2_600_000)); // boş kaldıysa taban dibe vurur
+    } else {
+      dept.sonTavanSira = 0;
+      dept.sonTabanSira = 0;
+    }
+    torenSatirlari.push({
+      bolumAd: def.ad, kisa: def.kisa, renk: def.renk,
+      kontenjan: dept.kontenjan, yerlesen: yeniKayit, talep: dept.sonTalep,
+      tavanSira: dept.sonTavanSira, tabanSira: dept.sonTabanSira, doldu, iptal: false,
+    });
 
     if (dept.ylAcik) {
       const ylKayit = Math.max(0, Math.min(dept.ylKontenjan, Math.floor(talep * 0.15)));
@@ -307,6 +340,16 @@ export function semesterStart(state: GameState): void {
     odenek = Math.round(odenek);
     earn(state, odenek);
     notify(state, `📥 Dönem ödeneği: ${formatMoney(odenek)}  (${toplamYeni} yeni öğrenci)`, 'iyi');
+  }
+
+  // Yıl başı (Güz dönemi) = YKS sonuç açıklama töreni (ilk alım da törenle kutlanır)
+  if ((donemIndex(state.gun) % 2 === 0 || ilkYerlestirme) && torenSatirlari.length > 0) {
+    state.yerlestirme = {
+      yil: yil(state.gun),
+      toplamYerlesen: toplamYeni,
+      odenek: Math.round(odenek),
+      satirlar: torenSatirlari,
+    };
   }
 }
 

@@ -195,8 +195,34 @@ export interface Department {
   sonTalep: number;
   /** son yerleştirmede kayıt olan öğrenci */
   sonKayit: number;
+  /** son yerleştirmede en iyi başarı sırası (tavan) — 0 = veri yok */
+  sonTavanSira: number;
+  /** son yerleştirmede son yerleşenin sırası (taban) — 0 = veri yok */
+  sonTabanSira: number;
   acilisDonemi: number;
   mezunSayisi: number;
+}
+
+/** Yıllık YKS yerleştirme töreni verisi (açıklanınca null'a çekilir). */
+export interface YerlestirmeSatir {
+  bolumAd: string;
+  kisa: string;
+  renk: string;
+  kontenjan: number;
+  yerlesen: number;
+  talep: number;
+  tavanSira: number;   // en yüksek başarı sırası (küçük = iyi)
+  tabanSira: number;   // en düşük başarı sırası
+  doldu: boolean;
+  /** öğretim üyesi yetersizliğinden kontenjan verilmedi */
+  iptal: boolean;
+}
+
+export interface YerlestirmeSonuc {
+  yil: number;
+  toplamYerlesen: number;
+  odenek: number;
+  satirlar: YerlestirmeSatir[];
 }
 
 // --- Araştırma / Yayın -------------------------------------------------------
@@ -307,6 +333,8 @@ export interface GameState {
   tutorialAdim: number;
   /** öğretici kartı görünür mü */
   tutorialAcik: boolean;
+  /** bekleyen YKS yerleştirme töreni (yıl başında dolar, tören kapanınca null) */
+  yerlestirme: YerlestirmeSonuc | null;
   /** toplam mezun, toplam bırakan (istatistik) */
   toplamMezun: number;
   toplamBirakan: number;

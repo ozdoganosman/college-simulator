@@ -291,6 +291,112 @@ html, body, #app {
 }
 .ayar-satir small { color: #8794ab; }
 
+/* ---- YKS yerleştirme töreni ---- */
+#toren-root { display: none; }
+#toren-root.acik { display: block; }
+.toren-perde {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 30%, rgba(30, 40, 70, 0.94), rgba(8, 10, 18, 0.97));
+  z-index: 50;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: torenAc 0.6s ease-out;
+}
+@keyframes torenAc { from { opacity: 0; } to { opacity: 1; } }
+.toren-kart {
+  width: min(860px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  text-align: center;
+  padding: 20px;
+}
+.toren-ust {
+  font-size: 15px;
+  letter-spacing: 4px;
+  color: #8fb3f0;
+  font-weight: 700;
+  animation: torenNabiz 1.2s ease-in-out infinite alternate;
+}
+@keyframes torenNabiz { from { opacity: 0.65; } to { opacity: 1; text-shadow: 0 0 18px rgba(143,179,240,0.7); } }
+.toren-yil {
+  font-size: 44px;
+  font-weight: 900;
+  color: #ffd166;
+  text-shadow: 0 4px 22px rgba(255, 209, 102, 0.35);
+  margin: 4px 0 18px;
+  animation: torenYilGel 0.9s cubic-bezier(0.2, 1.6, 0.4, 1) 0.4s backwards;
+}
+@keyframes torenYilGel { from { transform: scale(2.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.toren-liste { display: flex; flex-direction: column; gap: 8px; }
+.toren-satir {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(28, 34, 48, 0.92);
+  border: 1px solid #39415a;
+  border-radius: 10px;
+  padding: 10px 14px;
+  text-align: left;
+  opacity: 0;
+  animation: torenSatirGel 0.55s cubic-bezier(0.2, 1.2, 0.4, 1) forwards;
+}
+@keyframes torenSatirGel {
+  from { opacity: 0; transform: translateX(-40px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.toren-renk { width: 10px; height: 34px; border-radius: 4px; flex: none; }
+.toren-bolum { font-weight: 800; font-size: 15px; color: #f2f5fa; flex: 1.3; }
+.toren-veri { flex: 1; font-size: 13px; color: #c8d1e0; display: flex; flex-direction: column; }
+.toren-veri small { color: #7f8ba2; font-size: 11px; }
+.toren-veri b { font-size: 15px; color: #f2f5fa; }
+.toren-rozet {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 12px;
+  animation: rozetPat 0.45s cubic-bezier(0.2, 2.2, 0.4, 1) 0.35s backwards;
+}
+@keyframes rozetPat { from { transform: scale(0); } to { transform: scale(1); } }
+.toren-rozet.doldu { background: #1f6b39; color: #b8f5cd; border: 1px solid #46b45e; }
+.toren-rozet.yari { background: #6b5a1f; color: #f5e4b8; border: 1px solid #b49a46; }
+.toren-rozet.bos { background: #6b1f1f; color: #f5b8b8; border: 1px solid #b44646; }
+.toren-rozet.iptal { background: #3a3f4c; color: #aab4c8; border: 1px solid #5a6478; }
+.toren-ozet {
+  margin-top: 16px;
+  font-size: 16px;
+  color: #dbe4f2;
+  opacity: 0;
+  animation: torenSatirGel 0.6s forwards;
+}
+.toren-ozet b { color: #ffd166; font-size: 20px; }
+.toren-btn {
+  margin-top: 16px;
+  font-size: 19px;
+  padding: 14px 34px;
+  opacity: 0;
+  animation: rozetPat 0.6s cubic-bezier(0.2, 1.8, 0.4, 1) forwards;
+  box-shadow: 0 6px 30px rgba(74, 123, 212, 0.45);
+}
+.konfeti {
+  position: absolute;
+  top: -20px;
+  width: 9px;
+  height: 15px;
+  border-radius: 2px;
+  opacity: 0;
+  animation-name: konfetiDus;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes konfetiDus {
+  0% { opacity: 1; transform: translateY(0) rotate(0); }
+  100% { opacity: 0.8; transform: translateY(105vh) rotate(var(--don, 540deg)); }
+}
+
 #hud-tooltip {
   position: absolute;
   background: rgba(12, 14, 18, 0.95);

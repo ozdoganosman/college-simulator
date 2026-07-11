@@ -11,6 +11,7 @@ import { initHud, refreshHud } from './ui/hud';
 import { initPanels, refreshOpenPanel } from './ui/panels';
 import { initTutorial, refreshTutorial } from './ui/tutorial';
 import { initMenu, isMenuOpen, openMainMenu } from './ui/menu';
+import { checkCeremony, initCeremony, isCeremonyOpen } from './ui/ceremony';
 import { invalidateGround } from './ui/renderer';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -48,6 +49,7 @@ attachInput(canvas, () => state, cam, ui);
 initHud(() => state, ui);
 initPanels(() => state);
 initTutorial();
+initCeremony();
 initMenu({
   getState: () => state,
   yeniOyun: () => {
@@ -78,7 +80,7 @@ function frame(t: number): void {
   const gecenSn = Math.min(0.25, (t - sonZaman) / 1000);
   sonZaman = t;
 
-  if (state.hiz > 0 && !isMenuOpen()) {
+  if (state.hiz > 0 && !isMenuOpen() && !isCeremonyOpen()) {
     advance(state, gecenSn * BALANCE.DAKIKA_SANIYE * state.hiz);
   }
 
@@ -90,6 +92,7 @@ function frame(t: number): void {
     refreshHud(state, ui);
     refreshOpenPanel(state);
     refreshTutorial(state);
+    if (!isMenuOpen()) checkCeremony(state);
   }
 
   requestAnimationFrame(frame);
