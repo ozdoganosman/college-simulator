@@ -210,6 +210,87 @@ html, body, #app {
 }
 .panel .aciklama { font-size: 12px; color: #94a0b8; margin: 4px 0 10px; }
 
+/* ---- menü ---- */
+#menu-root { display: none; }
+#menu-root.acik {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 16, 0.72);
+  backdrop-filter: blur(3px);
+  z-index: 40;
+}
+.menu-kart {
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: #171b25;
+  border: 1px solid #3d4356;
+  border-radius: 14px;
+  padding: 28px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  text-align: center;
+}
+.menu-baslik {
+  font-size: 30px;
+  font-weight: 800;
+  color: #f2f5fa;
+  margin-bottom: 2px;
+  text-shadow: 0 2px 10px rgba(74,123,212,0.4);
+}
+.menu-baslik.kucuk { font-size: 22px; }
+.menu-alt { font-size: 13px; color: #8fa0bd; margin-bottom: 14px; }
+.menu-btn {
+  background: linear-gradient(180deg, #35538f, #2b4374);
+  color: #eef2fa;
+  border: 1px solid #4a6cb3;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.menu-btn:hover:not(:disabled) { background: linear-gradient(180deg, #4066b3, #35538f); }
+.menu-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.menu-btn.kucuk { padding: 6px 12px; font-size: 13px; }
+.menu-btn.tehlike { background: #6e2c2c; border-color: #a04444; }
+.menu-btn.acik-ayar { background: linear-gradient(180deg, #2f7a45, #276538); border-color: #46b45e; }
+.slot-liste { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 10px; }
+.slot-satir {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1f2431;
+  border: 1px solid #2f3547;
+  border-radius: 8px;
+  padding: 9px 12px;
+  text-align: left;
+}
+.slot-ad { font-weight: 800; color: #8fb3f0; min-width: 46px; }
+.slot-bilgi { flex: 1; font-size: 12.5px; color: #c8d1e0; }
+.slot-bilgi .slot-zaman { display: block; color: #7c889e; font-size: 11px; }
+.slot-bos { color: #67718a; font-style: italic; }
+.slot-eylem { display: flex; gap: 6px; }
+.ayar-liste { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 10px; }
+.ayar-satir {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #1f2431;
+  border: 1px solid #2f3547;
+  border-radius: 8px;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 14px;
+}
+.ayar-satir small { color: #8794ab; }
+
 #hud-tooltip {
   position: absolute;
   background: rgba(12, 14, 18, 0.95);

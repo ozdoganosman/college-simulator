@@ -38,7 +38,7 @@ npm run dev        # http://localhost:5173
 | 1 / 2 / 3 | Hız 1x / 2x / 4x |
 | Esc | Aracı bırak / seçim iptal |
 
-Oyun her gün sonunda otomatik kaydedilir (localStorage). Raporlar panelinden yeni oyun başlatılabilir.
+**Menü (Esc / ☰)**: Oyun Kaydet ve Oyun Yükle (5 slot + otomatik kayıt), Yeni Oyun, Seçenekler (otomatik kayıt, gündüz/gece ışığı, ızgara, dekor) ve Ana Menü. Oyun her gün sonunda otomatik kaydedilir (localStorage). Oyuna ilk girişte 12 adımlı öğretici yol gösterir; ❓ "Nasıl Oynanır" paneli her zaman açıktır.
 
 ## Teknik
 

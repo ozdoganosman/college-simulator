@@ -34,8 +34,12 @@ export function initHud(getState: () => GameState, ui: UIState): void {
       <button class="hiz" data-hiz="1">▶</button>
       <button class="hiz" data-hiz="2">▶▶</button>
       <button class="hiz" data-hiz="4">▶▶▶</button>
+      <button class="hiz" id="menu-ac" title="Menü (Esc)">☰</button>
     </span>
   `;
+  document.getElementById('menu-ac')?.addEventListener('click', () => {
+    document.dispatchEvent(new CustomEvent('toggle-menu'));
+  });
   for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
     b.addEventListener('click', () => {
       getState().hiz = Number(b.dataset.hiz);

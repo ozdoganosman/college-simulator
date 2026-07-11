@@ -10,6 +10,8 @@ import { render } from './ui/renderer';
 import { initHud, refreshHud } from './ui/hud';
 import { initPanels, refreshOpenPanel } from './ui/panels';
 import { initTutorial, refreshTutorial } from './ui/tutorial';
+import { initMenu, isMenuOpen, openMainMenu } from './ui/menu';
+import { invalidateGround } from './ui/renderer';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -33,10 +35,29 @@ if (kayit) {
 const cam = createCamera(canvas);
 const ui = createUIState();
 
+function swapState(yeni: GameState): void {
+  state = yeni;
+  ui.selectedRoomId = -1;
+  ui.tool = { kind: 'sec' };
+  ui.dragStart = null;
+  invalidateGround();
+  refreshHud(state, ui);
+}
+
 attachInput(canvas, () => state, cam, ui);
 initHud(() => state, ui);
 initPanels(() => state);
 initTutorial();
+initMenu({
+  getState: () => state,
+  yeniOyun: () => {
+    const s = createInitialState();
+    initNewGame(s);
+    swapState(s);
+  },
+  yukleState: (s) => swapState(s),
+});
+openMainMenu();
 
 // Konsoldan / otomatik testlerden erişim için debug kancası
 import * as build from './game/build';
@@ -57,7 +78,7 @@ function frame(t: number): void {
   const gecenSn = Math.min(0.25, (t - sonZaman) / 1000);
   sonZaman = t;
 
-  if (state.hiz > 0) {
+  if (state.hiz > 0 && !isMenuOpen()) {
     advance(state, gecenSn * BALANCE.DAKIKA_SANIYE * state.hiz);
   }
 

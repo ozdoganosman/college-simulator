@@ -2,6 +2,7 @@ import {
   GameState, GATE, MAP_H, MAP_W, TILE, WALL_DOOR, WALL_NONE, WALL_SOLID, tileIndex,
 } from '../core/types';
 import { roomCenter } from '../core/grid';
+import { AYARLAR } from '../core/settings';
 import { formatMoney } from '../core/util';
 import { FLOOR_DEFS, ROOM_DEFS, WALL_COST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
@@ -17,6 +18,11 @@ import type { UIState } from './uistate';
 
 let groundCanvas: HTMLCanvasElement | null = null;
 let groundVersion = -1;
+
+/** Zemin katmanı önbelleğini geçersiz kıl (durum değişimi / ayar değişimi). */
+export function invalidateGround(): void {
+  groundVersion = -1;
+}
 
 function hash2(x: number, y: number): number {
   let h = (x * 374761393 + y * 668265263) | 0;
@@ -202,7 +208,7 @@ function drawGround(state: GameState): HTMLCanvasElement {
   }
 
   // --- dekor: bina/oda olmayan çimlere ağaç ve çalılar ---
-  for (let y = 1; y < MAP_H - 1; y++) {
+  if (AYARLAR.dekor) for (let y = 1; y < MAP_H - 1; y++) {
     for (let x = 1; x < MAP_W - 1; x++) {
       const t = tileIndex(x, y);
       if (state.floor[t] !== null || state.wall[t] !== WALL_NONE || state.roomAt[t] !== -1) continue;
@@ -362,7 +368,7 @@ export function render(
   }
 
   // --- ızgara (yakınken, çok hafif) ---
-  if (cam.zoom >= 1.2) {
+  if (AYARLAR.izgara && cam.zoom >= 1.2) {
     ctx.strokeStyle = 'rgba(0,0,0,0.05)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -481,7 +487,7 @@ export function render(
   drawToolPreview(ctx, state, ui);
 
   // --- gün ışığı tonu (dünya uzayında, tüm harita) ---
-  const isik = dayLight(state.dakika);
+  const isik = AYARLAR.isikDongusu ? dayLight(state.dakika) : { renk: '#000', alpha: 0 };
   if (isik.alpha > 0.01) {
     ctx.fillStyle = isik.renk;
     ctx.globalAlpha = isik.alpha;

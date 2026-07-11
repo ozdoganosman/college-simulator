@@ -1,4 +1,5 @@
 import { GameState, GUN_DAKIKA, donemGunu } from '../core/types';
+import { AYARLAR } from '../core/settings';
 import { validateRooms } from '../core/grid';
 import { updateAgents } from './agents';
 import { updateResearch } from './research';
@@ -45,7 +46,7 @@ function endOfDay(state: GameState): void {
     semesterStart(state);
   }
 
-  saveGame(state);
+  if (AYARLAR.otomatikKayit) saveGame(state);
 }
 
 /** Yeni oyun kurulumu (boş kampüs + başlangıç aday havuzları). */

@@ -89,10 +89,15 @@ export function attachInput(
     }
     const st = state();
     if (e.key === 'Escape') {
-      ui.tool = { kind: 'sec' };
-      ui.dragStart = null;
-      ui.selectedRoomId = -1;
-      document.dispatchEvent(new CustomEvent('tool-changed'));
+      const arac = ui.tool.kind !== 'sec' || ui.dragStart !== null || ui.selectedRoomId !== -1;
+      if (arac) {
+        ui.tool = { kind: 'sec' };
+        ui.dragStart = null;
+        ui.selectedRoomId = -1;
+        document.dispatchEvent(new CustomEvent('tool-changed'));
+      } else {
+        document.dispatchEvent(new CustomEvent('toggle-menu'));
+      }
     } else if (e.key === ' ') {
       e.preventDefault();
       st.hiz = st.hiz === 0 ? 1 : 0;
