@@ -74,6 +74,7 @@ export function slottanYukle(slot: number): GameState | null {
     if (typeof s.tutorialAdim !== 'number') s.tutorialAdim = -1;
     if (typeof s.tutorialAcik !== 'boolean') s.tutorialAcik = false;
     if (s.yerlestirme === undefined) s.yerlestirme = null;
+    if (typeof s.yksBekliyor !== 'boolean') s.yksBekliyor = true;
     return s;
   } catch {
     return null;

@@ -6,6 +6,8 @@ import { isEnclosed, libraryLevel } from '../core/grid';
 import {
   PREFABS, autoFurnishCost, autoFurnishRoom, prefabCost, prefabOzet, roomFurnishPlan,
 } from '../game/prefab';
+import { runYerlestirme } from '../game/departments';
+import { deleteRoom } from '../game/build';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
 
@@ -42,6 +44,11 @@ export function initHud(getState: () => GameState, ui: UIState): void {
   `;
   document.getElementById('menu-ac')?.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('toggle-menu'));
+  });
+
+  // YKS yerleştirme butonu: YKS dönemi açıkken görünür, basınca sonuç töreni gelir
+  document.getElementById('yks-cta')?.addEventListener('click', () => {
+    runYerlestirme(getState());
   });
   for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
     b.addEventListener('click', () => {
@@ -211,6 +218,23 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         });
         div.appendChild(b);
       }
+
+      // oda düzenleme: genişletme ipucu + silme
+      const ipucu = document.createElement('span');
+      ipucu.className = 'gerek';
+      ipucu.textContent = '✏️ Genişlet: Odalar aracıyla bitişiğine sürükle · Küçült: Oda Kaldır aracı';
+      div.appendChild(ipucu);
+
+      const sil = document.createElement('button');
+      sil.className = 'sub-btn';
+      sil.innerHTML = '🗑️ Odayı Sil';
+      sil.title = 'Oda atamasını tamamen kaldırır — duvarlar ve eşyalar yerinde kalır';
+      sil.addEventListener('click', () => {
+        deleteRoom(state, room.id);
+        ui.selectedRoomId = -1;
+        renderSubbar(getState, ui);
+      });
+      div.appendChild(sil);
       subbarEl.appendChild(div);
     }
   }
@@ -240,6 +264,8 @@ export function refreshHud(state: GameState, ui: UIState): void {
   for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
     b.classList.toggle('active', Number(b.dataset.hiz) === state.hiz);
   }
+
+  document.getElementById('yks-cta')?.classList.toggle('hidden', !state.yksBekliyor);
 
   // bildirimler (son 6) — değişmediyse DOM'a dokunma
   const son = state.notices.slice(-6);

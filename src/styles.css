@@ -291,6 +291,30 @@ html, body, #app {
 }
 .ayar-satir small { color: #8794ab; }
 
+/* ---- YKS başlat butonu ---- */
+#yks-cta {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 14;
+  background: linear-gradient(180deg, #d8a62c, #b3841a);
+  color: #241a02;
+  border: 1px solid #ffd166;
+  border-radius: 10px;
+  padding: 11px 22px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 24px rgba(255, 209, 102, 0.45);
+  animation: yksNabiz 1.1s ease-in-out infinite alternate;
+}
+#yks-cta:hover { background: linear-gradient(180deg, #eebb3e, #c99a24); }
+@keyframes yksNabiz {
+  from { box-shadow: 0 4px 18px rgba(255, 209, 102, 0.35); filter: brightness(1); }
+  to { box-shadow: 0 6px 40px rgba(255, 209, 102, 0.85); filter: brightness(1.12); }
+}
+
 /* ---- YKS yerleştirme töreni ---- */
 #toren-root { display: none; }
 #toren-root.acik { display: block; }

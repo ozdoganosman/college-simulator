@@ -6,9 +6,10 @@ export const BALANCE = {
   BASLANGIC_PRESTIJ: 100,
 
   // Ekonomi
-  OGRENCI_ODENEK: 9000,        // dönem başına öğrenci başı devlet ödeneği ₺
+  OGRENCI_ODENEK: 9000,        // yerleştirmede yeni öğrenci başı devlet ödeneği ₺
   YL_ODENEK: 14000,
   DOKTORA_ODENEK: 20000,
+  DONEM_DESTEK: 3000,          // her dönem başı mevcut öğrenci başına destek ₺
   BAKIM_GIDERI_TILE: 2,        // günlük, zemin döşeli kare başına ₺
   MEZUN_BONUS: 4000,           // mezun başına tek seferlik ₺
 

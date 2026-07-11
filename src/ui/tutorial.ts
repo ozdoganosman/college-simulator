@@ -92,8 +92,8 @@ const STEPS: TutorialStep[] = [
     }),
   },
   {
-    baslik: 'İlk öğrencilerini karşıla',
-    detay: 'Her şey hazır! Hızı <b>▶▶▶</b> yap ve dönem başını bekle (her dönem 20 gün — üstte "Gün X/20"). Dönem başında öğrenciler kayıt olur ve <b>devlet ödeneği</b> yatar. 💡 Bu arada <b>🔬 Araştırma</b> panelinden bir proje başlatabilirsin.',
+    baslik: 'YKS Yerleştirmeyi başlat!',
+    detay: 'Her şey hazır! Ekranın üstündeki altın <b>🎓 YKS Yerleştirmeyi Başlat</b> butonuna bas — sonuçlar törenle açıklanır, kazanan öğrenciler kampüse gelir ve <b>devlet ödeneği</b> yatar. Her yıl başında YKS dönemi yeniden açılır; acele etmeden hazırlanıp istediğin an başlatırsın. 💡 Bu arada <b>🔬 Araştırma</b> panelinden bir proje başlatabilirsin.',
     kontrol: (s) => ({ tamam: s.agents.some((a) => a.kind === 'ogrenci') }),
   },
 ];

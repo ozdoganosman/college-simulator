@@ -1,10 +1,10 @@
-import { GameState, GUN_DAKIKA, donemGunu } from '../core/types';
+import { GameState, GUN_DAKIKA, donemGunu, donemIndex } from '../core/types';
 import { AYARLAR } from '../core/settings';
 import { validateRooms } from '../core/grid';
 import { updateAgents } from './agents';
 import { updateResearch } from './research';
 import { dailyAcademicUpdate, refreshCandidatePools } from './academics';
-import { assignClassrooms, dailyDepartmentUpdate, semesterEnd, semesterStart } from './departments';
+import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } from './departments';
 import { dailyEconomy } from './economy';
 import { notify, saveGame } from './state';
 
@@ -39,11 +39,17 @@ function endOfDay(state: GameState): void {
   validateRooms(state);
   assignClassrooms(state);
 
-  // Dönem geçişi: yeni günün dönem günü 1 ise biten dönemi kapatıp yenisini başlat
+  // Dönem geçişi: mezuniyet + aday havuzları + öğrenci desteği.
+  // Yerleştirme OTOMATİK YAPILMAZ — yıl başında YKS dönemi açılır,
+  // oyuncu hazır olunca 'Yerleştirmeyi Başlat' butonuna basar.
   if (donemGunu(state.gun) === 1) {
     semesterEnd(state);
     refreshCandidatePools(state);
-    semesterStart(state);
+    donemDestegi(state);
+    if (donemIndex(state.gun) % 2 === 0 && !state.yksBekliyor) {
+      state.yksBekliyor = true;
+      notify(state, '🎓 YKS dönemi açıldı! Hazırlıkların bitince yerleştirmeyi başlat.', 'odul');
+    }
   }
 
   if (AYARLAR.otomatikKayit) saveGame(state);
@@ -55,5 +61,5 @@ export function initNewGame(state: GameState): void {
   assignClassrooms(state);
   notify(state, 'Üniversiteye hoş geldiniz, Rektörüm! Önce zemin döşeyip duvarlarla bir bina yapın.', 'bilgi');
   notify(state, 'Derslik + ofis + tuvalet kurup KPSS ile akademisyen alınca ilk bölümünüzü açabilirsiniz.', 'bilgi');
-  notify(state, 'Bölüm açınca dönem başında öğrenciler kayıt olur ve devlet ödeneği gelir.', 'bilgi');
+  notify(state, '🎓 Acele etme: kampüsün hazır olunca üstteki "YKS Yerleştirmeyi Başlat" butonuna bas — öğrenciler o zaman gelir.', 'odul');
 }

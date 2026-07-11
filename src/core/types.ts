@@ -335,6 +335,8 @@ export interface GameState {
   tutorialAcik: boolean;
   /** bekleyen YKS yerleştirme töreni (yıl başında dolar, tören kapanınca null) */
   yerlestirme: YerlestirmeSonuc | null;
+  /** YKS dönemi açık mı — oyuncu 'Yerleştirmeyi Başlat'a basana dek bekler */
+  yksBekliyor: boolean;
   /** toplam mezun, toplam bırakan (istatistik) */
   toplamMezun: number;
   toplamBirakan: number;

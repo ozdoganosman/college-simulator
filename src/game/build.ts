@@ -1,5 +1,5 @@
 import {
-  FloorId, GameState, PlacedObject, Room, RoomType,
+  FloorId, GameState, MAP_W, PlacedObject, Room, RoomType,
   WALL_DOOR, WALL_NONE, WALL_SOLID, inBounds, tileIndex,
 } from '../core/types';
 import { validateRooms } from '../core/grid';
@@ -130,29 +130,77 @@ export function placeObject(state: GameState, type: PlacedObject['type'], x: num
   validateRooms(state);
 }
 
-/** Dikdörtgen alanı oda olarak işaretle. Mevcut oda karelerinin üstüne yazılamaz. */
+/**
+ * Dikdörtgen alanı oda olarak işaretle. Sürüklenen alan aynı türde mevcut bir
+ * odayla kesişiyor ya da ona bitişikse yeni kareler o odaya EKLENİR (genişletme);
+ * yoksa yeni oda oluşturulur. Farklı türdeki odaların karelerine yazılamaz.
+ */
 export function designateRoom(state: GameState, type: RoomType, x0: number, y0: number, x1: number, y1: number): void {
   const tiles: number[] = [];
+  let hedef: Room | undefined; // genişletilecek aynı türde oda
   for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
     for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
       if (!inBounds(x, y)) continue;
       const t = tileIndex(x, y);
-      if (state.roomAt[t] !== -1) continue;   // başka odanın karesi
+      const rid = state.roomAt[t];
+      if (rid !== -1) {
+        if (!hedef) {
+          const r = state.rooms.find((r) => r.id === rid);
+          if (r && r.type === type) hedef = r; // kesişim -> bu odayı büyüt
+        }
+        continue; // mevcut oda karesinin üstüne yazma
+      }
       if (state.wall[t] === WALL_SOLID) continue;
       tiles.push(t);
     }
   }
   if (tiles.length === 0) return;
-  const room: Room = { id: newId(state), type, tiles, valid: false, missing: [], deptId: null };
-  state.rooms.push(room);
+
+  // kesişim yoksa bitişiklik ara: yeni karelerden birine komşu aynı türde oda
+  if (!hedef) {
+    dis: for (const t of tiles) {
+      const x = t % MAP_W, y = Math.floor(t / MAP_W);
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const) {
+        if (!inBounds(nx, ny)) continue;
+        const rid = state.roomAt[tileIndex(nx, ny)];
+        if (rid === -1) continue;
+        const r = state.rooms.find((r) => r.id === rid);
+        if (r && r.type === type) { hedef = r; break dis; }
+      }
+    }
+  }
+
+  let room: Room;
+  if (hedef) {
+    hedef.tiles.push(...tiles);
+    room = hedef;
+    notify(state, `${ROOM_DEFS[type].ad} genişletildi (+${tiles.length} kare)`, 'bilgi');
+  } else {
+    room = { id: newId(state), type, tiles, valid: false, missing: [], deptId: null };
+    state.rooms.push(room);
+    notify(state, `${ROOM_DEFS[type].ad} bölgesi atandı`, 'bilgi');
+  }
   for (const t of tiles) state.roomAt[t] = room.id;
   // içerideki eşyaların oda kaydını güncelle
+  const tileSet = new Set(tiles);
   for (const o of state.objects) {
-    const t = tileIndex(o.x, o.y);
-    if (tiles.includes(t)) o.roomId = room.id;
+    if (tileSet.has(tileIndex(o.x, o.y))) o.roomId = room.id;
   }
   validateRooms(state);
-  notify(state, `${ROOM_DEFS[type].ad} bölgesi atandı`, 'bilgi');
+}
+
+/** Odayı tamamen kaldırır — inşaat ve eşyalar yerinde kalır. */
+export function deleteRoom(state: GameState, roomId: number): void {
+  const idx = state.rooms.findIndex((r) => r.id === roomId);
+  if (idx < 0) return;
+  const room = state.rooms[idx];
+  for (const t of room.tiles) state.roomAt[t] = -1;
+  for (const o of state.objects) {
+    if (o.roomId === roomId) o.roomId = -1;
+  }
+  state.rooms.splice(idx, 1);
+  validateRooms(state);
+  notify(state, `${ROOM_DEFS[room.type].ad} oda ataması silindi (inşaat ve eşyalar yerinde).`, 'bilgi');
 }
 
 /** Oda atamasını kaldır (inşaat kalır). */

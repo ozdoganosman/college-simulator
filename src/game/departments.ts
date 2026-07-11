@@ -248,11 +248,20 @@ export function seatCapacity(state: GameState, deptId: number): number {
   return sira;
 }
 
-export function semesterStart(state: GameState): void {
-  if (state.departments.length === 0) return;
-
-  // üniversitenin ilk öğrenci alımı mı? (tören her yıl başında + ilk alımda yapılır)
-  const ilkYerlestirme = !state.agents.some((a) => a.kind === 'ogrenci');
+/**
+ * YKS yerleştirmesini çalıştırır — oyuncu 'Yerleştirmeyi Başlat' butonuna basınca.
+ * Yılda bir kez (yksBekliyor açıkken) çalışır; sonuçlar törenle açıklanır.
+ */
+export function runYerlestirme(state: GameState): boolean {
+  if (!state.yksBekliyor) {
+    notify(state, 'YKS dönemi kapalı — yeni yerleştirme her yıl başında açılır.', 'kotu');
+    return false;
+  }
+  if (state.departments.length === 0) {
+    notify(state, 'Önce bir bölüm açmalısın (🎓 Bölümler paneli).', 'kotu');
+    return false;
+  }
+  state.yksBekliyor = false;
 
   // bölüm -> akademisyen ve lisans öğrenci sayıları (tek geçiş)
   const akademisyen = new Map<number, number>();
@@ -342,15 +351,24 @@ export function semesterStart(state: GameState): void {
     notify(state, `📥 Dönem ödeneği: ${formatMoney(odenek)}  (${toplamYeni} yeni öğrenci)`, 'iyi');
   }
 
-  // Yıl başı (Güz dönemi) = YKS sonuç açıklama töreni (ilk alım da törenle kutlanır)
-  if ((donemIndex(state.gun) % 2 === 0 || ilkYerlestirme) && torenSatirlari.length > 0) {
-    state.yerlestirme = {
-      yil: yil(state.gun),
-      toplamYerlesen: toplamYeni,
-      odenek: Math.round(odenek),
-      satirlar: torenSatirlari,
-    };
-  }
+  // Sonuçlar her zaman törenle açıklanır
+  state.yerlestirme = {
+    yil: yil(state.gun),
+    toplamYerlesen: toplamYeni,
+    odenek: Math.round(odenek),
+    satirlar: torenSatirlari,
+  };
+  return true;
+}
+
+/** Her dönem başında mevcut öğrenciler için devlet desteği (ekonomi dengesi). */
+export function donemDestegi(state: GameState): void {
+  let ogrenci = 0;
+  for (const a of state.agents) if (a.kind === 'ogrenci') ogrenci++;
+  if (ogrenci === 0) return;
+  const tutar = ogrenci * BALANCE.DONEM_DESTEK;
+  earn(state, tutar);
+  notify(state, `🏛️ Dönem desteği: ${formatMoney(tutar)} (${ogrenci} öğrenci)`, 'iyi');
 }
 
 export function semesterEnd(state: GameState): void {

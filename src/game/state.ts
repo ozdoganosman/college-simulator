@@ -36,6 +36,7 @@ export function createInitialState(): GameState {
     tutorialAdim: 0,
     tutorialAcik: true,
     yerlestirme: null,
+    yksBekliyor: true,
     toplamMezun: 0,
     toplamBirakan: 0,
   };
@@ -87,6 +88,7 @@ export function loadGame(): GameState | null {
     if (typeof s.tutorialAdim !== 'number') s.tutorialAdim = -1;
     if (typeof s.tutorialAcik !== 'boolean') s.tutorialAcik = false;
     if (s.yerlestirme === undefined) s.yerlestirme = null;
+    if (typeof s.yksBekliyor !== 'boolean') s.yksBekliyor = true;
     return s;
   } catch {
     return null;
