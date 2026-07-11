@@ -23,9 +23,46 @@ export function isCeremonyOpen(): boolean {
 export function checkCeremony(state: GameState): void {
   if (acikMi) return;
   if (state.oyunBitti) openGameOver(state);
+  else if (state.zafer) openZafer(state);
   else if (state.yilSonu) openYilSonu(state);
   else if (state.mezuniyet) openMezuniyet(state);
   else if (state.yerlestirme) open(state);
+}
+
+// --- 👑 Zafer töreni (1 NUMARA) ---------------------------------------------------
+
+function openZafer(state: GameState): void {
+  if (!root) return;
+  acikMi = true;
+  const yilNo = Math.floor((state.gun - 1) / 40) + 1;
+  const yolculuk = state.siraGecmisi.join(' → ') || String(state.sonSira);
+
+  root.innerHTML = `
+    <div class="toren-perde" style="background:radial-gradient(ellipse at 50% 30%, rgba(80,64,10,0.96), rgba(16,12,4,0.98))">
+      ${konfetiHtml(140, 0.4)}
+      <div class="toren-kart">
+        <div class="toren-ust" style="color:#ffd166">👑 TÜRKİYE'NİN 1 NUMARASI</div>
+        <div class="toren-yil" style="color:#ffd166">ŞAMPİYON</div>
+        <div class="toren-ozet" style="animation-delay:0.6s">
+          Sıfırdan kurduğun üniversite <b>${yilNo}. yılında</b> Türkiye sıralamasının ZİRVESİNE oturdu!
+        </div>
+        <div class="toren-ozet" style="animation-delay:1.2s">
+          🎓 <b class="sayac" data-hedef="${state.toplamMezun}" data-gecikme="1.2">0</b> mezun ·
+          📄 <b class="sayac" data-hedef="${state.publications.length}" data-gecikme="1.2">0</b> yayın ·
+          ⭐ <b class="sayac" data-hedef="${Math.round(state.prestij)}" data-gecikme="1.2">0</b> prestij ·
+          🏅 ${state.basarimlar.length} başarım
+          <br><small>Sıralama yolculuğun: <b>${yolculuk} → 1</b></small>
+        </div>
+        <div class="toren-ozet" style="animation-delay:2s">
+          Oyun bitmedi — zirvede kalmak çıkmaktan zordur. Rakipler boş durmayacak, Rektörüm!
+        </div>
+        <button class="menu-btn toren-btn" id="toren-kapat" style="animation-delay:2.6s">
+          👑 Mirası Sürdür
+        </button>
+      </div>
+    </div>`;
+
+  torenKur(state, () => { state.zafer = false; });
 }
 
 // --- Mezuniyet töreni (kep atma) ------------------------------------------------
@@ -318,6 +355,7 @@ function openYilSonu(state: GameState): void {
           📄 <b>${y.yayin}</b> yayın ·
           📖 GNO ort. <b>${y.ortGno === null ? '—' : y.ortGno.toFixed(2)}</b> ·
           💰 öğrenci sermayesi <b>${formatMoney(y.toplamSermaye)}</b>
+          ${y.mezuniyetOzet ? `<br>🎓 Bahar mezuniyeti: <b>${y.mezuniyetOzet.toplam}</b> öğrenci kep attı (🌟 ${y.mezuniyetOzet.onur} yüksek onur${y.mezuniyetOzet.bagis > 0 ? ` · 💝 ${formatMoney(y.mezuniyetOzet.bagis)} bağış` : ''})` : ''}
           ${y.siraPrestij > 0 ? `<br>🏆 Sıralama ödülü: <b>+${y.siraPrestij} prestij</b>` : ''}
         </div>
         <button class="menu-btn toren-btn" id="toren-kapat" style="animation-delay:${ozetGecikme + 0.5}s">

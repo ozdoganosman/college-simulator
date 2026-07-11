@@ -663,3 +663,25 @@ html, body, #app {
 
 /* Katman düğmesi aktifken turuncu vurgu */
 .tb-btn.katman-acik { background: #7a4a1f; border-color: #d97b3c; color: #ffe3c8; }
+
+/* Akademik takvim şeridi: sınav haftası bölgesi + denetim işareti */
+.donem-bar { position: relative; overflow: visible !important; }
+.donem-sinav {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 15%; /* son 3 gün / 20 gün */
+  background: rgba(220, 70, 60, 0.45);
+  border-radius: 0 3px 3px 0;
+  pointer-events: none;
+}
+.donem-isaret {
+  position: absolute;
+  top: -7px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  line-height: 1;
+  display: none;
+  pointer-events: auto;
+}

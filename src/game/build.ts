@@ -176,7 +176,7 @@ export function designateRoom(state: GameState, type: RoomType, x0: number, y0: 
     room = hedef;
     notify(state, `${ROOM_DEFS[type].ad} genişletildi (+${tiles.length} kare)`, 'bilgi');
   } else {
-    room = { id: newId(state), type, tiles, valid: false, missing: [], deptId: null };
+    room = { id: newId(state), type, tiles, valid: false, missing: [], deptId: null, ozelAd: null };
     state.rooms.push(room);
     notify(state, `${ROOM_DEFS[type].ad} bölgesi atandı`, 'bilgi');
   }

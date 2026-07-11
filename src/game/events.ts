@@ -9,6 +9,7 @@
 import { GameState, Student } from '../core/types';
 import { chance, formatMoney, randInt } from '../core/util';
 import { istihdamOrani } from './alumni';
+import { removeAgent } from './agents';
 import { addPrestij, earn, notify } from './state';
 
 export interface OlaySecenek {
@@ -301,6 +302,67 @@ export const OLAYLAR: OlayTanim[] = [
  */
 export const ZINCIR_OLAYLAR: OlayTanim[] = [
   {
+    id: 'rakip-ayartma',
+    emoji: '🎣',
+    baslik: 'Hocana Transfer Teklifi!',
+    metin: 'Bir rakip üniversite, yıldız hocalarından birine yüklü bir teklif götürdü (ayrıntılar bildirimde). Hoca kararsız — hamlen ne?',
+    kosul: () => false,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Zam yap (maaş ×1.15)',
+        ipucu: 'Hoca kesin kalır, morali fırlar',
+        uygula: (s) => {
+          const b = s.bekleyenAyartma;
+          s.bekleyenAyartma = null;
+          const hoca = b ? s.agents.find((a) => a.id === b.academicId && a.kind === 'akademisyen') : undefined;
+          if (!hoca || hoca.kind !== 'akademisyen') return 'Hoca çoktan ayrılmış — teklif boşa düştü.';
+          hoca.maas = Math.round(hoca.maas * 1.15);
+          hoca.memnuniyet = Math.min(100, hoca.memnuniyet + 18);
+          return `${hoca.ad} zamla ikna edildi (maaş ${formatMoney(hoca.maas)}/gün, moral +18) — rakip eli boş döndü.`;
+        },
+      },
+      {
+        etiket: 'Karışma — kendi bilir',
+        ipucu: 'Bedava ama riskli: %25 ihtimalle hoca GİDER',
+        uygula: (s) => {
+          const b = s.bekleyenAyartma;
+          s.bekleyenAyartma = null;
+          const hoca = b ? s.agents.find((a) => a.id === b.academicId && a.kind === 'akademisyen') : undefined;
+          if (!hoca || hoca.kind !== 'akademisyen') return 'Hoca zaten yoktu.';
+          if (chance(s, 0.25)) {
+            const ad = hoca.ad;
+            removeAgent(s, hoca.id);
+            addPrestij(s, -3);
+            return `${ad} teklifi KABUL ETTİ ve ${b?.rakipAd ?? 'rakibe'} gitti! (-3 prestij) Kadro panelinden yerine birini al.`;
+          }
+          hoca.memnuniyet = Math.max(0, hoca.memnuniyet - 12);
+          return `${hoca.ad} kaldı ama morali sarsıldı (-12) — bir dahaki teklifte gidebilir.`;
+        },
+      },
+    ],
+  },
+  {
+    id: 'tanitim-savasi',
+    emoji: '📉',
+    baslik: 'Rakip Tanıtım Savaşı Açtı',
+    metin: 'Bir rakip, dev bütçeli reklam kampanyasıyla YKS adaylarının dikkatini çekiyor. Karşılık verecek misin?',
+    kosul: () => false,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Karşı kampanya (₺50.000)',
+        ipucu: 'Talep kaybı önlenir',
+        uygula: (s) => { s.para -= 50000; return 'Karşı kampanya rakibin etkisini sıfırladı — talep korunuyor.'; },
+      },
+      {
+        etiket: 'Boş ver',
+        ipucu: 'Bedava ama bir sonraki YKS talebi ×0.88',
+        uygula: (s) => { s.sonrakiTalepCarpan *= 0.88; return 'Kampanyaya karşılık verilmedi — bir sonraki YKS talebi ×0.88.'; },
+      },
+    ],
+  },
+  {
     id: 'bina-bagisi',
     emoji: '🏛️',
     baslik: 'İsimli Bina Bağışı Teklifi',
@@ -317,7 +379,15 @@ export const ZINCIR_OLAYLAR: OlayTanim[] = [
           if (!b) return 'Teklif çoktan geri çekilmiş.';
           earn(s, b.tutar);
           addPrestij(s, 3);
-          return `"${b.bina}" kampüse kazandırıldı: ${b.ad}'ın ${formatMoney(b.tutar)} bağışı kasada (+3 prestij).`;
+          // GÖRSEL KARŞILIK: en büyük isimsiz geçerli oda bağışçının adını alır
+          const aday = [...s.rooms]
+            .filter((r) => r.valid && !r.ozelAd && r.type !== 'tuvalet')
+            .sort((x, y) => y.tiles.length - x.tiles.length)[0];
+          if (aday) {
+            aday.ozelAd = b.bina;
+            return `"${b.bina}" açıldı — kampüsteki en büyük bina ${b.ad}'ın adını taşıyor (haritada ⭐). ${formatMoney(b.tutar)} kasada (+3 prestij).`;
+          }
+          return `${b.ad}'ın ${formatMoney(b.tutar)} bağışı kasada (+3 prestij) — isim verilecek bina bulunamadı, ilk yeni binaya verilecek söz verildi.`;
         },
       },
       {

@@ -76,6 +76,10 @@ export function mezunEkle(state: GameState, s: Student, bolumAd: string, gno: nu
   if (!m.issiz) m.gelir = yeniGelir(m);
 
   state.mezunlar.push(m);
+  // ⭐ yıldız öğrenci takibi: mezuniyeti özel bildirilir
+  if ((state.yildizlar ?? []).includes(m.ad)) {
+    notify(state, `⭐ Yıldız öğrencin ${m.ad} mezun oldu — ${m.issiz ? 'iş arıyor' : `ilk durağı: ${m.meslek} (${formatMoney(m.gelir)}/yıl)`}. Kariyerini haberlerden izleyeceğiz!`, 'odul');
+  }
   if (state.mezunlar.length > BALANCE.MEZUN_LIMIT) {
     // en eski ve en düşük gelirli kayıtlar düşer
     state.mezunlar.sort((a, b) => b.yil - a.yil || b.gelir - a.gelir);
@@ -115,6 +119,9 @@ export function yillikMezunGuncelle(state: GameState): void {
         m.meslek = MESLEKLER[m.sektor][m.kademe];
         m.gelir = yeniGelir(m);
         isBulanlar.push(m);
+        if ((state.yildizlar ?? []).includes(m.ad)) {
+          notify(state, `⭐ Yıldız mezunun ${m.ad} işe girdi: ${m.meslek} (${formatMoney(m.gelir)}/yıl)!`, 'odul');
+        }
       }
       continue;
     }
@@ -124,6 +131,9 @@ export function yillikMezunGuncelle(state: GameState): void {
       m.meslek = MESLEKLER[m.sektor][m.kademe];
       m.gelir = yeniGelir(m);
       terfiler.push(m);
+      if ((state.yildizlar ?? []).includes(m.ad)) {
+        notify(state, `⭐ Yıldız mezunun ${m.ad} TERFİ etti: artık ${m.meslek} (${formatMoney(m.gelir)}/yıl)!`, 'odul');
+      }
     } else {
       m.gelir = Math.round(m.gelir * randRange(state, 1.03, 1.12));
     }

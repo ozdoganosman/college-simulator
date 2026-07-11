@@ -460,6 +460,7 @@ export function render(
 
   // --- ajanlar ---
   const zaman = performance.now();
+  const yildizSet = new Set(state.yildizlar ?? []);
   for (const a of state.agents) {
     if (!a.onCampus) continue;
     if (a.x < x0 - 1 || a.x > x1 + 1 || a.y < y0 - 1 || a.y > y1 + 1) continue;
@@ -474,6 +475,36 @@ export function render(
     else if (a.kind === 'tamirci') renk = '#d97b3c';
     else renk = '#c9a227';
     drawPerson(ctx, px, py, renk, a.id, a.path.length > 0, zaman, a.kind);
+
+    if (a.kind !== 'ogrenci') continue;
+
+    // ⭐ yıldız öğrenci işareti
+    if (yildizSet.has(a.ad)) {
+      ctx.font = `${Math.round(TILE * 0.45)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⭐', px, py - TILE * 0.72 + Math.sin(zaman / 400 + a.id) * 1.5);
+    }
+
+    // 💭 düşünce balonu: sorun yaşayan öğrenci derdini söyler (yakın zoomda)
+    if (cam.zoom >= 0.8) {
+      const derdi = a.needs.aclik > 70 ? '🍽' : a.needs.tuvalet > 70 ? '🚻'
+        : a.needs.enerji > 78 ? '😪' : a.mutluluk < 32 ? '☁️' : null;
+      if (derdi) {
+        const by = py - TILE * 0.75;
+        ctx.fillStyle = 'rgba(245,247,250,0.92)';
+        ctx.beginPath();
+        ctx.arc(px + TILE * 0.34, by, TILE * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px + TILE * 0.16, by + TILE * 0.26, TILE * 0.07, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = `${Math.round(TILE * 0.36)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(derdi, px + TILE * 0.34, by + 1);
+      }
+    }
   }
 
   // --- ısı haritası katmanı (yeşil iyi → kırmızı kötü) ---
@@ -518,8 +549,9 @@ export function render(
       const cnt = roomCenter(room);
       if (cnt.x < x0 - 4 || cnt.x > x1 + 4 || cnt.y < y0 - 2 || cnt.y > y1 + 2) continue;
       const def = ROOM_DEFS[room.type];
-      let etiket = def.ad;
-      if ((room.type === 'derslik' || room.type === 'amfi' || room.type === 'laboratuvar') && room.deptId !== null) {
+      let etiket = room.ozelAd ? `⭐ ${room.ozelAd}` : def.ad;
+      if (!room.ozelAd
+          && (room.type === 'derslik' || room.type === 'amfi' || room.type === 'laboratuvar') && room.deptId !== null) {
         const dept = state.departments.find((d) => d.id === room.deptId);
         if (dept) etiket += ` · ${DEPT_DEFS.find((dd) => dd.id === dept.defId)?.kisa ?? ''}`;
       }

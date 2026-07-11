@@ -15,6 +15,7 @@ import { oyuncuSirasi } from '../game/rivals';
 import { cazibePuani } from '../game/campus';
 import { DERS_LIMIT, asistanlari, dersYukuVerimi } from '../game/schedule';
 import { bolumUcreti } from '../game/economy';
+import { sonrakiDenetimGunu } from '../game/accreditation';
 import { deptDef } from '../data/departments';
 import { deleteRoom } from '../game/build';
 import type { UIState, Tool } from './uistate';
@@ -53,9 +54,13 @@ export function initHud(getState: () => GameState, ui: UIState): void {
       title="Kampüs Cazibesi (0-100) — tıkla: 📊 Raporlar&#10;Faaliyet çeşitliliği (bank, basket, satranç, sahne, kantin...) %50&#10;+ Yurt barınması %30 + Servis durakları %20&#10;YKS talebini en çok +%40 artırır"></span>
     <span class="stat tikla" data-st="sira" data-panel="raporlar"
       title="Türkiye Üniversite Sıralaması — tıkla: 📊 Raporlar&#10;Skor = prestij + yayın + mezun · Hedef: 1 numara olmak!"></span>
-    <span class="stat tarih" data-st="tarih" title="Dönem 20 gün sürer (Güz + Bahar = 1 yıl)&#10;Dönem sonunda mezuniyet; yıl başında YKS ve Akademik Yıl Ödülleri">
+    <span class="stat tarih" data-st="tarih" title="Dönem 20 gün sürer (Güz + Bahar = 1 yıl)&#10;Dönem sonunda mezuniyet; yıl başında YKS ve Akademik Yıl Ödülleri&#10;Kırmızı bölge = SINAV HAFTASI (son 3 gün)">
       <span data-st="tarih-metin"></span>
-      <span class="donem-bar" title="Dönem ilerlemesi"><span class="donem-dolu" data-st="donem-bar"></span></span>
+      <span class="donem-bar" title="Akademik takvim: kırmızı bölge sınav haftası; 🏛 YÖK denetimi işareti">
+        <span class="donem-sinav"></span>
+        <span class="donem-dolu" data-st="donem-bar"></span>
+        <span class="donem-isaret" data-st="takvim-isaret"></span>
+      </span>
     </span>
     <span class="hiz-grup">
       <button class="hiz" data-hiz="0">⏸</button>
@@ -94,6 +99,23 @@ export function initHud(getState: () => GameState, ui: UIState): void {
     highlightToolbar();
   });
   document.addEventListener('room-selected', () => renderSubbar(getState, ui));
+
+  // ⭐ yıldız öğrenci takip düğmesi (alt bar kartında — delegasyonla yaşar)
+  subbarEl.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-yildiz]');
+    if (!b) return;
+    const state = getState();
+    const ad = b.dataset.yildiz ?? '';
+    if (state.yildizlar.includes(ad)) {
+      state.yildizlar = state.yildizlar.filter((y) => y !== ad);
+    } else if (state.yildizlar.length >= 5) {
+      state.yildizlar.shift(); // en eski takip düşer
+      state.yildizlar.push(ad);
+    } else {
+      state.yildizlar.push(ad);
+    }
+    renderSubbar(getState, ui);
+  });
 }
 
 function buildToolbar(getState: () => GameState, ui: UIState): void {
@@ -325,7 +347,11 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     const gno = gnoHesapla(a);
     const egilimEtiket = a.egilim >= 115 ? 'çalışkan' : a.egilim >= 85 ? 'normal' : 'zorlanıyor';
     const hoca = a.asistani !== -1 ? state.agents.find((x) => x.id === a.asistani) : undefined;
-    let html = `<span class="baslik">🎓 ${a.ad} — ${LEVEL_LABEL[a.level]} · ${bolum}</span>`;
+    const takipte = state.yildizlar.includes(a.ad);
+    let html = `<span class="baslik">${takipte ? '⭐ ' : ''}🎓 ${a.ad} — ${LEVEL_LABEL[a.level]} · ${bolum}</span>`;
+    html += `<button class="eylem" data-yildiz="${a.ad.replace(/"/g, '')}"
+      title="${takipte ? 'Takipten çıkar' : 'Yıldız öğrenci olarak takip et: mezuniyeti, işi ve terfileri sana bildirilir (en çok 5)'}">
+      ${takipte ? '⭐ Takipte — çıkar' : '☆ Takip Et'}</button>`;
     if (a.kisilik && a.kisilik !== 'normal') {
       html += cip(`${KISILIK_META[a.kisilik].emoji} ${KISILIK_META[a.kisilik].ad} — ${KISILIK_META[a.kisilik].tanim}`);
     }
@@ -399,10 +425,25 @@ export function refreshHud(state: GameState, ui: UIState): void {
   setStat('kutuphane', `📚 Ktp. Sv. ${libraryLevel(state)}`);
   setStat('cazibe', `✨ ${cazibePuani(state)}`);
   setStat('sira', `🏆 ${oyuncuSirasi(state)}/${state.rakipler.length + 1}`);
-  setStat('tarih-metin', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}`);
+  const sinavHaftasi = donemGunu(state.gun) > DONEM_GUN - 3;
+  setStat('tarih-metin', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}${sinavHaftasi ? ' · 📝 SINAV' : ''}${state.yksBekliyor ? ' · 🎓 YKS' : ''}`);
   const donemOran = ((donemGunu(state.gun) - 1) * 1440 + state.dakika) / (DONEM_GUN * 1440);
   const bar = topEl.querySelector<HTMLElement>('[data-st="donem-bar"]');
   if (bar) bar.style.width = `${Math.round(donemOran * 100)}%`;
+  // takvim işareti: bu dönemde YÖK denetimi varsa çubukta 🏛 görünür
+  const isaret = topEl.querySelector<HTMLElement>('[data-st="takvim-isaret"]');
+  if (isaret) {
+    const denetimGunu = sonrakiDenetimGunu(state);
+    const donemBasi = state.gun - donemGunu(state.gun) + 1;
+    if (denetimGunu >= donemBasi && denetimGunu < donemBasi + DONEM_GUN) {
+      isaret.textContent = '🏛';
+      isaret.style.left = `${Math.round((((denetimGunu - donemBasi) + 0.5) / DONEM_GUN) * 100)}%`;
+      isaret.title = `YÖK akreditasyon denetimi: gün ${denetimGunu} (karne: 📊 Raporlar)`;
+      isaret.style.display = 'block';
+    } else {
+      isaret.style.display = 'none';
+    }
+  }
   for (const b of topEl.querySelectorAll<HTMLButtonElement>('.hiz')) {
     b.classList.toggle('active', Number(b.dataset.hiz) === state.hiz);
   }

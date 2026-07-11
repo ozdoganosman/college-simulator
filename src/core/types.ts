@@ -44,6 +44,8 @@ export interface Room {
   missing: string[];
   /** derslik/amfi/lab için atanmış bölüm id'si (assignClassrooms günceller) */
   deptId: number | null;
+  /** bağışla verilen özel isim (harita etiketinde ⭐ ile görünür) */
+  ozelAd: string | null;
 }
 
 export type ObjectTypeId =
@@ -133,6 +135,8 @@ export interface DersSlot {
   courseId: string;
   /** atanan akademisyen (yoksa -1) */
   academicId: number;
+  /** 📌 oyuncu kilidi: elle atanan hoca gece yeniden kurulumda değişmez */
+  kilit?: boolean;
 }
 
 export const RANK_LABEL: Record<AcademicRank, string> = {
@@ -411,6 +415,8 @@ export interface YilSonuSonuc {
   ortGno: number | null;       // öğrenci not ortalaması
   toplamSermaye: number;       // öğrenci girişim sermayesi
   siraPrestij: number;         // sıralama yükselişi prestij ödülü
+  /** yıl dönümüne denk gelen mezuniyet özeti (ayrı tören açılmaz) */
+  mezuniyetOzet?: { toplam: number; onur: number; bagis: number };
 }
 
 // --- Araştırma / Yayın -------------------------------------------------------
@@ -602,6 +608,14 @@ export interface GameState {
   bekleyenBina: { ad: string; bina: string; tutar: number } | null;
   /** kurulu öğrenci kulübü id'leri */
   kulupler: string[];
+  /** 👑 1 numara zafer ekranı bekliyor */
+  zafer: boolean;
+  /** zafer ekranı bir kez gösterildi */
+  zaferGosterildi: boolean;
+  /** bekleyen rakip ayartma kartı hedefi */
+  bekleyenAyartma: { academicId: number; rakipAd: string } | null;
+  /** ⭐ takip edilen yıldız öğrenciler (isimle — mezuniyette de sürer) */
+  yildizlar: string[];
   /** planlanmış zincir olayları: verdiğin kararın devamı ileride kapına gelir */
   bekleyenZincir: { id: string; gun: number }[];
 

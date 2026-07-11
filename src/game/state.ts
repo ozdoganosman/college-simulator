@@ -70,6 +70,10 @@ export function createInitialState(): GameState {
     sonBulusmaGunu: 0,
     bekleyenBina: null,
     kulupler: [],
+    zafer: false,
+    zaferGosterildi: false,
+    bekleyenAyartma: null,
+    yildizlar: [],
 
     nextId: 1,
     insaatSurumu: 0,
@@ -186,6 +190,16 @@ export function eskiKayitUyumu(s: GameState): void {
   if (typeof s.sonBulusmaGunu !== 'number') s.sonBulusmaGunu = 0;
   if (s.bekleyenBina === undefined) s.bekleyenBina = null;
   if (!Array.isArray(s.kulupler)) s.kulupler = [];
+  if (typeof s.zafer !== 'boolean') s.zafer = false;
+  if (typeof s.zaferGosterildi !== 'boolean') {
+    // eski kayıt zaten 1 numaraysa zafer ekranı tekrar fırlamasın
+    s.zaferGosterildi = s.basarimlar.includes('bir_numara');
+  }
+  if (s.bekleyenAyartma === undefined) s.bekleyenAyartma = null;
+  if (!Array.isArray(s.yildizlar)) s.yildizlar = [];
+  for (const r of s.rooms) {
+    if (r.ozelAd === undefined) r.ozelAd = null;
+  }
   for (const o of s.objects) {
     if (typeof o.yipranma !== 'number') o.yipranma = 0; // eskime sonradan eklendi
   }

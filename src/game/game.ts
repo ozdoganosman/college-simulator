@@ -94,6 +94,16 @@ function endOfDay(state: GameState): void {
       // Yıl dönümü: biten yılın Akademik Yıl Ödülleri töreni (oyunun ilk günü hariç)
       if (state.gun > 1) {
         const sonuc = yilSonuHesapla(state);
+        // tören yorgunluğu önlemi: yıl dönümüne denk gelen mezuniyet ayrı tören
+        // açmaz — özeti yıl sonu ekranına satır olarak girer
+        if (state.mezuniyet) {
+          sonuc.mezuniyetOzet = {
+            toplam: state.mezuniyet.toplam,
+            onur: state.mezuniyet.onur,
+            bagis: state.mezuniyet.bagis,
+          };
+          state.mezuniyet = null;
+        }
         state.yilSonu = sonuc;
         if (sonuc.siraPrestij > 0) {
           addPrestij(state, sonuc.siraPrestij);
@@ -121,6 +131,12 @@ function endOfDay(state: GameState): void {
 
   // Başarımlar + iflas takibi
   kontrolBasarimlar(state);
+
+  // 👑 ZAFER: 1 numara olununca bir kez şampiyonluk töreni
+  if (!state.zaferGosterildi && state.basarimlar.includes('bir_numara')) {
+    state.zaferGosterildi = true;
+    state.zafer = true;
+  }
   if (state.para < 0) {
     state.borcGunleri++;
     const limit = BALANCE.IFLAS_GUN[state.zorluk];
@@ -157,7 +173,7 @@ function donemRakipOlayi(state: GameState): void {
     rakip.yayin += 10;
     notify(state, `🚀 ${rakip.ad} dev bir AR-GE hibesi kaptı — sıralamada güçleniyor.`, 'bilgi');
   } else if (zar === 2) {
-    // en değerli hocaya ayartma girişimi: morali sarsılır
+    // en değerli hocaya ayartma girişimi — KARŞI HAMLE kartı olarak gelir
     let hedef: Academic | null = null;
     let enIyi = -1;
     for (const a of state.agents) {
@@ -168,10 +184,19 @@ function donemRakipOlayi(state: GameState): void {
         hedef = a;
       }
     }
-    if (hedef) {
+    if (hedef && !state.aktifOlay) {
+      state.bekleyenAyartma = { academicId: hedef.id, rakipAd };
+      state.aktifOlay = { id: 'rakip-ayartma', gun: state.gun };
+      notify(state, `🎣 ${rakipAd}, ${hedef.ad}'a transfer teklif etti — kararın bekleniyor (olay kartı)!`, 'kotu');
+    } else if (hedef) {
+      // olay yuvası doluysa eski davranış: moral sarsılır
       hedef.memnuniyet = clamp(hedef.memnuniyet - 12, 0, 100);
       notify(state, `🎣 ${rakipAd}, ${hedef.ad}'a transfer teklif etti — morali sarsıldı (%${Math.round(hedef.memnuniyet)}). Zam vermenin tam zamanı olabilir!`, 'kotu');
     }
+  } else if (!state.aktifOlay) {
+    // tanıtım savaşı — karşı kampanya kartı
+    state.aktifOlay = { id: 'tanitim-savasi', gun: state.gun };
+    notify(state, `📉 ${rakipAd} dev bir tanıtım kampanyası başlattı — karşılık verecek misin (olay kartı)?`, 'kotu');
   } else {
     state.sonrakiTalepCarpan *= 0.88;
     notify(state, `📉 ${rakipAd} dev bir tanıtım kampanyası başlattı — bir sonraki YKS talebin düşebilir (×0.88).`, 'kotu');

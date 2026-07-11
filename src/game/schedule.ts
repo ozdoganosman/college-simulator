@@ -263,11 +263,33 @@ export function rebuildDersProgrami(state: GameState): void {
   const blokMesgul = new Set<string>(); // "id:blok" — bir hoca aynı saatte İKİ sınıfa giremez
   const tumHocalar = akademisyenler(state);
 
+  // 📌 kilitli slotlar: oyuncunun elle atadığı (deptId, blok) çiftleri korunur.
+  // Hocaları ve saatleri PEŞİNEN rezerve edilir ki serbest dağıtım sırasında
+  // başka bir bölüm aynı hocayı aynı saate kapamasın.
+  const kilitliler = new Map<string, DersSlot>();
+  for (const s of state.dersProgrami ?? []) {
+    if (s.kilit && s.academicId !== -1 && tumHocalar.some((h) => h.id === s.academicId)
+        && state.departments.some((d) => d.id === s.deptId)) {
+      const mesgulKey = `${s.academicId}:${s.blok}`;
+      if (blokMesgul.has(mesgulKey)) continue; // aynı hoca+saat iki kez kilitlenemez
+      kilitliler.set(`${s.deptId}:${s.blok}`, s);
+      blokMesgul.add(mesgulKey);
+      gunlukBlok.set(s.academicId, (gunlukBlok.get(s.academicId) ?? 0) + 1);
+    }
+  }
+
   for (const dept of state.departments) {
     const dersler = deptDef(dept.defId).dersler;
     if (dersler.length === 0) continue;
 
     for (let blok = 0; blok < 4; blok++) {
+      // kilitli slot: ders + hoca aynen korunur (rezervasyon yukarıda yapıldı)
+      const kilitli = kilitliler.get(`${dept.id}:${blok}`);
+      if (kilitli) {
+        slots.push({ ...kilitli });
+        continue;
+      }
+
       // müfredat gün + blok üzerinden döner: her gün farklı ders kombinasyonu
       const courseId = dersler[(state.gun + blok) % dersler.length];
 
@@ -367,9 +389,18 @@ export function slotaHocaAta(
     a.verdigiDersler = [...(a.verdigiDersler ?? []), slot.courseId];
   }
   slot.academicId = a.id;
+  slot.kilit = true; // 📌 elle atama kilitlenir: gece yeniden kurulumda değişmez
   hocaBolumleriniGuncelle(state);
-  notify(state, `📅 ${courseDef(slot.courseId).kod} dersine ${a.ad} atandı.`, 'iyi');
+  notify(state, `📅 ${courseDef(slot.courseId).kod} dersine ${a.ad} atandı ve 📌 kilitlendi (kilidi panelden açabilirsin).`, 'iyi');
   return true;
+}
+
+/** 📌 Slot kilidini açar — program yeniden serbest kurulur. */
+export function slotKilidiAc(state: GameState, deptId: number, blok: number): void {
+  const slot = (state.dersProgrami ?? []).find((s) => s.deptId === deptId && s.blok === blok);
+  if (!slot) return;
+  slot.kilit = false;
+  notify(state, `📌 ${courseDef(slot.courseId).kod} slot kilidi açıldı — program yarından itibaren en uygun hocayı seçecek.`, 'bilgi');
 }
 
 /** Bölümün belirli bloktaki dersi (panel ve simülasyon için). */

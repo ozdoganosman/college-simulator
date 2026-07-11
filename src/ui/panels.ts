@@ -12,16 +12,17 @@
  */
 import {
   ALAN_META, AcademicRank, Alan, GameState, LEVEL_LABEL, Mezun, NITELIK_META, Nitelik,
-  ProjeTip, RANK_LABEL, RoomType, Sektor, StrategyDef, Student, StudentLevel, tileIndex,
+  NoticeKind, ProjeTip, RANK_LABEL, RoomType, Sektor, StrategyDef, Student, StudentLevel,
+  tileIndex,
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
 import {
   ASISTAN_LIMIT, DERS_LIMIT, acikDersler, akilliOtoSec, asistanlari, blokDersi, bolumuHedefle,
-  dersYukuVerimi, hocaDersCikar, hocaDersEkle, otoDersSec, slotaHocaAta, verilemeyenDersler,
-  yukVerimi,
+  dersYukuVerimi, hocaDersCikar, hocaDersEkle, otoDersSec, slotKilidiAc, slotaHocaAta,
+  verilemeyenDersler, yukVerimi,
 } from '../game/schedule';
 import { COURSES } from '../data/courses';
-import { formatMoney } from '../core/util';
+import { formatClock, formatMoney } from '../core/util';
 import { libraryLevel, validRooms } from '../core/grid';
 import { clearSave, notify, spend } from '../game/state';
 import {
@@ -391,6 +392,9 @@ function onPanelClick(e: Event): void {
     case 'kulup-kapat':
       kulupKapat(state, id);
       break;
+    case 'slot-kilit-ac':
+      slotKilidiAc(state, Number(id), Number(hedef.dataset.blok ?? '-1'));
+      break;
     case 'proje-baslat': {
       const kap = hedef.closest('div[data-proje-kap]');
       const tip = (kap?.querySelector<HTMLSelectElement>('select[data-role="proje-tip"]')?.value ?? 'temel') as ProjeTip;
@@ -420,6 +424,9 @@ function onPanelClick(e: Event): void {
     }
     case 'rapor-sekme':
       raporSekme = id;
+      break;
+    case 'arsiv-filtre':
+      arsivFiltre = id as typeof arsivFiltre;
       break;
     case 'bolum-kapat':
       bolumKapatToggle(state, Number(id));
@@ -1596,6 +1603,7 @@ function raporlarGovde(state: GameState): string {
     { id: 'kadro', ad: '👩‍🏫 Kadro & Kampüs' },
     { id: 'siralama', ad: '🏆 Sıralama & Başarım' },
     { id: 'olaylar', ad: '⚡ Olay Günlüğü' },
+    { id: 'bildirimler', ad: '📜 Arşiv' },
   ];
   if (!sekmeler.some((s) => s.id === raporSekme)) raporSekme = 'genel';
   const sekmeBar = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
@@ -1660,11 +1668,40 @@ function raporlarGovde(state: GameState): string {
   } else if (raporSekme === 'siralama') {
     icerik = `${siralamaBolumu(state)}
     ${basarimBolumu(state)}`;
+  } else if (raporSekme === 'bildirimler') {
+    icerik = bildirimArsiviBolumu(state);
   } else {
     icerik = olayGunluguBolumu(state);
   }
 
   return sekmeBar + icerik;
+}
+
+/** Bildirim arşivi filtre durumu. */
+let arsivFiltre: NoticeKind | 'hepsi' = 'hepsi';
+
+/** Raporlar: bildirim arşivi — akıp giden bildirimlerin kalıcı kaydı. */
+function bildirimArsiviBolumu(state: GameState): string {
+  const filtreler: { id: NoticeKind | 'hepsi'; ad: string }[] = [
+    { id: 'hepsi', ad: 'Hepsi' },
+    { id: 'odul', ad: '🏆 Ödül' },
+    { id: 'iyi', ad: '✅ İyi' },
+    { id: 'kotu', ad: '⚠️ Kötü' },
+    { id: 'bilgi', ad: 'ℹ️ Bilgi' },
+  ];
+  const secili = state.notices.filter((n) => arsivFiltre === 'hepsi' || n.kind === arsivFiltre);
+  const renk: Record<NoticeKind, string> = { odul: '#e8c66a', iyi: '#9fd3a8', kotu: '#f4a09c', bilgi: '#aab4c6' };
+  const satirlar = [...secili].reverse().map((n) => `<tr>
+      <td style="white-space:nowrap"><small>Gün ${n.gun} · ${formatClock(n.dakika)}</small></td>
+      <td style="color:${renk[n.kind]}">${esc(n.metin)}</td>
+    </tr>`).join('');
+  return `<h3>📜 Bildirim Arşivi <small style="color:#8f9ab0">(son ${state.notices.length} bildirim)</small></h3>
+    <div class="aciklama">Sağdaki akışta kaybolan bildirimlerin kalıcı kaydı.
+    ${filtreler.map((f) => (f.id === arsivFiltre
+    ? `<span class="rozet" style="background:#4a7bd4;color:#fff">${f.ad}</span>`
+    : `<button class="eylem" data-action="arsiv-filtre" data-id="${f.id}">${f.ad}</button>`)).join(' ')}</div>
+    ${secili.length === 0 ? '<p class="aciklama">Bu filtrede bildirim yok.</p>'
+    : `<table><tr><th>Zaman</th><th>Bildirim</th></tr>${satirlar}</table>`}`;
 }
 
 /** Raporlar: olay günlüğü — verdiğin kararların kaydı. */
@@ -2046,10 +2083,14 @@ function programGovde(state: GameState): string {
             ${cakisma || kotaDolu ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${dersiVar ? '' : ' (+ders)'}${neden}</option>`;
         }).join('');
         const seciciStil = slot.academicId === -1 ? 'border-color:#c25450;background:#3a2426' : '';
-        html += `<td><b>${ders.kod}</b> ${ders.ad}<br><small>${hoca}</small><br>
+        const kilitRozet = slot.kilit
+          ? `<button class="cip-cikar" data-action="slot-kilit-ac" data-id="${dept.id}" data-blok="${blok}"
+              title="📌 Bu slot kilitli: elle atadığın hoca gece yeniden kurulumda değişmez. Tıkla: kilidi aç.">📌</button>`
+          : '';
+        html += `<td><b>${ders.kod}</b> ${ders.ad} ${kilitRozet}<br><small>${hoca}</small><br>
           <select class="kontenjan-input ders-ekle" style="width:150px;font-size:11px;${seciciStil}"
             data-action="slot-hoca" data-id="${dept.id}" data-blok="${blok}"
-            title="Bu derse hoca ata — %uyum: alan-ders uygunluğu; (+ders) hocanın yıllık programına eklenir">
+            title="Bu derse hoca ata (📌 kilitlenir) — %uyum: alan-ders uygunluğu; (+ders) hocanın yıllık programına eklenir">
             <option value="-1" ${slot.academicId === -1 ? 'selected' : ''}>— hoca ata —</option>
             ${secenekler}
           </select></td>`;
