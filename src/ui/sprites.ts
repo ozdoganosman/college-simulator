@@ -288,6 +288,82 @@ const CIZIMLER: Record<ObjectTypeId, (c: Ctx2, s: number) => void> = {
     c.fillStyle = '#556070';
     rr(c, s * 0.28, s * 0.72, s * 0.44, s * 0.1, s * 0.02); c.fill();
   },
+  ranza(c, s) {
+    golge(c, s);
+    // iki katlı yatak: çerçeve + iki şilte
+    c.fillStyle = '#6b4a2f';
+    c.fillRect(s * 0.12, s * 0.1, s * 0.06, s * 0.76);
+    c.fillRect(s * 0.82, s * 0.1, s * 0.06, s * 0.76);
+    c.fillStyle = '#e8e2d4';
+    rr(c, s * 0.16, s * 0.16, s * 0.68, s * 0.2, s * 0.04); c.fill();
+    rr(c, s * 0.16, s * 0.54, s * 0.68, s * 0.2, s * 0.04); c.fill();
+    c.fillStyle = '#5aa2d0';
+    rr(c, s * 0.16, s * 0.16, s * 0.2, s * 0.2, s * 0.04); c.fill();
+    rr(c, s * 0.16, s * 0.54, s * 0.2, s * 0.2, s * 0.04); c.fill();
+  },
+  servis_duragi(c, s) {
+    golge(c, s);
+    // durak direği + tabela + bank
+    c.fillStyle = '#8a939e';
+    c.fillRect(s * 0.2, s * 0.14, s * 0.05, s * 0.62);
+    c.fillStyle = '#2f6db3';
+    rr(c, s * 0.12, s * 0.08, s * 0.42, s * 0.22, s * 0.04); c.fill();
+    c.fillStyle = '#fff';
+    c.font = `${s * 0.16}px sans-serif`;
+    c.fillText('🚌', s * 0.2, s * 0.25);
+    c.fillStyle = AHSAP_ACIK;
+    rr(c, s * 0.34, s * 0.56, s * 0.5, s * 0.1, s * 0.03); c.fill();
+    c.fillStyle = '#4a525c';
+    c.fillRect(s * 0.38, s * 0.66, s * 0.05, s * 0.14);
+    c.fillRect(s * 0.74, s * 0.66, s * 0.05, s * 0.14);
+  },
+  basket_potasi(c, s) {
+    golge(c, s);
+    c.fillStyle = '#8a939e';
+    c.fillRect(s * 0.46, s * 0.2, s * 0.07, s * 0.6);
+    c.fillStyle = '#e8e2d4';
+    rr(c, s * 0.26, s * 0.08, s * 0.46, s * 0.3, s * 0.03); c.fill();
+    c.strokeStyle = '#d9534f'; c.lineWidth = s * 0.035;
+    c.strokeRect(s * 0.38, s * 0.16, s * 0.22, s * 0.16);
+    c.strokeStyle = '#e8862f';
+    c.beginPath(); c.arc(s * 0.49, s * 0.38, s * 0.09, 0, Math.PI); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = s * 0.015;
+    for (let i = 0; i < 3; i++) {
+      c.beginPath();
+      c.moveTo(s * (0.42 + i * 0.07), s * 0.38);
+      c.lineTo(s * (0.45 + i * 0.045), s * 0.5);
+      c.stroke();
+    }
+  },
+  satranc_masasi(c, s) {
+    golge(c, s);
+    c.fillStyle = AHSAP_ACIK;
+    rr(c, s * 0.14, s * 0.2, s * 0.72, s * 0.56, s * 0.06); c.fill();
+    // satranç deseni
+    const kare = s * 0.1;
+    for (let r = 0; r < 4; r++) {
+      for (let k = 0; k < 4; k++) {
+        c.fillStyle = (r + k) % 2 === 0 ? '#e8e2d4' : '#3f4750';
+        c.fillRect(s * 0.3 + k * kare, s * 0.28 + r * kare, kare, kare);
+      }
+    }
+  },
+  muzik_sahnesi(c, s) {
+    golge(c, s);
+    // platform + hoparlör + mikrofon
+    c.fillStyle = '#4a3a5c';
+    rr(c, s * 0.08, s * 0.4, s * 0.84, s * 0.4, s * 0.05); c.fill();
+    c.fillStyle = '#2b2138';
+    rr(c, s * 0.12, s * 0.14, s * 0.2, s * 0.3, s * 0.03); c.fill();
+    rr(c, s * 0.68, s * 0.14, s * 0.2, s * 0.3, s * 0.03); c.fill();
+    c.fillStyle = '#c77dff';
+    c.beginPath(); c.arc(s * 0.22, s * 0.26, s * 0.05, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(s * 0.78, s * 0.26, s * 0.05, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#8a939e';
+    c.fillRect(s * 0.48, s * 0.18, s * 0.03, s * 0.24);
+    c.fillStyle = '#e8e2d4';
+    c.beginPath(); c.arc(s * 0.495, s * 0.16, s * 0.045, 0, Math.PI * 2); c.fill();
+  },
 };
 
 export function objectSprite(tip: ObjectTypeId): HTMLCanvasElement {

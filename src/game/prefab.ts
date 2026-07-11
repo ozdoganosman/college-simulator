@@ -33,6 +33,7 @@ export const PREFABS: PrefabDef[] = [
   { id: 'p_kantin', ad: 'Kantin', room: 'kantin', w: 6, h: 6 },
   { id: 'p_tuvalet', ad: 'Tuvalet', room: 'tuvalet', w: 5, h: 5 },
   { id: 'p_rektorluk', ad: 'Rektörlük', room: 'rektorluk', w: 6, h: 6 },
+  { id: 'p_yurt', ad: 'Öğrenci Yurdu', room: 'yurt', w: 10, h: 8 },
 ];
 
 export function prefabDef(id: string): PrefabDef {
@@ -111,6 +112,9 @@ export function furnishPlan(room: RoomType, tiles: number[], occupied: Set<numbe
       case 'tuvalet':
         if (by === 0 && bx % 2 === 0) koy('klozet', x, y);
         else if (by === h - 1 && by !== 0 && bx % 2 === 0) koy('lavabo', x, y);
+        break;
+      case 'yurt':
+        if (by % 2 === 0 && bx % 2 === 0) koy('ranza', x, y);
         break;
       default:
         break;

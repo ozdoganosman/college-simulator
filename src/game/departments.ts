@@ -58,6 +58,7 @@ import { bolumBaskinAlan, deptDef } from '../data/departments';
 import { addPrestij, earn, notify, spend } from './state';
 import { gnoHesapla, removeAgent, spawnStudent } from './agents';
 import { mezunEkle, mutevelliBonusu } from './alumni';
+import { cazibePuani, faaliyetPuani } from './campus';
 
 function sinifMi(r: Room): boolean {
   return r.type === 'derslik' || r.type === 'amfi';
@@ -324,6 +325,7 @@ export function runYerlestirme(state: GameState): boolean {
     talep *= BALANCE.HARC_TALEP[state.harc];          // harç politikası
     talep *= state.sonrakiTalepCarpan;                 // rakip olayı etkisi
     talep *= 1 + 0.03 * mutevelliBonusu(state, 'pratik'); // heyetteki iş dünyası mezunları
+    talep *= 1 + cazibePuani(state) / 250; // kampüs cazibesi: yurt + ulaşım + faaliyet (en çok +%40)
     if (state.strategies.includes('tanitim')) talep *= 1.25;
     if (state.strategies.includes('uluslararasi_ofis')) talep *= 1.15;
     talep *= randRange(state, 0.8, 1.2);
@@ -537,7 +539,8 @@ export function dailyDepartmentUpdate(state: GameState): void {
   const subvansiyon = state.strategies.includes('yemek_subvansiyon');
   const politikaMutluluk = (state.harc === 'yuksek' ? -0.5 : state.harc === 'ucretsiz' ? 0.3 : 0)
     + (state.burs ? 1 : 0)
-    + 0.4 * mutevelliBonusu(state, 'sosyal');
+    + 0.4 * mutevelliBonusu(state, 'sosyal')
+    + (faaliyetPuani(state) >= 50 ? 0.3 : 0); // canlı kampüs yaşamı moral verir
   let toplamMutluluk = 0;
   let ogrenciSayisi = 0;
   for (const a of state.agents) {

@@ -12,6 +12,7 @@ import {
 import { runYerlestirme } from '../game/departments';
 import { gnoHesapla } from '../game/agents';
 import { oyuncuSirasi } from '../game/rivals';
+import { cazibePuani } from '../game/campus';
 import { DERS_LIMIT, asistanlari, dersYukuVerimi } from '../game/schedule';
 import { deptDef } from '../data/departments';
 import { deleteRoom } from '../game/build';
@@ -47,6 +48,8 @@ export function initHud(getState: () => GameState, ui: UIState): void {
       title="Mutfak yemek stoğu (porsiyon) — tıkla: 👩‍🏫 Kadro&#10;Aşçılar 11:00-14:00 banko başında üretir; her öğrenci 1 porsiyon yer&#10;Stok biterse öğrenciler aç kalır ve mutsuzlaşır; kalan yemek gece bayatlar"></span>
     <span class="stat tikla" data-st="kutuphane" data-panel="kutuphane"
       title="Kütüphane seviyesi (0-3) — tıkla: 📚 Kütüphane&#10;Kitaplık rafı sayısıyla yükselir; araştırma ve öğrenmeyi hızlandırır"></span>
+    <span class="stat tikla" data-st="cazibe" data-panel="raporlar"
+      title="Kampüs Cazibesi (0-100) — tıkla: 📊 Raporlar&#10;Faaliyet çeşitliliği (bank, basket, satranç, sahne, kantin...) %50&#10;+ Yurt barınması %30 + Servis durakları %20&#10;YKS talebini en çok +%40 artırır"></span>
     <span class="stat tikla" data-st="sira" data-panel="raporlar"
       title="Türkiye Üniversite Sıralaması — tıkla: 📊 Raporlar&#10;Skor = prestij + yayın + mezun · Hedef: 1 numara olmak!"></span>
     <span class="stat tarih" data-st="tarih" title="Dönem 20 gün sürer (Güz + Bahar = 1 yıl)&#10;Dönem sonunda mezuniyet; yıl başında YKS ve Akademik Yıl Ödülleri">
@@ -370,6 +373,7 @@ export function refreshHud(state: GameState, ui: UIState): void {
   setStat('akademisyen', `👩‍🏫 ${akademisyen}`);
   setStat('yemek', `🍲 ${Math.floor(state.yemekStok)}`);
   setStat('kutuphane', `📚 Ktp. Sv. ${libraryLevel(state)}`);
+  setStat('cazibe', `✨ ${cazibePuani(state)}`);
   setStat('sira', `🏆 ${oyuncuSirasi(state)}/${state.rakipler.length + 1}`);
   setStat('tarih-metin', `Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · Gün ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}`);
   const donemOran = ((donemGunu(state.gun) - 1) * 1440 + state.dakika) / (DONEM_GUN * 1440);

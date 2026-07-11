@@ -30,6 +30,7 @@ export type RoomType =
   | 'ofis'
   | 'tuvalet'
   | 'kantin'
+  | 'yurt'
   | 'rektorluk';
 
 export interface Room {
@@ -59,7 +60,12 @@ export type ObjectTypeId =
   | 'otomat'        // kantin otomatı (açlık/eğlence)
   | 'bank'          // dış mekân bankı (dinlenme/eğlence)
   | 'cop_kutusu'
-  | 'bilgisayar';   // kütüphane/lab verim artışı
+  | 'bilgisayar'    // kütüphane/lab verim artışı
+  | 'ranza'         // yurt yatağı (2 öğrenci barındırır)
+  | 'servis_duragi' // ulaşım: sabah kampüse geliş hızlanır, cazibe artar
+  | 'basket_potasi' // aktivite: eğlence + influencer
+  | 'satranc_masasi'// aktivite: eğlence + filozof
+  | 'muzik_sahnesi';// aktivite: eğlence + artist
 
 export interface PlacedObject {
   id: number;

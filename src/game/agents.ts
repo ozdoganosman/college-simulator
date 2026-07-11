@@ -50,6 +50,7 @@ import { courseDef, dersEtki } from '../data/courses';
 import { asistanSayilari, yukVerimi } from './schedule';
 import { kitapCarpani } from './library';
 import { bolumBaskinAlan } from '../data/departments';
+import { ulasimSeviyesi, yurtKapasitesi } from './campus';
 import { findPath } from '../core/pathfinding';
 import { libraryLevel, roomCenter, walkable } from '../core/grid';
 import { BALANCE } from '../data/balance';
@@ -151,6 +152,13 @@ interface Ctx {
   kutuphaneIds: Set<number>;
   /** deptId -> bölümün baskın alanı (kütüphane çalışması hangi alanda gelişir) */
   deptAlan: Map<number, import('../core/types').Alan>;
+  /** geçerli yurt odaları + yurtta kalan öğrenci id'leri (kapasite kadar) */
+  yurtOdalar: Room[];
+  yurtSakinleri: Set<number>;
+  /** boş sosyal aktivite objeleri (basket/satranç/sahne) */
+  freeAktivite: PlacedObject[];
+  /** ulaşım seviyesi (0-5) — kampüse geliş hızlanır */
+  ulasim: number;
   yemekhaneler: Room[];
   kantinler: Room[];
   /** deptId -> bölüme atanmış geçerli derslik/amfiler */
@@ -168,9 +176,11 @@ function buildCtx(state: GameState, dk: number): Ctx {
   const yemekhaneler: Room[] = [];
   const kantinler: Room[] = [];
 
+  const yurtOdalar: Room[] = [];
   for (const r of state.rooms) {
     roomById.set(r.id, r);
     if (!r.valid) continue;
+    if (r.type === 'yurt') yurtOdalar.push(r);
     if ((r.type === 'derslik' || r.type === 'amfi') && r.deptId !== null) {
       const liste = deptClassrooms.get(r.deptId);
       if (liste) liste.push(r);
@@ -188,6 +198,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
   const freeKantinSandalye: PlacedObject[] = [];
   const freeOtomat: PlacedObject[] = [];
   const freeBank: PlacedObject[] = [];
+  const freeAktivite: PlacedObject[] = [];
   const freeMasa: PlacedObject[] = [];
   const freeBanko: PlacedObject[] = [];
   const tahtaByRoom = new Map<number, PlacedObject>();
@@ -225,6 +236,11 @@ function buildCtx(state: GameState, dk: number): Ctx {
         break;
       case 'bank':
         freeBank.push(o);
+        break;
+      case 'basket_potasi':
+      case 'satranc_masasi':
+      case 'muzik_sahnesi':
+        freeAktivite.push(o);
         break;
       case 'calisma_masasi':
         if (oda && oda.valid && oda.type === 'ofis') freeMasa.push(o);
@@ -292,6 +308,16 @@ function buildCtx(state: GameState, dk: number): Ctx {
   const deptAlan = new Map<number, import('../core/types').Alan>();
   for (const d of state.departments) deptAlan.set(d.id, bolumBaskinAlan(d.defId));
 
+  // yurt sakinleri: kapasite kadar öğrenci (id sırasıyla — kayıt önceliği)
+  const yurtSakinleri = new Set<number>();
+  const kapasite = yurtOdalar.length > 0 ? yurtKapasitesi(state) : 0;
+  if (kapasite > 0) {
+    const ogrenciIds: number[] = [];
+    for (const a of state.agents) if (a.kind === 'ogrenci') ogrenciIds.push(a.id);
+    ogrenciIds.sort((x, y) => x - y);
+    for (const id of ogrenciIds.slice(0, kapasite)) yurtSakinleri.add(id);
+  }
+
   return {
     dk,
     ogrenmeCarpan: (1 + libraryLevel(state) * BALANCE.KUTUPHANE_OGRENME_BONUS)
@@ -318,6 +344,10 @@ function buildCtx(state: GameState, dk: number): Ctx {
     kutuphaneler,
     kutuphaneIds: new Set(kutuphaneler.map((r) => r.id)),
     deptAlan,
+    yurtOdalar,
+    yurtSakinleri,
+    freeAktivite,
+    ulasim: ulasimSeviyesi(state),
     yemekhaneler,
     kantinler,
     deptClassrooms,
@@ -437,10 +467,11 @@ function finishActivity(state: GameState, a: Agent, ctx: Ctx): void {
   a.activity = 'bosta';
 }
 
-function maybeArrive(state: GameState, a: Agent, dk: number, dtMin: number): void {
+function maybeArrive(state: GameState, a: Agent, dk: number, dtMin: number, ulasim: number): void {
   if (dk < T.KAMPUS_ACILIS || dk >= T.CIKIS) return;
-  // kademeli varış: açılış penceresinde seyrek, sonrasında hızla tamamlanır
-  const p = dk < T.DERS1 ? dtMin / 30 : dtMin / 4;
+  // kademeli varış: açılış penceresinde seyrek, sonrasında hızla tamamlanır;
+  // servis durakları gelişi hızlandırır (durak başına +%35)
+  const p = (dk < T.DERS1 ? dtMin / 30 : dtMin / 4) * (1 + 0.35 * ulasim);
   if (!chance(state, p)) return;
   a.onCampus = true;
   a.x = GATE.x;
@@ -485,7 +516,8 @@ function trySatisfy(state: GameState, s: Student, ctx: Ctx, need: keyof Needs): 
     if (ctx.mutfak && state.yemekStok >= 1) obj = ctx.freeYemekSandalye.pop();
     if (!obj) obj = ctx.freeOtomat.pop();
   } else {
-    obj = ctx.freeKantinSandalye.pop() ?? ctx.freeBank.pop();
+    // sosyal aktiviteler öncelikli: basket/satranç/sahne kampüs yaşamını canlandırır
+    obj = ctx.freeAktivite.pop() ?? ctx.freeKantinSandalye.pop() ?? ctx.freeBank.pop();
   }
   if (!obj) return false;
   obj.reservedBy = s.id;
@@ -670,10 +702,13 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
         n.tuvalet = clamp(n.tuvalet - 2 * dtMin, 0, 100);
         bitti = n.tuvalet <= 5;
       } else if (o) {
-        // kantin sandalyesi / bank: dinlenme + eğlence + sosyal çevre (influencer)
+        // sosyal alanlar: dinlenme + eğlence + türe göre nitelik gelişimi
         n.enerji = clamp(n.enerji - 2 * dtMin, 0, 100);
-        n.eglence = clamp(n.eglence - 2 * dtMin, 0, 100);
+        n.eglence = clamp(n.eglence - (o.type === 'basket_potasi' || o.type === 'muzik_sahnesi' ? 3 : 2) * dtMin, 0, 100);
         s.nitelik.influencer = clamp(s.nitelik.influencer + 0.04 * dtMin, 0, 100);
+        if (o.type === 'satranc_masasi') s.nitelik.filozof = clamp(s.nitelik.filozof + 0.08 * dtMin, 0, 100);
+        else if (o.type === 'muzik_sahnesi') s.nitelik.artist = clamp(s.nitelik.artist + 0.08 * dtMin, 0, 100);
+        else if (o.type === 'basket_potasi') s.nitelik.influencer = clamp(s.nitelik.influencer + 0.06 * dtMin, 0, 100);
         bitti = n.enerji <= 5 && n.eglence <= 5;
       }
       if (bitti || (s.activityUntil !== -1 && dk >= s.activityUntil)) {
@@ -916,12 +951,31 @@ export function updateAgents(state: GameState, dtMin: number): void {
 
   for (const a of state.agents) {
     if (!a.onCampus) {
-      maybeArrive(state, a, dk, dtMin);
+      maybeArrive(state, a, dk, dtMin, ctx.ulasim);
       continue;
     }
 
-    // kampüs kapanışı: kalan herkes zorla çıkarılır
+    // kampüs kapanışı: yurt sakinleri YURDA çekilip uyur, kalanlar zorla çıkarılır
     if (dk >= T.KAMPUS_KAPANIS) {
+      if (a.kind === 'ogrenci' && ctx.yurtSakinleri.has(a.id) && ctx.yurtOdalar.length > 0) {
+        if (a.activity !== 'ihtiyacta') {
+          releaseReservations(state, a.id);
+          const oda = ctx.yurtOdalar[a.id % ctx.yurtOdalar.length];
+          const hedef = randomRoomTile(state, oda);
+          if (hedef) { a.x = hedef.x; a.y = hedef.y; }
+          a.path = [];
+          a.usingObject = -1;
+          a.activity = 'ihtiyacta'; // yurt uykusu
+          a.activityUntil = -1;
+          // yurtta geçen gece: ihtiyaçlar tazelenir, morale küçük bonus
+          a.needs.aclik = randRange(state, 10, 25);
+          a.needs.tuvalet = randRange(state, 5, 15);
+          a.needs.enerji = randRange(state, 5, 20);
+          a.needs.eglence = Math.max(0, a.needs.eglence * 0.4);
+          a.mutluluk = clamp(a.mutluluk + 1, 0, 100);
+        }
+        continue; // uyuyor — gece görünür kalabalık
+      }
       releaseReservations(state, a.id);
       leaveCampus(state, a);
       a.x = GATE.x;
@@ -929,10 +983,19 @@ export function updateAgents(state: GameState, dtMin: number): void {
       continue;
     }
 
+    // sabah: yurtta uyuyan sakinler kampüs açılışında uyanır
+    if (a.kind === 'ogrenci' && a.activity === 'ihtiyacta' && a.usingObject === -1
+        && ctx.yurtSakinleri.has(a.id) && dk >= T.KAMPUS_ACILIS && dk < T.CIKIS) {
+      a.activity = 'bosta';
+      a.activityUntil = -1;
+    }
+
     depositDirt(state, a, dtMin, ctx);
 
-    // çıkış saati: her şeyi bırakıp kapıya yönel
-    if (dk >= T.CIKIS && a.activity !== 'cikiyor') {
+    // çıkış saati: yurt sakinleri kampüste kalır (akşam sosyalleşir/kütüphaneye gider),
+    // diğerleri her şeyi bırakıp kapıya yönelir
+    const yurtta = a.kind === 'ogrenci' && ctx.yurtSakinleri.has(a.id) && ctx.yurtOdalar.length > 0;
+    if (dk >= T.CIKIS && a.activity !== 'cikiyor' && !yurtta) {
       releaseReservations(state, a.id);
       a.usingObject = -1;
       a.activityUntil = -1;

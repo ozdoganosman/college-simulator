@@ -12,6 +12,7 @@ import { dersYukuVerimi } from '../game/schedule';
 import { officeCapacity } from '../game/academics';
 import { toplamKoleksiyon } from '../game/library';
 import { seatCapacity } from '../game/departments';
+import { cazibePuani, yurtKapasitesi } from '../game/campus';
 import { openPanel, PanelName } from './panels';
 
 interface Oneri {
@@ -118,6 +119,13 @@ function onerileriHesapla(state: GameState): Oneri[] {
   }
   if (!state.mentorluk && calisanMezun >= BALANCE.MENTORLUK_MIN_MEZUN) {
     ekle('mentor', '🤝 Mentorluk programı hazır', `${calisanMezun} çalışan mezunun var — mentorluk öğrenci gelişimini +%15 hızlandırır (günlük ₺${BALANCE.MENTORLUK_GIDER.toLocaleString('tr-TR')}).`, 'mezunlar');
+  }
+
+  if (ogrenciler.length >= 30 && yurtKapasitesi(state) === 0 && state.para > 400_000) {
+    ekle('yurt-yok', '🛏️ Yurt yok — kampüs gece bomboş', 'Yurt kur (Hazır Bina → Öğrenci Yurdu): yurtta kalanlar gece kampüste yaşar, derse tok/erken gelir; barınma cazibeyi ve YKS talebini artırır.', null);
+  }
+  if (ogrenciler.length >= 15 && cazibePuani(state) < 25) {
+    ekle('cazibe-dusuk', `✨ Kampüs cazibesi düşük (${cazibePuani(state)}/100)`, 'Aktivite alanları ekle (🏀 basket, ♟️ satranç, 🎸 sahne — Eşyalar menüsü), servis durağı koy, yurt kur. Cazibe YKS talebine +%40\'a dek çarpan verir.', 'raporlar');
   }
 
   // --- büyüme fırsatı ---

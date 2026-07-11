@@ -83,10 +83,11 @@ import * as library from './game/library';
 import * as prefab from './game/prefab';
 import * as rivals from './game/rivals';
 import * as alumni from './game/alumni';
+import * as campus from './game/campus';
 (window as unknown as Record<string, unknown>).__sim = {
   state: () => state,
   advance: (dk: number) => advance(state, dk),
-  build, departments, academics, research, agents, library, prefab, rivals, alumni,
+  build, departments, academics, research, agents, library, prefab, rivals, alumni, campus,
   ui, cam,
 };
 

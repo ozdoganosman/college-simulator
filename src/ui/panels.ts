@@ -40,6 +40,7 @@ import {
   mutevelliBonusu, mutevelliCikar,
 } from '../game/alumni';
 import { krediCek } from '../game/economy';
+import { cazibePuani, faaliyetPuani, ulasimSeviyesi, yurtKapasitesi } from '../game/campus';
 import {
   KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
   toplamKoleksiyon,
@@ -1208,6 +1209,28 @@ function siralamaBolumu(state: GameState): string {
     </table>`;
 }
 
+/** Raporlar: kampüs cazibesi — barınma + ulaşım + faaliyet çeşitliliği. */
+function cazibeBolumu(state: GameState): string {
+  const faaliyet = faaliyetPuani(state);
+  const kapasite = yurtKapasitesi(state);
+  const ulasim = ulasimSeviyesi(state);
+  const cazibe = cazibePuani(state);
+  const ogrenci = state.agents.filter((a) => a.kind === 'ogrenci').length;
+  const yurtta = Math.min(kapasite, ogrenci);
+  return `<h3>✨ Kampüs Cazibesi: ${cazibe}/100</h3>
+    <div class="aciklama">Cazibe YKS talebini artırır (en çok +%40) — üç ayaktan oluşur:
+    <b>faaliyet çeşitliliği</b> (bank, 🏀 basket potası, ♟️ satranç masası, 🎸 müzik sahnesi,
+    kantin/yemekhane/kütüphane), <b>barınma</b> (🛏️ yurt: gece kampüste kalan öğrenci derse tok
+    ve erken gelir — hedef: öğrencilerin yarısını barındırmak) ve <b>ulaşım</b>
+    (🚌 servis durağı: sabah kampüse geliş hızlanır, durak başına +%35).</div>
+    ${grafikBar('🎪 Faaliyet çeşitliliği', faaliyet, 100, '#c77dff', `${faaliyet}/100`)}
+    ${grafikBar('🛏️ Barınma', yurtta, Math.max(1, Math.ceil(ogrenci * 0.5)), '#59a14f', `${yurtta} yatak dolu / ${kapasite} kapasite`)}
+    ${grafikBar('🚌 Ulaşım', ulasim, 5, '#4a7bd4', `${ulasim}/5 durak`)}
+    <div class="aciklama">💡 Aktivite alanları öğrencilerin boş vaktinde nitelik de geliştirir:
+    🏀 → 📣 Influencer · ♟️ → 📜 Filozof · 🎸 → 🎨 Artist. Yurtta kalanlar akşam kütüphanede
+    çalışır, gece kampüs boş kalmaz.</div>`;
+}
+
 /** Raporlar: başarım merdiveni — nihai hedef 1 numara olmak. */
 function basarimBolumu(state: GameState): string {
   const satirlar = BASARIMLAR.map((b) => {
@@ -1308,6 +1331,7 @@ function raporlarGovde(state: GameState): string {
       ${satir('Toplam mezun / bırakan', `${state.toplamMezun} / ${state.toplamBirakan}`)}
       ${satir('Mezun istihdamı', istihdamOrani(state) === null ? '— (🤝 Mezunlar paneli)' : `%${istihdamOrani(state)} (🤝 Mezunlar panelinde kıyas)`)}
     </table>
+    ${cazibeBolumu(state)}
     ${basarimBolumu(state)}
     ${ekosistemBolumu(state)}
     <h3>👩‍🏫 Kadro</h3>
@@ -1411,7 +1435,17 @@ function yardimGovde(): string {
       1 dersin yükünü üstlenir (hoca başına en çok 2), okul asistana günlük maaş öder.
     </div>
 
-    <h3>4c) 🚀 Girişim ekosistemi</h3>
+    <h3>4c) ✨ Kampüs cazibesi: yurt, ulaşım, aktivite</h3>
+    <div class="aciklama">
+      <b>🛏️ Yurt</b> kur (Odalar/Hazır Bina; ranza başına 2 öğrenci): yurtta kalanlar gece
+      kampüste yaşar, akşam kütüphanede çalışır, derse tok ve erken gelir. <b>🚌 Servis durağı</b>
+      koy: sabah kampüse geliş hızlanır. <b>Aktivite alanları</b> (🏀 basket, ♟️ satranç,
+      🎸 müzik sahnesi) öğrencilerin takıldığı yerlerdir — eğlence ihtiyacını karşılar VE nitelik
+      geliştirir. Üçü birlikte <b>✨ Kampüs Cazibesi</b>ni (üst barda) oluşturur: YKS talebine
+      en çok +%40 çarpan. Detay: 📊 Raporlar.
+    </div>
+
+    <h3>4d) 🚀 Girişim ekosistemi</h3>
     <div class="aciklama">
       Her ders, alanına göre öğrencinin niteliklerini geliştirir: 🔬 Mühendis, 🎨 Artist,
       📜 Filozof, 💼 Pratik — kantin/bank sosyalleşmesi ve sanat dersleri 📣 <b>Influencer</b>'ı

@@ -57,6 +57,11 @@ export const ROOM_DEFS: Record<RoomType, RoomDef> = {
     gereksinim: [ { obj: 'otomat', adet: 1 }, { obj: 'sandalye', adet: 2 } ],
     aciklama: 'Öğrenciler boş vakitte dinlenir, eğlence ihtiyacını karşılar.',
   },
+  yurt: {
+    id: 'yurt', ad: 'Yurt', renk: '#c2a878', minBoyut: 20, kapali: true,
+    gereksinim: [ { obj: 'ranza', adet: 4 } ],
+    aciklama: 'Öğrenci barındırır: her ranza 2 kişilik. Yurtta kalanlar gece kampüste yaşar, derse tok ve erken gelir.',
+  },
   rektorluk: {
     id: 'rektorluk', ad: 'Rektörlük', renk: '#bab0ac', minBoyut: 12, kapali: true,
     gereksinim: [ { obj: 'calisma_masasi', adet: 1 } ],
