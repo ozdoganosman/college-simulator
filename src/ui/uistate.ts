@@ -10,7 +10,9 @@ export type Tool =
   | { kind: 'oda_kaldir' }
   | { kind: 'esya'; obj: ObjectTypeId }
   | { kind: 'hazir'; prefab: string }
-  | { kind: 'tasi'; roomId: number };
+  | { kind: 'tasi'; roomId: number }
+  | { kind: 'boyutlandir'; roomId: number; prefab: string }
+  | { kind: 'tasiGrup'; roomIds: number[] };
 
 /** Isı haritası katmanları — haritanın üstüne renk kaplaması basar. */
 export type Katman = 'yok' | 'mutluluk' | 'aclik' | 'kir' | 'yipranma';
@@ -22,6 +24,8 @@ export interface UIState {
   hoverTile: Point | null;
   /** seçili oda (bilgi göstermek için), yoksa -1 */
   selectedRoomId: number;
+  /** çoklu seçim: Shift+tık ile eklenen bina id'leri (toplu taşıma/yıkım) */
+  selectedRoomIds: number[];
   /** seçili kişi (öğrenci/hoca kartı göstermek için), yoksa -1 */
   selectedAgentId: number;
   paused: boolean;
@@ -37,6 +41,7 @@ export function createUIState(): UIState {
     dragStart: null,
     hoverTile: null,
     selectedRoomId: -1,
+    selectedRoomIds: [],
     selectedAgentId: -1,
     paused: false,
     katman: 'yok',

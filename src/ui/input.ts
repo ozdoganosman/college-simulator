@@ -2,8 +2,8 @@ import { GameState, tileIndex, inBounds } from '../core/types';
 import {
   buildDoor, buildFloor, buildWallRect, demolish, designateRoom, placeObject, unassignRoom,
 } from '../game/build';
-import { placePrefab, prefabDef, prefabOrigin, prefabRect } from '../game/prefab';
-import { moveRoom, roomOuterRect } from '../game/build';
+import { placePrefab, prefabDef, prefabOrigin, prefabRect, resizeRoom } from '../game/prefab';
+import { moveGroup, moveRoom, roomOuterRect } from '../game/build';
 import { Camera, clampCamera, screenToTile, zoomAt } from './camera';
 import { sesInsa } from './audio';
 import { isCeremonyOpen } from './ceremony';
@@ -54,7 +54,50 @@ export function attachInput(
             document.dispatchEvent(new CustomEvent('tool-changed'));
           }
         }
+      } else if (t.kind === 'tasiGrup') {
+        // grubu imleçle (ortak sınır kutusu merkezi) taşı
+        const st = state();
+        const bbox = grupBbox(st, t.roomIds);
+        if (bbox) {
+          const cw = bbox.x1 - bbox.x0 + 1, ch = bbox.y1 - bbox.y0 + 1;
+          const dx = (tile.x - Math.floor(cw / 2)) - bbox.x0;
+          const dy = (tile.y - Math.floor(ch / 2)) - bbox.y0;
+          if (moveGroup(st, t.roomIds, dx, dy)) {
+            sesInsa();
+            ui.tool = { kind: 'sec' };
+            document.dispatchEvent(new CustomEvent('tool-changed'));
+          }
+        }
+      } else if (t.kind === 'boyutlandir') {
+        // imleç = yeni sağ-alt köşe; sol-üst çapada sabit → resizeRoom
+        const st = state();
+        const rect = roomOuterRect(st, t.roomId);
+        if (rect) {
+          const nw = Math.max(5, tile.x - rect.x0 + 1);
+          const nh = Math.max(5, tile.y - rect.y0 + 1);
+          if (resizeRoom(st, t.roomId, t.prefab, rect.x0, rect.y0, nw, nh)) {
+            sesInsa();
+            const yeni = st.rooms[st.rooms.length - 1];
+            ui.tool = { kind: 'sec' };
+            ui.selectedRoomId = yeni ? yeni.id : -1;
+            document.dispatchEvent(new CustomEvent('tool-changed'));
+          }
+        }
       } else if (t.kind === 'sec') {
+        // Shift+tık: binayı çoklu seçime ekle/çıkar
+        if (e.shiftKey) {
+          const rid = state().roomAt[tileIndex(tile.x, tile.y)];
+          if (rid !== -1) {
+            const i = ui.selectedRoomIds.indexOf(rid);
+            if (i >= 0) ui.selectedRoomIds.splice(i, 1);
+            else ui.selectedRoomIds.push(rid);
+            ui.selectedRoomId = rid;
+            ui.selectedAgentId = -1;
+            document.dispatchEvent(new CustomEvent('room-selected'));
+            return;
+          }
+        }
+        ui.selectedRoomIds = [];
         selectAt(state(), ui, tile.x, tile.y);
       } else {
         ui.dragStart = tile; // hazır bina dahil: sürükleyerek boyutlandırılır
@@ -134,10 +177,12 @@ export function attachInput(
       // önce yalnız aktif sürüklemeyi iptal et (araç elde kalsın)
       if (ui.dragStart) {
         ui.dragStart = null;
-      } else if (ui.tool.kind !== 'sec' || ui.selectedRoomId !== -1 || ui.selectedAgentId !== -1) {
+      } else if (ui.tool.kind !== 'sec' || ui.selectedRoomId !== -1 || ui.selectedAgentId !== -1
+                 || ui.selectedRoomIds.length > 0) {
         ui.tool = { kind: 'sec' };
         ui.selectedRoomId = -1;
         ui.selectedAgentId = -1;
+        ui.selectedRoomIds = [];
         document.dispatchEvent(new CustomEvent('tool-changed'));
       } else {
         document.dispatchEvent(new CustomEvent('toggle-menu'));
@@ -160,6 +205,20 @@ export function attachInput(
     if (e.key === 'ArrowDown' || e.key === 's') cam.y += pan;
     clampCamera(cam, canvas);
   });
+}
+
+/** Bir grup binanın ortak sınır kutusu (dış). */
+function grupBbox(
+  state: GameState, roomIds: number[],
+): { x0: number; y0: number; x1: number; y1: number } | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const id of roomIds) {
+    const r = roomOuterRect(state, id);
+    if (!r) continue;
+    x0 = Math.min(x0, r.x0); y0 = Math.min(y0, r.y0);
+    x1 = Math.max(x1, r.x1); y1 = Math.max(y1, r.y1);
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
 }
 
 function selectAt(state: GameState, ui: UIState, x: number, y: number): void {

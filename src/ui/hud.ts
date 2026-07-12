@@ -8,6 +8,7 @@ import { OBJECT_DEFS, OBJECT_LIST } from '../data/objects';
 import { isEnclosed, libraryLevel } from '../core/grid';
 import {
   PREFABS, autoFurnishCost, autoFurnishRoom, prefabCost, prefabOzet, roomFurnishPlan,
+  sablonlar, sablonKaydet, sablonSil,
 } from '../game/prefab';
 import { runYerlestirme } from '../game/departments';
 import { gnoHesapla } from '../game/agents';
@@ -20,7 +21,7 @@ import { deptDef } from '../data/departments';
 import { BALANCE } from '../data/balance';
 import { sesBildirim, sesUyari } from './audio';
 import { arkadasAdi } from '../game/social';
-import { deleteRoom, demolishRoom } from '../game/build';
+import { deleteRoom, demolishRoom, roomOuterRect } from '../game/build';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
 
@@ -220,6 +221,26 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         `Tek tık = ${p.w}×${p.h} kurulur · SÜRÜKLE = istediğin boyutta kur (eşyalar boyuta göre döşenir)\nVarsayılan içerik: ${prefabOzet(p)}`,
       );
     }
+    // özel şablonlar (💾 ile kaydedilenler) — sil butonlu
+    for (const s of sablonlar()) {
+      const secili = ui.tool.kind === 'hazir' && ui.tool.prefab === s.id;
+      const b = document.createElement('button');
+      b.className = 'tb-btn' + (secili ? ' aktif' : '');
+      b.innerHTML = `⭐ ${s.ad} <span class="fiyat">${s.w}×${s.h} · ${formatMoney(prefabCost(s))}</span>`
+        + '<span class="cip-cikar" style="margin-left:6px">×</span>';
+      b.title = 'Özel şablon · × ile sil';
+      b.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).classList.contains('cip-cikar')) {
+          sablonSil(s.id);
+          if (secili) ui.tool = { kind: 'sec' };
+          renderSubbar(getState, ui);
+        } else {
+          ui.tool = { kind: 'hazir', prefab: s.id };
+          renderSubbar(getState, ui);
+        }
+      });
+      subbarEl.appendChild(b);
+    }
     const div = document.createElement('div');
     div.className = 'oda-bilgi';
     const yonAd = ['⬇ alt', '➡ sağ', '⬆ üst', '⬅ sol'][ui.buildYon % 4];
@@ -273,6 +294,49 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
       div.innerHTML = agentCard(state, a);
       subbarEl.appendChild(div);
     }
+  } else if (ui.selectedRoomIds.length >= 2) {
+    // TOPLU SEÇİM paneli: birden çok bina seçili
+    const div = document.createElement('div');
+    div.className = 'gerek-liste';
+    const n = ui.selectedRoomIds.length;
+    const bilgi = document.createElement('span');
+    bilgi.className = 'baslik';
+    bilgi.textContent = `🏢 ${n} bina seçili (Shift+tık ile ekle/çıkar)`;
+    div.appendChild(bilgi);
+    const eylem = document.createElement('div');
+    eylem.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
+    const tasiHep = document.createElement('button');
+    tasiHep.className = 'sub-btn';
+    tasiHep.innerHTML = '📦 Hepsini Taşı';
+    tasiHep.title = 'Seçili binaları düzenlerini bozmadan birlikte taşı';
+    tasiHep.addEventListener('click', () => {
+      ui.tool = { kind: 'tasiGrup', roomIds: [...ui.selectedRoomIds] };
+      document.dispatchEvent(new CustomEvent('tool-changed'));
+    });
+    eylem.appendChild(tasiHep);
+    const yikHep = document.createElement('button');
+    yikHep.className = 'sub-btn';
+    yikHep.innerHTML = '🧨 Hepsini Yık';
+    yikHep.addEventListener('click', () => {
+      if (confirm(`${n} bina tümüyle yıkılsın mı? (%25 iade)`)) {
+        for (const id of [...ui.selectedRoomIds]) demolishRoom(state, id);
+        ui.selectedRoomIds = [];
+        ui.selectedRoomId = -1;
+        renderSubbar(getState, ui);
+      }
+    });
+    eylem.appendChild(yikHep);
+    const temizle = document.createElement('button');
+    temizle.className = 'sub-btn';
+    temizle.innerHTML = '✖ Seçimi Temizle';
+    temizle.addEventListener('click', () => {
+      ui.selectedRoomIds = [];
+      ui.selectedRoomId = -1;
+      renderSubbar(getState, ui);
+    });
+    eylem.appendChild(temizle);
+    div.appendChild(eylem);
+    subbarEl.appendChild(div);
   } else if (ui.selectedRoomId !== -1) {
     const room = state.rooms.find((r) => r.id === ui.selectedRoomId);
     if (room) {
@@ -330,8 +394,21 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
       });
       aksiyon.appendChild(tasiBtn);
 
-      // kopyala: aynı türde hazır bina aracına geç (varsa)
       const kopyaP = PREFABS.find((p) => p.room === room.type);
+      // yeniden boyutlandır (türün prefabı gerekli)
+      if (kopyaP) {
+        const boyutBtn = document.createElement('button');
+        boyutBtn.className = 'sub-btn';
+        boyutBtn.innerHTML = '📐 Boyutlandır';
+        boyutBtn.title = 'Binayı kimliğini koruyarak yeniden boyutlandır (yalnız fark ödenir)';
+        boyutBtn.addEventListener('click', () => {
+          ui.tool = { kind: 'boyutlandir', roomId: room.id, prefab: kopyaP.id };
+          document.dispatchEvent(new CustomEvent('tool-changed'));
+        });
+        aksiyon.appendChild(boyutBtn);
+      }
+
+      // kopyala: aynı türde hazır bina aracına geç (varsa)
       if (kopyaP) {
         const kopyaBtn = document.createElement('button');
         kopyaBtn.className = 'sub-btn';
@@ -343,6 +420,23 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         });
         aksiyon.appendChild(kopyaBtn);
       }
+
+      // şablon kaydet: bu binanın tür+boyutunu Hazır Bina'ya ekle
+      const sablonBtn = document.createElement('button');
+      sablonBtn.className = 'sub-btn';
+      sablonBtn.innerHTML = '💾 Şablon';
+      sablonBtn.title = 'Bu binayı (tür + boyut) özel şablon olarak kaydet — Hazır Bina listesine eklenir';
+      sablonBtn.addEventListener('click', () => {
+        const rect = roomOuterRect(state, room.id);
+        if (!rect) return;
+        const w = rect.x1 - rect.x0 + 1, h = rect.y1 - rect.y0 + 1;
+        const ad = (prompt('Şablon adı:', `${def.ad} ${w}×${h}`) ?? '').trim();
+        if (!ad) return;
+        const yeni = sablonKaydet(room.type, w, h, ad);
+        ui.tool = { kind: 'hazir', prefab: yeni.id };
+        document.dispatchEvent(new CustomEvent('tool-changed'));
+      });
+      aksiyon.appendChild(sablonBtn);
 
       const yikBtn = document.createElement('button');
       yikBtn.className = 'sub-btn';

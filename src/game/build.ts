@@ -309,6 +309,109 @@ export function demolishRoom(state: GameState, roomId: number): void {
   demolish(state, rect.x0, rect.y0, rect.x1, rect.y1);
 }
 
+/**
+ * Bir dikdörtgeni İADESİZ temizler (zemin/duvar/kapı/eşya/oda) — yeniden
+ * boyutlandırma gibi para ayrı hesaplanan işlemler için. Boş kalan oda silinir.
+ */
+export function clearRect(state: GameState, x0: number, y0: number, x1: number, y1: number): void {
+  for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
+    for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
+      if (!inBounds(x, y)) continue;
+      const t = tileIndex(x, y);
+      for (let i = state.objects.length - 1; i >= 0; i--) {
+        if (state.objects[i].x === x && state.objects[i].y === y) {
+          releaseObjectUsers(state, state.objects[i].id);
+          state.objects.splice(i, 1);
+        }
+      }
+      state.wall[t] = WALL_NONE;
+      state.floor[t] = null;
+      const rid = state.roomAt[t];
+      if (rid !== -1) {
+        const room = state.rooms.find((r) => r.id === rid);
+        if (room) room.tiles = room.tiles.filter((tt) => tt !== t);
+        state.roomAt[t] = -1;
+      }
+    }
+  }
+  state.rooms = state.rooms.filter((r) => r.tiles.length > 0);
+}
+
+/** Bir grup binayı (dx,dy) kaydırabilir miyiz? Grup içi örtüşme serbest. */
+export function canMoveGroup(
+  state: GameState, roomIds: number[], dx: number, dy: number,
+): boolean {
+  if (dx === 0 && dy === 0) return false;
+  // grubun tüm kaynak kareleri
+  const kaynak = new Set<number>();
+  const rects: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  for (const id of roomIds) {
+    const rect = roomOuterRect(state, id);
+    if (!rect) return false;
+    rects.push(rect);
+    for (let y = rect.y0; y <= rect.y1; y++) {
+      for (let x = rect.x0; x <= rect.x1; x++) {
+        if (!inBounds(x, y)) return false;
+        const t = tileIndex(x, y);
+        const rid = state.roomAt[t];
+        if (rid !== -1 && !roomIds.includes(rid)) return false; // grup dışı odayla iç içe
+        kaynak.add(t);
+      }
+    }
+  }
+  // hedef kareleri: grup dışına düşen her kare boş olmalı
+  for (const rect of rects) {
+    for (let y = rect.y0; y <= rect.y1; y++) {
+      for (let x = rect.x0; x <= rect.x1; x++) {
+        const nx = x + dx, ny = y + dy;
+        if (!inBounds(nx, ny)) return false;
+        if (nx === GATE.x && ny === GATE.y) return false;
+        const nt = tileIndex(nx, ny);
+        if (kaynak.has(nt)) continue;
+        if (state.floor[nt] !== null || state.wall[nt] !== WALL_NONE || state.roomAt[nt] !== -1) return false;
+        if (state.objects.some((o) => o.x === nx && o.y === ny)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** Grup taşıma: tüm binalar aynı (dx,dy) ile birlikte kayar. */
+export function moveGroup(state: GameState, roomIds: number[], dx: number, dy: number): boolean {
+  if (!canMoveGroup(state, roomIds, dx, dy)) return false;
+  // tüm kaynak karelerini fotoğrafla, temizle, kaydırılmış yaz
+  const kar: { t: number; floor: FloorId | null; wall: number }[] = [];
+  const objIds = new Set<number>();
+  for (const id of roomIds) {
+    const rect = roomOuterRect(state, id)!;
+    for (let y = rect.y0; y <= rect.y1; y++) {
+      for (let x = rect.x0; x <= rect.x1; x++) {
+        const t = tileIndex(x, y);
+        kar.push({ t, floor: state.floor[t], wall: state.wall[t] });
+        for (const o of state.objects) if (o.x === x && o.y === y) objIds.add(o.id);
+      }
+    }
+  }
+  for (const s of kar) { state.floor[s.t] = null; state.wall[s.t] = WALL_NONE; state.roomAt[s.t] = -1; }
+  for (const s of kar) {
+    const nt = tileIndex((s.t % MAP_W) + dx, Math.floor(s.t / MAP_W) + dy);
+    state.floor[nt] = s.floor; state.wall[nt] = s.wall;
+  }
+  for (const id of roomIds) {
+    const room = state.rooms.find((r) => r.id === id);
+    if (!room) continue;
+    room.tiles = room.tiles.map((t) => tileIndex((t % MAP_W) + dx, Math.floor(t / MAP_W) + dy));
+    for (const t of room.tiles) state.roomAt[t] = id;
+  }
+  for (const o of state.objects) {
+    if (objIds.has(o.id)) { releaseObjectUsers(state, o.id); o.x += dx; o.y += dy; o.reservedBy = -1; }
+  }
+  state.insaatSurumu = (state.insaatSurumu ?? 0) + 1;
+  validateRooms(state);
+  notify(state, `📦 ${roomIds.length} bina birlikte taşındı.`, 'iyi');
+  return true;
+}
+
 /** Oda atamasını kaldır (inşaat kalır). */
 export function unassignRoom(state: GameState, x0: number, y0: number, x1: number, y1: number): void {
   for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {

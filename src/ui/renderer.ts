@@ -9,7 +9,8 @@ import { OBJECT_DEFS } from '../data/objects';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { bushSprite, gateSprite, objectSprite, treeSprite } from './sprites';
 import { canPlacePrefab, prefabCost, prefabDef, prefabKapi, prefabOrigin, prefabRect } from '../game/prefab';
-import { canMoveRoom, roomOuterRect } from '../game/build';
+import { canMoveGroup, canMoveRoom, roomOuterRect } from '../game/build';
+import { resizeGecerli } from '../game/prefab';
 import type { Camera } from './camera';
 import type { UIState } from './uistate';
 
@@ -640,6 +641,21 @@ export function render(
     }
   }
 
+  // --- çoklu seçim vurgusu (Shift+tık ile seçilen binalar) ---
+  if (ui.selectedRoomIds.length > 0) {
+    for (const id of ui.selectedRoomIds) {
+      const r = roomOuterRect(state, id);
+      if (!r) continue;
+      ctx.strokeStyle = 'rgba(90,180,250,0.95)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([7, 4]);
+      ctx.strokeRect(r.x0 * TILE, r.y0 * TILE, (r.x1 - r.x0 + 1) * TILE, (r.y1 - r.y0 + 1) * TILE);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(90,180,250,0.14)';
+      ctx.fillRect(r.x0 * TILE, r.y0 * TILE, (r.x1 - r.x0 + 1) * TILE, (r.y1 - r.y0 + 1) * TILE);
+    }
+  }
+
   // --- araç önizlemesi ---
   drawToolPreview(ctx, state, ui);
 
@@ -838,6 +854,77 @@ function drawToolPreview(ctx: CanvasRenderingContext2D, state: GameState, ui: UI
     ctx.fill();
     ctx.fillStyle = '#f2f5fa';
     ctx.fillText(etiket, ex, ey);
+    return;
+  }
+
+  // yeniden boyutlandırma hayaleti — sol-üst çapa sabit, imleç sağ-alt köşe
+  if (t.kind === 'boyutlandir') {
+    const rect = roomOuterRect(state, t.roomId);
+    if (rect) {
+      const nw = Math.max(5, hover.x - rect.x0 + 1), nh = Math.max(5, hover.y - rect.y0 + 1);
+      const ok = resizeGecerli(state, t.roomId, rect.x0, rect.y0, nw, nh);
+      const px = rect.x0 * TILE, py = rect.y0 * TILE, pw = nw * TILE, ph = nh * TILE;
+      const room = state.rooms.find((r) => r.id === t.roomId);
+      ctx.fillStyle = ok ? hexA(room ? ROOM_DEFS[room.type].renk : '#888', 0.4) : 'rgba(220,60,60,0.28)';
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = ok ? 'rgba(90,200,250,0.95)' : 'rgba(255,120,110,0.95)';
+      ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]);
+      ctx.strokeRect(px, py, pw, ph);
+      ctx.setLineDash([]);
+      // çapa köşe (sol-üst sabit)
+      ctx.fillStyle = 'rgba(90,180,250,0.95)';
+      ctx.beginPath();
+      ctx.arc(rect.x0 * TILE + TILE / 2, rect.y0 * TILE + TILE / 2, TILE * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      const fs = Math.max(10, TILE * 0.42);
+      ctx.font = `700 ${fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const etiket = ok ? `📐 ${nw}×${nh} · tık: uygula · Esc: iptal` : '⛔ boyut uymuyor';
+      const tw = ctx.measureText(etiket).width;
+      ctx.fillStyle = ok ? 'rgba(12,16,22,0.88)' : 'rgba(140,35,30,0.92)';
+      roundRectPath(ctx, px + pw / 2 - tw / 2 - 7, py - fs * 1.6, tw + 14, fs * 1.6, 5);
+      ctx.fill();
+      ctx.fillStyle = '#f2f5fa';
+      ctx.fillText(etiket, px + pw / 2, py - fs * 0.8);
+    }
+    return;
+  }
+
+  // grup taşıma hayaleti — tüm seçili binaların izdüşümü imleçte
+  if (t.kind === 'tasiGrup') {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const rects: { x0: number; y0: number; x1: number; y1: number; renk: string }[] = [];
+    for (const id of t.roomIds) {
+      const r = roomOuterRect(state, id);
+      if (!r) continue;
+      const room = state.rooms.find((rr) => rr.id === id);
+      rects.push({ ...r, renk: room ? ROOM_DEFS[room.type].renk : '#888' });
+      x0 = Math.min(x0, r.x0); y0 = Math.min(y0, r.y0); x1 = Math.max(x1, r.x1); y1 = Math.max(y1, r.y1);
+    }
+    if (rects.length > 0) {
+      const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+      const dx = (hover.x - Math.floor(cw / 2)) - x0, dy = (hover.y - Math.floor(ch / 2)) - y0;
+      const ok = canMoveGroup(state, t.roomIds, dx, dy);
+      for (const r of rects) {
+        ctx.fillStyle = ok ? hexA(r.renk, 0.4) : 'rgba(220,60,60,0.28)';
+        ctx.fillRect((r.x0 + dx) * TILE, (r.y0 + dy) * TILE, (r.x1 - r.x0 + 1) * TILE, (r.y1 - r.y0 + 1) * TILE);
+        ctx.strokeStyle = ok ? 'rgba(90,220,140,0.9)' : 'rgba(255,120,110,0.95)';
+        ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+        ctx.strokeRect((r.x0 + dx) * TILE, (r.y0 + dy) * TILE, (r.x1 - r.x0 + 1) * TILE, (r.y1 - r.y0 + 1) * TILE);
+        ctx.setLineDash([]);
+      }
+      const fs = Math.max(10, TILE * 0.42);
+      ctx.font = `700 ${fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const etiket = ok ? `📦 ${t.roomIds.length} bina · tık: taşı` : '⛔ buraya taşınamaz';
+      const cx = (x0 + dx) * TILE + cw * TILE / 2, cy = (y0 + dy) * TILE - fs;
+      const tw = ctx.measureText(etiket).width;
+      ctx.fillStyle = ok ? 'rgba(12,16,22,0.88)' : 'rgba(140,35,30,0.92)';
+      roundRectPath(ctx, cx - tw / 2 - 7, cy - fs * 0.8, tw + 14, fs * 1.6, 5);
+      ctx.fill();
+      ctx.fillStyle = '#f2f5fa';
+      ctx.fillText(etiket, cx, cy);
+    }
     return;
   }
 

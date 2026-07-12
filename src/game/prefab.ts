@@ -12,8 +12,11 @@ import { validateRooms } from '../core/grid';
 import { OBJECT_DEFS } from '../data/objects';
 import { BALANCE } from '../data/balance';
 import { ROOM_DEFS, WALL_COST, DOOR_COST, FLOOR_DEFS } from '../data/rooms';
-import { notify } from './state';
-import { buildDoor, buildFloor, buildWallRect, designateRoom, placeObject } from './build';
+import { formatMoney } from '../core/util';
+import { notify, earn } from './state';
+import {
+  buildDoor, buildFloor, buildWallRect, clearRect, designateRoom, placeObject, roomOuterRect,
+} from './build';
 
 export interface PrefabDef {
   id: string;
@@ -42,10 +45,50 @@ export const PREFABS: PrefabDef[] = [
   { id: 'p_yurt', ad: 'Öğrenci Yurdu', room: 'yurt', w: 10, h: 8 },
 ];
 
+// --- Özel şablonlar (localStorage) ------------------------------------------------
+
+const SABLON_ANAHTAR = 'universite-simulatoru-sablonlar';
+let ozelSablonlar: PrefabDef[] = sablonlariYukle();
+
+function sablonlariYukle(): PrefabDef[] {
+  try {
+    const raw = localStorage.getItem(SABLON_ANAHTAR);
+    if (!raw) return [];
+    const liste = JSON.parse(raw) as PrefabDef[];
+    return Array.isArray(liste) ? liste.filter((s) => s && s.room && s.w && s.h) : [];
+  } catch { return []; }
+}
+
+function sablonlariKaydet(): void {
+  try { localStorage.setItem(SABLON_ANAHTAR, JSON.stringify(ozelSablonlar)); } catch { /* dolu */ }
+}
+
+/** Kayıtlı özel şablonlar (Hazır Bina listesine eklenir). */
+export function sablonlar(): PrefabDef[] {
+  return ozelSablonlar;
+}
+
+/** Bir binayı özel şablon olarak kaydeder (tür + boyut). */
+export function sablonKaydet(room: RoomType, w: number, h: number, ad: string): PrefabDef {
+  let sayac = 1;
+  let id = 't_' + room + '_' + w + 'x' + h;
+  while (ozelSablonlar.some((s) => s.id === id)) id = 't_' + room + '_' + w + 'x' + h + '_' + (++sayac);
+  const def: PrefabDef = { id, ad, room, w, h };
+  ozelSablonlar.push(def);
+  sablonlariKaydet();
+  return def;
+}
+
+/** Özel şablonu siler. */
+export function sablonSil(id: string): void {
+  ozelSablonlar = ozelSablonlar.filter((s) => s.id !== id);
+  sablonlariKaydet();
+}
+
 export function prefabDef(id: string): PrefabDef {
-  const p = PREFABS.find((p) => p.id === id);
-  if (!p) throw new Error('Bilinmeyen prefab: ' + id);
-  return p;
+  const p = PREFABS.find((p) => p.id === id) ?? ozelSablonlar.find((p) => p.id === id);
+  // bilinmeyen id (ör. silinmiş şablon) → türe göre ilk yerleşik ya da derslik
+  return p ?? PREFABS[0];
 }
 
 // --- Döşeme desenleri ----------------------------------------------------------
@@ -272,6 +315,71 @@ export function placePrefab(
   notify(state, aninda
     ? `🏗️ ${def.ad} kuruldu (${ROOM_DEFS[def.room].ad}, ${w}×${h}).`
     : `🏗️ ${def.ad} şantiyesi kuruldu (${w}×${h}) — ustalar çalışıyor, bina yaklaşık ${Math.round((w * h * BALANCE.INSAAT_DK_KARE) / 60)} saatte hazır.`, 'iyi');
+  return true;
+}
+
+/**
+ * Var olan binayı yeniden boyutlandırır: kimliği (bölüm ataması, özel ad)
+ * korunur; eski malzeme tam iade edilip yeni boyut kurulur — net maliyet
+ * yalnızca FARK olur (küçültünce para geri gelir). Hedef, eski izdüşüm dışında
+ * boş olmalı. prefabId, binanın türüne uygun prefab (maliyet + döşeme için).
+ */
+/** Yeniden boyutlandırma geçerli mi (hedef eski izdüşüm dışında boş olmalı)? */
+export function resizeGecerli(
+  state: GameState, roomId: number, nx0: number, ny0: number, nw: number, nh: number,
+): boolean {
+  const oldRect = roomOuterRect(state, roomId);
+  if (!oldRect) return false;
+  const eski = new Set<number>();
+  for (let y = oldRect.y0; y <= oldRect.y1; y++) {
+    for (let x = oldRect.x0; x <= oldRect.x1; x++) eski.add(tileIndex(x, y));
+  }
+  for (let y = ny0; y < ny0 + nh; y++) {
+    for (let x = nx0; x < nx0 + nw; x++) {
+      if (!inBounds(x, y)) return false;
+      if (x === GATE.x && y === GATE.y) return false;
+      const t = tileIndex(x, y);
+      if (eski.has(t)) continue;
+      if (state.floor[t] !== null || state.wall[t] !== WALL_NONE || state.roomAt[t] !== -1
+          || state.objects.some((o) => o.x === x && o.y === y)) return false;
+    }
+  }
+  return true;
+}
+
+export function resizeRoom(
+  state: GameState, roomId: number, prefabId: string, nx0: number, ny0: number, nw: number, nh: number,
+): boolean {
+  const room = state.rooms.find((r) => r.id === roomId);
+  const oldRect = roomOuterRect(state, roomId);
+  if (!room || !oldRect) return false;
+  const def = prefabDef(prefabId);
+  nw = Math.max(PREFAB_MIN, Math.min(PREFAB_MAX_W, nw));
+  nh = Math.max(PREFAB_MIN, Math.min(PREFAB_MAX_H, nh));
+  const oldW = oldRect.x1 - oldRect.x0 + 1, oldH = oldRect.y1 - oldRect.y0 + 1;
+
+  if (!resizeGecerli(state, roomId, nx0, ny0, nw, nh)) {
+    notify(state, 'Yeni boyut komşu binaya/girişe çakışıyor ya da harita dışına taşar.', 'kotu');
+    return false;
+  }
+
+  const oldCost = prefabCost(def, oldW, oldH);
+  const newCost = prefabCost(def, nw, nh);
+  // fark maliyet: büyütünce fark ödenir (bütçe yetmezse iptal)
+  if (newCost - oldCost > state.para) {
+    notify(state, `Yetersiz bütçe: büyütmek için ${formatMoney(newCost - oldCost)} gerekir.`, 'kotu');
+    return false;
+  }
+  const deptId = room.deptId, ozelAd = room.ozelAd;
+  earn(state, oldCost); // eski malzeme tam iade
+  clearRect(state, oldRect.x0, oldRect.y0, oldRect.x1, oldRect.y1); // odayı ve inşaatı sil (iadesiz)
+  const ok = placePrefab(state, def, nx0, ny0, nw, nh, true); // yeni boyut, anında, newCost düşer
+  if (!ok) return false;
+  const yeni = state.rooms[state.rooms.length - 1];
+  yeni.deptId = deptId;
+  yeni.ozelAd = ozelAd;
+  validateRooms(state);
+  notify(state, `📐 ${ROOM_DEFS[def.room].ad}${ozelAd ? ` "${ozelAd}"` : ''} yeniden boyutlandırıldı (${oldW}×${oldH} → ${nw}×${nh}, net ${formatMoney(newCost - oldCost)}).`, 'iyi');
   return true;
 }
 
