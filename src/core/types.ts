@@ -648,6 +648,8 @@ export interface GameState {
   makro: MakroDurum | null;
   /** prestij kampanyalarının son kullanım günleri (id -> gün) */
   prestijKampanya: Record<string, number>;
+  /** üst üste "boş" yıl sayısı (bölüm var ama öğrenci kritik az) — YÖK kapatma sayacı */
+  bosYil: number;
   /** son YÖK akreditasyon denetimi sonucu (hiç olmadıysa null) */
   sonDenetim: { gun: number; puan: number; sonuc: string } | null;
   /** dönemlik trend fotoğrafları (son 24 dönem) — Raporlar grafikleri */

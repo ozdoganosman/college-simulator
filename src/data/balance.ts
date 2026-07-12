@@ -100,6 +100,12 @@ export const BALANCE = {
   // Eksi bakiye günlük gecikme faizi (borcun oranı; en az ₺250)
   EKSI_BAKIYE_FAIZ: 0.004,
 
+  // Yönetim gideri: geçerli oda başına günlük idari maliyet (büyük kampüs pahalı)
+  YONETIM_GIDER: 1200,
+  // Hayalet kampüs: bölüm varken öğrenci bu sayının altındaysa "boş yıl" sayılır
+  HAYALET_ESIK: 6,
+  HAYALET_YIL: 3,             // üst üste bu kadar boş yıl → YÖK üniversiteyi kapatır
+
   // İnşaat: hazır bina kare başına şantiye süresi (dk) — ustalar hızlandırır
   INSAAT_DK_KARE: 5,
 

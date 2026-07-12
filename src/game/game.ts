@@ -161,6 +161,24 @@ function endOfDay(state: GameState): void {
         makroGunGuncelle(state); // ülke ekonomisi: enflasyon/teşvik/kriz
         // YÖK akreditasyon denetimi: 3. yıldan itibaren 2 yılda bir
         if (yil(state.gun) > 1 && (yil(state.gun) - 1) % 2 === 0) denetimUygula(state);
+
+        // 👻 HAYALET KAMPÜS: bölüm var ama öğrenci kritik az kalırsa YÖK üniversiteyi
+        // kapatır (üst üste HAYALET_YIL boş yıl). Öğrenci toparlarsa sayaç sıfırlanır.
+        const ogrSay = state.agents.reduce((n, a) => n + (a.kind === 'ogrenci' ? 1 : 0), 0);
+        const bolumVar = state.departments.some((d) => !d.kapaniyor);
+        if (bolumVar && ogrSay < BALANCE.HAYALET_ESIK) {
+          state.bosYil++;
+          const kalan = BALANCE.HAYALET_YIL - state.bosYil;
+          if (kalan > 0) {
+            notify(state, `👻 Kampüs neredeyse boş (${ogrSay} öğrenci)! YÖK üniversiteyi izliyor — ${kalan} yıl içinde öğrenci getirmezsen kapatılacak.`, 'kotu');
+          }
+        } else {
+          state.bosYil = 0;
+        }
+        if (state.bosYil >= BALANCE.HAYALET_YIL) {
+          state.oyunBitti = `Üniversite ${BALANCE.HAYALET_YIL} yıl boyunca öğrencisiz kaldı — YÖK faaliyet iznini İPTAL ETTİ. Rektörlük maceran ${yil(state.gun)}. yılda hazin bir sessizlikle sona erdi.`;
+          state.hiz = 0;
+        }
       }
       if (!state.yksBekliyor) {
         state.yksBekliyor = true;

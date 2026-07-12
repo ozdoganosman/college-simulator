@@ -74,7 +74,11 @@ export function dailyEconomy(state: GameState): void {
 
   let doseliKare = 0;
   for (const f of state.floor) if (f !== null) doseliKare++;
-  const bakim = doseliKare * BALANCE.BAKIM_GIDERI_TILE;
+  // idari yönetim gideri: geçerli oda başına sabit — büyük kampüsün işletmesi
+  // pahalıdır, öğrenci gelirinden bağımsız (boş kampüs bile masraf çıkarır)
+  let gecerliOda = 0;
+  for (const r of state.rooms) if (r.valid) gecerliOda++;
+  const bakim = doseliKare * BALANCE.BAKIM_GIDERI_TILE + gecerliOda * BALANCE.YONETIM_GIDER;
 
   // aktif politikaların günlük bakım giderleri (yemek sübvansiyonu dahil)
   let politikaGideri = 0;

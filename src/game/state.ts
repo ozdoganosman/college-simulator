@@ -75,6 +75,7 @@ export function createInitialState(): GameState {
     salgin: null,
     makro: null,
     prestijKampanya: {},
+    bosYil: 0,
     sonDenetim: null,
     trend: [],
     aktifOlay: null,
@@ -216,6 +217,7 @@ export function eskiKayitUyumu(s: GameState): void {
   if (s.salgin === undefined) s.salgin = null;
   if (s.makro === undefined) s.makro = null;
   if (!s.prestijKampanya || typeof s.prestijKampanya !== 'object') s.prestijKampanya = {};
+  if (typeof s.bosYil !== 'number') s.bosYil = 0;
   // ömürlük sayaçlar sonradan eklendi: eldeki listelerden tohumla
   if (typeof s.toplamYayin !== 'number') s.toplamYayin = s.publications?.length ?? 0;
   if (typeof s.toplamUluslararasiYayin !== 'number') {

@@ -90,8 +90,10 @@ export function furnishPlan(room: RoomType, tiles: number[], occupied: Set<numbe
     switch (room) {
       case 'derslik':
       case 'amfi':
+        // tahta üst-orta; sıralar 2. satırdan itibaren HER satıra, orta koridor
+        // (ortaBx) boş bırakılır — daha yoğun oturma = daha çok kontenjan
         if (by === 0 && bx === ortaBx) koy('tahta', x, y);
-        else if (by >= 2 && by % 2 === 0) koy('sira', x, y);
+        else if (by >= 2 && bx !== ortaBx) koy('sira', x, y);
         break;
       case 'ofis':
       case 'rektorluk':

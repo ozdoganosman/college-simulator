@@ -42,52 +42,57 @@ export function yanginlariGuncelle(state: GameState, dtMin: number): void {
   if (state.yanginlar.length === 0) return;
   const kalan: Yangin[] = [];
 
+  const yanan = new Set<number>(); // bu turda kül olan eşya id'leri
+  const yanici = (o: { type: string }) =>
+    o.type !== 'jenerator' && o.type !== 'su_deposu' && o.type !== 'yangin_dolabi';
+
   for (const y of state.yanginlar) {
-    // söndürme gücü: 4 kare içindeki personel + yangın dolabı
-    let sondurme = 0.4; // pasif (kendiliğinden zayıflama)
+    // söndürme gücü: personel + yangın dolabı + PASİF (yakıt yoksa hızlı söner)
+    let sondurme = 1.0;
     for (const a of state.agents) {
       if (!a.onCampus) continue;
-      if ((a.kind === 'guvenlik' || a.kind === 'tamirci') && komsuMesafe(a, y) <= 4) sondurme += 2.2;
+      if ((a.kind === 'guvenlik' || a.kind === 'tamirci') && komsuMesafe(a, y) <= 4) sondurme += 2.4;
     }
     for (const o of state.objects) {
-      if (o.type === 'yangin_dolabi' && (o.yipranma ?? 0) < 100 && komsuMesafe(o, y) <= 6) sondurme += 1.6;
+      if (o.type === 'yangin_dolabi' && (o.yipranma ?? 0) < 100 && komsuMesafe(o, y) <= 6) sondurme += 1.8;
     }
-    // büyüme: yakıt (yakındaki sağlam yanıcı eşya) varsa güçlenir
+    // yakıt: yakındaki SAĞLAM yanıcı eşya (kül olanlar sayılmaz)
     let yakit = 0;
     for (const o of state.objects) {
-      if (o.type === 'jenerator' || o.type === 'su_deposu' || o.type === 'yangin_dolabi') continue;
-      if (komsuMesafe(o, y) <= 2) yakit += 0.5;
+      if (!yanici(o) || yanan.has(o.id) || (o.yipranma ?? 0) >= 130) continue;
+      if (komsuMesafe(o, y) <= 2) yakit += 0.6;
     }
-    const buyume = 0.5 + Math.min(2, yakit);
+    // yakıt yoksa yangın açlıktan söner; varsa büyür
+    const buyume = yakit > 0 ? 0.5 + Math.min(2.5, yakit) : 0;
+    if (yakit === 0) sondurme += 2.5; // yakıtsız alev hızla kendini tüketir
     y.siddet += (buyume - sondurme) * dtMin * 0.5;
 
-    // alev altındaki kareyi kavur + yakın eşyaları hasarla
+    // alev altındaki kareyi kavur + üstündeki/komşu eşyaları YAKAR (kül olabilir)
     const idx = tileIndex(Math.round(y.x), Math.round(y.y));
     if (idx >= 0 && idx < state.dirt.length) state.dirt[idx] = Math.min(100, state.dirt[idx] + 0.6 * dtMin);
     for (const o of state.objects) {
-      if (komsuMesafe(o, y) <= 1 && o.type !== 'jenerator' && o.type !== 'su_deposu') {
-        o.yipranma = Math.min(130, (o.yipranma ?? 0) + 0.4 * dtMin);
+      if (yanici(o) && komsuMesafe(o, y) <= 1) {
+        o.yipranma = Math.min(130, (o.yipranma ?? 0) + 1.2 * dtMin); // eskisinden 3× hızlı
+        if ((o.yipranma ?? 0) >= 130) yanan.add(o.id); // kül oldu
       }
     }
-    // yakındaki öğrencilerin morali düşer + panik (dağıl)
+    // yakındaki öğrencilerin morali düşer (kriz gerçekten acıtır)
     for (const a of state.agents) {
-      if (a.kind === 'ogrenci' && a.onCampus && komsuMesafe(a, y) <= 3) {
-        a.mutluluk = Math.max(0, a.mutluluk - 0.3 * dtMin);
+      if (a.kind === 'ogrenci' && a.onCampus && komsuMesafe(a, y) <= 4) {
+        a.mutluluk = Math.max(0, a.mutluluk - 0.5 * dtMin);
       }
     }
 
-    if (y.siddet <= 0) {
-      // söndü
-      continue;
-    }
-    // sıçrama: şiddet yüksekken yakındaki sağlam eşyaya yeni yangın atla
-    if (y.siddet > 70 && state.yanginlar.length + kalan.length < 5) {
+    if (y.siddet <= 0) continue; // söndü
+
+    // sıçrama: şiddet yüksekken yakındaki sağlam eşyaya atla
+    if (y.siddet > 70 && state.yanginlar.length + kalan.length < 6) {
       for (const o of state.objects) {
-        if (komsuMesafe(o, y) <= 2 && komsuMesafe(o, y) >= 1
-            && (o.yipranma ?? 0) < 100 && o.type !== 'jenerator' && o.type !== 'su_deposu'
+        const m = komsuMesafe(o, y);
+        if (m <= 2 && m >= 1 && yanici(o) && !yanan.has(o.id) && (o.yipranma ?? 0) < 100
             && !kalan.some((k) => k.x === o.x && k.y === o.y)) {
-          kalan.push({ x: o.x, y: o.y, siddet: 25 });
-          y.siddet = 55; // ana yangın biraz zayıflar (sıçradı)
+          kalan.push({ x: o.x, y: o.y, siddet: 22 });
+          y.siddet = 50;
           break;
         }
       }
@@ -96,10 +101,20 @@ export function yanginlariGuncelle(state: GameState, dtMin: number): void {
     kalan.push(y);
   }
 
+  // kül olan eşyaları haritadan kaldır (yangın gerçek hasar bıraktı)
+  if (yanan.size > 0) {
+    for (const id of yanan) {
+      const o = state.objects.find((x) => x.id === id);
+      if (o && o.reservedBy !== -1) o.reservedBy = -1;
+    }
+    state.objects = state.objects.filter((o) => !yanan.has(o.id));
+  }
+
   const oncekiSayi = state.yanginlar.length;
   state.yanginlar = kalan;
   if (kalan.length === 0 && oncekiSayi > 0) {
-    notify(state, '🧯 Yangın söndürüldü — kampüs güvende. Bozulan eşyaları tamir ettir.', 'iyi');
+    const kayip = yanan.size > 0 ? ` ${yanan.size} eşya kül oldu — ` : ' ';
+    notify(state, `🧯 Yangın söndü —${kayip}kampüs güvende.`, yanan.size > 3 ? 'kotu' : 'iyi');
   }
 }
 

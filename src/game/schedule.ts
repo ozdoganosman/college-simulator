@@ -293,10 +293,11 @@ export function rebuildDersProgrami(state: GameState): void {
       // müfredat gün + blok üzerinden döner: her gün farklı ders kombinasyonu
       const courseId = dersler[(state.gun + blok) % dersler.length];
 
-      // dersi SEÇMİŞ hocalardan en uygunu (önce bölümün kendi hocası), günde en çok 2 blok;
-      // kimse boşta değilse limit gevşer (yorgun hoca boş dersten iyidir — yük cezası zaten var)
+      // dersi SEÇMİŞ hocalardan en uygunu (önce bölümün kendi hocası), günde en çok 3 blok;
+      // kimse boşta değilse limit gevşer (yorgun hoca boş dersten iyidir — yük cezası zaten var).
+      // 3 blok: az kadroyla çok bölüm kapsanır — "hoca yok" kısırdöngüsü kırılır
       let secilen: Academic | null = null;
-      for (const blokLimit of [2, 4]) {
+      for (const blokLimit of [3, 4]) {
         let enIyi = -1;
         for (const a of tumHocalar) {
           if (!(a.verdigiDersler ?? []).includes(courseId)) continue;
