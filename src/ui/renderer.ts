@@ -8,7 +8,7 @@ import { FLOOR_DEFS, ROOM_DEFS, WALL_COST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { bushSprite, gateSprite, objectSprite, treeSprite } from './sprites';
-import { canPlacePrefab, prefabCost, prefabDef, prefabOrigin, prefabRect } from '../game/prefab';
+import { canPlacePrefab, prefabCost, prefabDef, prefabKapi, prefabOrigin, prefabRect } from '../game/prefab';
 import type { Camera } from './camera';
 import type { UIState } from './uistate';
 
@@ -756,37 +756,84 @@ function drawToolPreview(ctx: CanvasRenderingContext2D, state: GameState, ui: UI
       const o = prefabOrigin(def, hover);
       gx = o.x; gy = o.y; gw = def.w; gh = def.h;
     }
-    const ok = canPlacePrefab(state, def, gx, gy, gw, gh);
+    const yerOk = canPlacePrefab(state, def, gx, gy, gw, gh);
+    const maliyet = prefabCost(def, gw, gh);
+    const paraYeter = state.para >= maliyet;
+    const ok = yerOk && paraYeter;
     const px = gx * TILE, py = gy * TILE, pw = gw * TILE, ph = gh * TILE;
 
-    // iç dolgu (oda rengi) + duvar çerçevesi
-    ctx.fillStyle = ok ? hexA(ROOM_DEFS[def.room].renk, 0.4) : 'rgba(220,60,60,0.3)';
+    // renk: geçerli yeşil-oda, para yetmez amber, yer geçersiz kırmızı
+    const dolguRenk = !yerOk ? 'rgba(220,60,60,0.28)'
+      : !paraYeter ? 'rgba(230,170,50,0.30)' : hexA(ROOM_DEFS[def.room].renk, 0.42);
+    const cerceveRenk = !yerOk ? 'rgba(160,40,40,0.7)'
+      : !paraYeter ? 'rgba(190,140,40,0.8)' : 'rgba(77,69,60,0.8)';
+    const kenarRenk = !yerOk ? 'rgba(255,120,110,0.95)'
+      : !paraYeter ? 'rgba(255,210,120,0.95)' : 'rgba(255,255,255,0.95)';
+
+    // iç döşeme ızgarası (yerleşecek eşya izlenimi) + duvar çerçevesi
+    ctx.fillStyle = dolguRenk;
     ctx.fillRect(px + TILE, py + TILE, pw - 2 * TILE, ph - 2 * TILE);
-    ctx.fillStyle = ok ? 'rgba(77,69,60,0.75)' : 'rgba(160,40,40,0.6)';
+    ctx.fillStyle = cerceveRenk;
     ctx.fillRect(px, py, pw, TILE);
     ctx.fillRect(px, py + ph - TILE, pw, TILE);
     ctx.fillRect(px, py, TILE, ph);
     ctx.fillRect(px + pw - TILE, py, TILE, ph);
-    // kapı işareti (alt orta)
-    ctx.fillStyle = ok ? 'rgba(165,113,58,0.95)' : 'rgba(120,60,60,0.9)';
-    const kapiX = Math.floor((gx + gx + gw - 1) / 2) * TILE;
-    ctx.fillRect(kapiX + 3, py + ph - TILE + 3, TILE - 6, TILE - 6);
-    ctx.strokeStyle = ok ? 'rgba(255,255,255,0.9)' : 'rgba(255,120,110,0.95)';
-    ctx.lineWidth = 2;
+    // ince iç ızgara çizgileri (hangi kareye oturacağı hissi)
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    for (let x = gx + 1; x < gx + gw - 1; x++) {
+      ctx.beginPath(); ctx.moveTo(x * TILE, py + TILE); ctx.lineTo(x * TILE, py + ph - TILE); ctx.stroke();
+    }
+    for (let y = gy + 1; y < gy + gh - 1; y++) {
+      ctx.beginPath(); ctx.moveTo(px + TILE, y * TILE); ctx.lineTo(px + pw - TILE, y * TILE); ctx.stroke();
+    }
+    // kapı işareti (yön: buildYon) — R ile döner
+    const kapi = prefabKapi(gx, gy, gw, gh, ui.buildYon);
+    ctx.fillStyle = ok ? 'rgba(165,113,58,0.98)' : 'rgba(150,90,70,0.9)';
+    ctx.fillRect(kapi.x * TILE + 3, kapi.y * TILE + 3, TILE - 6, TILE - 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = `${TILE * 0.5}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🚪', kapi.x * TILE + TILE / 2, kapi.y * TILE + TILE / 2);
+
+    ctx.strokeStyle = kenarRenk;
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(px, py, pw, ph);
 
-    // etiket — boyut + o boyuttaki maliyet (sürüklerken canlı değişir)
-    const fs = Math.max(10, TILE * 0.45);
+    // çapa köşe işareti (sürüklerken sabit kalan köşe)
+    if (ui.dragStart) {
+      ctx.fillStyle = 'rgba(90,180,250,0.95)';
+      ctx.beginPath();
+      ctx.arc(ui.dragStart.x * TILE + TILE / 2, ui.dragStart.y * TILE + TILE / 2, TILE * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ölçü çizgileri: üstte genişlik, solda yükseklik
+    const olcuFs = Math.max(9, TILE * 0.4);
+    ctx.font = `700 ${olcuFs}px system-ui, sans-serif`;
+    ctx.fillStyle = kenarRenk;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(`↔ ${gw}`, px + pw / 2, py - 3);
+    ctx.save();
+    ctx.translate(px - 4, py + ph / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`↕ ${gh}`, 0, 0);
+    ctx.restore();
+
+    // etiket — ad + iç eşya özeti + maliyet + durum/ipucu
+    const fs = Math.max(10, TILE * 0.42);
     ctx.font = `700 ${fs}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const etiket = ok
-      ? `${def.ad} ${gw}×${gh} · ${formatMoney(prefabCost(def, gw, gh))}${ui.dragStart ? '' : ' · sürükle = boyutlandır'}`
-      : `${def.ad} — alan uygun değil`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const durum = !yerOk ? '⛔ alan uygun değil'
+      : !paraYeter ? `⚠ bütçe yetmez (${formatMoney(maliyet)})`
+        : `${formatMoney(maliyet)}`;
+    const ipucu = ui.dragStart ? ' · sağ tık/Esc: iptal' : ' · sürükle: boyut · R: döndür';
+    const etiket = `${def.ad} ${gw}×${gh} · ${durum}${ipucu}`;
     const tw = ctx.measureText(etiket).width;
-    const ex = px + pw / 2, ey = py - fs;
-    ctx.fillStyle = ok ? 'rgba(12,16,22,0.85)' : 'rgba(140,35,30,0.9)';
-    roundRectPath(ctx, ex - tw / 2 - 6, ey - fs * 0.75, tw + 12, fs * 1.5, 4);
+    const ex = px + pw / 2, ey = py - fs - olcuFs - 4;
+    ctx.fillStyle = ok ? 'rgba(12,16,22,0.88)' : !paraYeter ? 'rgba(120,85,20,0.92)' : 'rgba(140,35,30,0.92)';
+    roundRectPath(ctx, ex - tw / 2 - 7, ey - fs * 0.8, tw + 14, fs * 1.6, 5);
     ctx.fill();
     ctx.fillStyle = '#f2f5fa';
     ctx.fillText(etiket, ex, ey);

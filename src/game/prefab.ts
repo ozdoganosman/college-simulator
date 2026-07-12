@@ -153,18 +153,19 @@ export function prefabOrigin(def: PrefabDef, hover: Point): Point {
 }
 
 /**
- * Sürükleme dikdörtgeninden prefab yerleşimi: iki köşe noktasından
- * min/max sınırlarına oturtulmuş {x, y, w, h} üretir (kapı payı için min 5).
- * İç alan oda minBoyut'unun altındaysa da en az o kadar büyütülür.
+ * Sürükleme dikdörtgeninden prefab yerleşimi. Köşe `a` (sürükleme başlangıcı)
+ * SABİT çapa olarak tutulur; dikdörtgen `b`'ye (imleç) doğru büyür. Min/max ve
+ * oda min-alan büyütmesi de HEP `a`'dan uzağa (sürükleme yönüne) uygulanır —
+ * kutu asla çapanın gerisine kaymaz, büyüme öngörülebilir olur.
  */
 export function prefabRect(def: PrefabDef, a: Point, b: Point): { x: number; y: number; w: number; h: number } {
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  let w = Math.abs(a.x - b.x) + 1;
-  let h = Math.abs(a.y - b.y) + 1;
+  const dirX = b.x >= a.x ? 1 : -1;
+  const dirY = b.y >= a.y ? 1 : -1;
+  let w = Math.abs(b.x - a.x) + 1;
+  let h = Math.abs(b.y - a.y) + 1;
   w = Math.max(PREFAB_MIN, Math.min(PREFAB_MAX_W, w));
   h = Math.max(PREFAB_MIN, Math.min(PREFAB_MAX_H, h));
-  // iç alan (duvarlar hariç) oda minimumunu karşılasın — genişliği önce büyüt
+  // iç alan (duvarlar hariç) oda minimumunu karşılasın — kısa kenarı büyüt
   const minAlan = ROOM_DEFS[def.room].minBoyut;
   let emniyet = 0;
   while ((w - 2) * (h - 2) < minAlan && emniyet++ < 40) {
@@ -172,7 +173,22 @@ export function prefabRect(def: PrefabDef, a: Point, b: Point): { x: number; y: 
     else if (h < PREFAB_MAX_H) h++;
     else break;
   }
+  // çapa `a`'yı köşe kabul et: kutu sürükleme yönünde uzar
+  const x = dirX > 0 ? a.x : a.x - (w - 1);
+  const y = dirY > 0 ? a.y : a.y - (h - 1);
   return { x, y, w, h };
+}
+
+/** Kapı konumu — yön: 0 alt · 1 sağ · 2 üst · 3 sol. */
+export function prefabKapi(x0: number, y0: number, w: number, h: number, yon: number): Point {
+  const x1 = x0 + w - 1, y1 = y0 + h - 1;
+  const mx = Math.floor((x0 + x1) / 2), my = Math.floor((y0 + y1) / 2);
+  switch (((yon % 4) + 4) % 4) {
+    case 1: return { x: x1, y: my };
+    case 2: return { x: mx, y: y0 };
+    case 3: return { x: x0, y: my };
+    default: return { x: mx, y: y1 };
+  }
 }
 
 const ZEMIN_MALIYET = FLOOR_DEFS.find((f) => f.id === 'beton')!.maliyet;
@@ -219,7 +235,7 @@ export function canPlacePrefab(
 
 export function placePrefab(
   state: GameState, def: PrefabDef, x0: number, y0: number, w = def.w, h = def.h,
-  aninda = false,
+  aninda = false, yon = 0,
 ): boolean {
   if (!canPlacePrefab(state, def, x0, y0, w, h)) {
     notify(state, 'Buraya yerleştirilemez: alan dolu ya da harita dışında.', 'kotu');
@@ -234,7 +250,8 @@ export function placePrefab(
   const x1 = x0 + w - 1, y1 = y0 + h - 1;
   buildFloor(state, x0, y0, x1, y1, 'beton');
   buildWallRect(state, x0, y0, x1, y1);
-  buildDoor(state, Math.floor((x0 + x1) / 2), y1);
+  const kapi = prefabKapi(x0, y0, w, h, yon);
+  buildDoor(state, kapi.x, kapi.y);
   designateRoom(state, def.room, x0 + 1, y0 + 1, x1 - 1, y1 - 1);
 
   const plan = furnishPlan(def.room, icTiles(x0, y0, w, h), new Set());

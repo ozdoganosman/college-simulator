@@ -21,6 +21,11 @@ export function attachInput(
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 1 || e.button === 2) {
+      // sağ/orta tık: aktif sürükleme varsa İPTAL et (pan başlatma)
+      if (e.button === 2 && ui.dragStart) {
+        ui.dragStart = null;
+        return;
+      }
       panning = true;
       lastX = e.clientX;
       lastY = e.clientY;
@@ -86,10 +91,10 @@ export function attachInput(
         const def = prefabDef(t.prefab);
         if (s.x === h.x && s.y === h.y) {
           const o = prefabOrigin(def, h);
-          placePrefab(st, def, o.x, o.y);
+          placePrefab(st, def, o.x, o.y, def.w, def.h, false, ui.buildYon);
         } else {
           const r = prefabRect(def, s, h);
-          placePrefab(st, def, r.x, r.y, r.w, r.h);
+          placePrefab(st, def, r.x, r.y, r.w, r.h, false, ui.buildYon);
         }
       }
       if (t.kind !== 'sec' && t.kind !== 'yikim') sesInsa();
@@ -111,17 +116,22 @@ export function attachInput(
     if (isCeremonyOpen()) return; // tören ekranında kısayollar (özellikle Esc) devre dışı
     const st = state();
     if (e.key === 'Escape') {
-      const arac = ui.tool.kind !== 'sec' || ui.dragStart !== null
-        || ui.selectedRoomId !== -1 || ui.selectedAgentId !== -1;
-      if (arac) {
-        ui.tool = { kind: 'sec' };
+      // önce yalnız aktif sürüklemeyi iptal et (araç elde kalsın)
+      if (ui.dragStart) {
         ui.dragStart = null;
+      } else if (ui.tool.kind !== 'sec' || ui.selectedRoomId !== -1 || ui.selectedAgentId !== -1) {
+        ui.tool = { kind: 'sec' };
         ui.selectedRoomId = -1;
         ui.selectedAgentId = -1;
         document.dispatchEvent(new CustomEvent('tool-changed'));
       } else {
         document.dispatchEvent(new CustomEvent('toggle-menu'));
       }
+    } else if ((e.key === 'r' || e.key === 'R') && ui.tool.kind === 'hazir') {
+      // R: hazır binayı döndür (kapı yönü değişir) — alt çubuk ipucu tazelensin
+      ui.buildYon = (ui.buildYon + 1) % 4;
+      document.dispatchEvent(new CustomEvent('tool-changed'));
+      e.preventDefault();
     } else if (e.key === ' ') {
       e.preventDefault();
       st.hiz = st.hiz === 0 ? 1 : 0;

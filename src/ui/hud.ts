@@ -222,7 +222,9 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
     }
     const div = document.createElement('div');
     div.className = 'oda-bilgi';
-    div.innerHTML = 'Tek tık: varsayılan boyut. <b>Sürükle: büyüt/küçült</b> — eşyalar boyuta göre döşenir, maliyet canlı görünür. Alan tamamen boş olmalı.';
+    const yonAd = ['⬇ alt', '➡ sağ', '⬆ üst', '⬅ sol'][ui.buildYon % 4];
+    div.innerHTML = `Tek tık: varsayılan boyut · <b>Sürükle: büyüt/küçült</b> · <b>R: döndür</b> (kapı: ${yonAd}) · sağ tık/Esc: iptal.<br>`
+      + 'Eşyalar boyuta göre döşenir, maliyet canlı görünür. Bütçe yetmezse hayalet amber olur.';
     subbarEl.appendChild(div);
   } else if (acikKategori === 'insaat') {
     for (const f of FLOOR_DEFS) {

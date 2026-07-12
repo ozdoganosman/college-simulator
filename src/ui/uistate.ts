@@ -26,6 +26,8 @@ export interface UIState {
   paused: boolean;
   /** aktif ısı haritası katmanı */
   katman: Katman;
+  /** hazır bina kapı yönü: 0 alt · 1 sağ · 2 üst · 3 sol (R ile döner) */
+  buildYon: number;
 }
 
 export function createUIState(): UIState {
@@ -37,5 +39,6 @@ export function createUIState(): UIState {
     selectedAgentId: -1,
     paused: false,
     katman: 'yok',
+    buildYon: 0,
   };
 }
