@@ -313,7 +313,28 @@ export function hocaBolumleriniGuncelle(state: GameState): void {
   }
 }
 
-/** Programı sıfırdan kurar — gün sonunda ve kadro/ders değişince çağrılır. */
+/**
+ * Bölümün 4 saat slotuna SABİTLENECEK dersleri seçer: müfredat 4 dersse hepsi
+ * (önlisans), daha uzunsa (lisans) kadronun en iyi verebildiği 4 ders. Bölüm
+ * açılırken bir kez belirlenir; sonra sabit slotlardan okunarak korunur.
+ */
+export function bolumSabitDersler(state: GameState, defId: string): string[] {
+  const dersler = deptDef(defId).dersler;
+  if (dersler.length <= 4) return dersler.slice();
+  const alanlar = akademisyenler(state).map((a) => a.alan);
+  const puan = (cid: string): number => {
+    let m = 0;
+    for (const al of alanlar) { const e = dersEtki(cid, al); if (e > m) m = e; }
+    return m;
+  };
+  return [...dersler].sort((a, b) => puan(b) - puan(a)).slice(0, 4);
+}
+
+/**
+ * Programı kurar. YERLEŞİK: sabit/kilitli hücreler korunur (ders+hoca+saat bölüm
+ * silinene dek değişmez); yalnız yeni bölümler ve hocası ayrılmış hücreler atanır.
+ * Gün sonunda ve kadro/ders değişince çağrılır.
+ */
 export function rebuildDersProgrami(state: GameState): void {
   hocaBolumleriniGuncelle(state); // aidiyet derslerden türesin, sonra program kurulsun
   const slots: DersSlot[] = [];
@@ -321,39 +342,43 @@ export function rebuildDersProgrami(state: GameState): void {
   const blokMesgul = new Set<string>(); // "id:blok" — bir hoca aynı saatte İKİ sınıfa giremez
   const tumHocalar = akademisyenler(state);
 
-  // 📌 kilitli slotlar: oyuncunun elle atadığı (deptId, blok) çiftleri korunur.
-  // Hocaları ve saatleri PEŞİNEN rezerve edilir ki serbest dağıtım sırasında
-  // başka bir bölüm aynı hocayı aynı saate kapamasın.
-  const kilitliler = new Map<string, DersSlot>();
+  // YERLEŞİK: (deptId:blok) hücreleri KORUNUR. Sabit (bölüm açılınca kurulan) ve
+  // 📌 elle kilitli slotların ders+hoca+saati değişmez — yalnız hocası kadrodan
+  // ayrılmış / dersi bırakmış hücreler yeniden atanır. Korunanların hoca+saatini
+  // PEŞİNEN rezerve et ki serbest dağıtım aynı hocayı aynı saate kapamasın.
+  const onceki = new Map<string, DersSlot>();
+  const korunan = new Map<string, DersSlot>();
   for (const s of state.dersProgrami ?? []) {
-    if (s.kilit && s.academicId !== -1 && tumHocalar.some((h) => h.id === s.academicId)
-        && state.departments.some((d) => d.id === s.deptId)) {
-      const mesgulKey = `${s.academicId}:${s.blok}`;
-      if (blokMesgul.has(mesgulKey)) continue; // aynı hoca+saat iki kez kilitlenemez
-      kilitliler.set(`${s.deptId}:${s.blok}`, s);
-      blokMesgul.add(mesgulKey);
-      gunlukBlok.set(s.academicId, (gunlukBlok.get(s.academicId) ?? 0) + 1);
-    }
+    if (!state.departments.some((d) => d.id === s.deptId)) continue;
+    onceki.set(`${s.deptId}:${s.blok}`, s);
+    if (!(s.sabit || s.kilit) || s.academicId === -1) continue;
+    const h = tumHocalar.find((x) => x.id === s.academicId);
+    if (!h || !(h.verdigiDersler ?? []).includes(s.courseId)) continue; // hoca yok / dersi bıraktı
+    const mesgulKey = `${s.academicId}:${s.blok}`;
+    if (blokMesgul.has(mesgulKey)) continue; // aynı hoca+saat iki kez rezerve edilemez
+    korunan.set(`${s.deptId}:${s.blok}`, s);
+    blokMesgul.add(mesgulKey);
+    gunlukBlok.set(s.academicId, (gunlukBlok.get(s.academicId) ?? 0) + 1);
   }
 
   for (const dept of state.departments) {
-    const dersler = deptDef(dept.defId).dersler;
-    if (dersler.length === 0) continue;
+    const tumDersler = deptDef(dept.defId).dersler;
+    if (tumDersler.length === 0) continue;
+    // bölümün 4 saat slotuna sabitlenen dersler (açılışta bir kez belirlenir, korunur)
+    const sabitDersler = bolumSabitDersler(state, dept.defId);
 
     for (let blok = 0; blok < 4; blok++) {
-      // kilitli slot: ders + hoca aynen korunur (rezervasyon yukarıda yapıldı)
-      const kilitli = kilitliler.get(`${dept.id}:${blok}`);
-      if (kilitli) {
-        slots.push({ ...kilitli });
-        continue;
-      }
+      const anahtar = `${dept.id}:${blok}`;
+      // korunan hücre: ders + hoca aynen kalır (rezervasyon yukarıda yapıldı)
+      const kor = korunan.get(anahtar);
+      if (kor) { slots.push({ ...kor, sabit: true }); continue; }
 
-      // müfredat gün + blok üzerinden döner: her gün farklı ders kombinasyonu
-      const courseId = dersler[(state.gun + blok) % dersler.length];
+      // ders SABİT: önceki sabit hücrenin dersini koru, yoksa kadroya uygun sabit dersi ata
+      const prev = onceki.get(anahtar);
+      const courseId = (prev && prev.sabit) ? prev.courseId : sabitDersler[blok % sabitDersler.length];
 
       // dersi SEÇMİŞ hocalardan en uygunu (önce bölümün kendi hocası), günde en çok 3 blok;
-      // kimse boşta değilse limit gevşer (yorgun hoca boş dersten iyidir — yük cezası zaten var).
-      // 3 blok: az kadroyla çok bölüm kapsanır — "hoca yok" kısırdöngüsü kırılır
+      // kimse boşta değilse limit gevşer (yorgun hoca boş dersten iyidir — yük cezası var).
       let secilen: Academic | null = null;
       for (const blokLimit of [3, 4]) {
         let enIyi = -1;
@@ -375,7 +400,7 @@ export function rebuildDersProgrami(state: GameState): void {
         blokMesgul.add(`${secilen.id}:${blok}`);
       }
 
-      slots.push({ deptId: dept.id, blok, courseId, academicId: secilen ? secilen.id : -1 });
+      slots.push({ deptId: dept.id, blok, courseId, academicId: secilen ? secilen.id : -1, sabit: true });
     }
   }
 

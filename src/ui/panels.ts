@@ -2162,16 +2162,28 @@ function programGovde(state: GameState): string {
     for (const d of state.departments) {
       for (const c of deptDef(d.defId).dersler) acikBolumDersleri.add(c);
     }
-    html += '<h3>4) Bugünün Ders Programı</h3>';
-    html += `<p class="aciklama">Hücredeki seçiciden derse <b>sonradan hoca atayabilirsin</b> —
-      ders hocanın yıllık programında yoksa (kota izin veriyorsa) otomatik eklenir.
-      Program hocasız kalan dersleri her gün kendini onararak doldurmayı dener;
-      yine de boş kalıyorsa kadro yetmiyordur.</p>`;
-    html += '<table><tr><th>Bölüm</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';
+    html += '<h3>4) Yerleşik Ders Programı <small style="opacity:.7">(bölüm × saat ızgarası)</small></h3>';
+    html += `<p class="aciklama">🔒 <b>Yerleşik ızgara:</b> bir bölüm açılınca her hücrenin
+      <b>dersi, hocası ve dersliği sabitlenir</b> — bölüm silinene dek değişmez (yalnız hoca
+      kadrodan ayrılırsa o hücre yeniden atanır). Hücredeki seçiciden <b>sonradan hoca atayabilirsin</b> —
+      atadığın hoca 📌 kilitlenir ve gece yeniden kurulumda korunur. Hocasız kalan hücreyi program
+      kendi onarmayı dener; yine de boşsa kadro fiziken yetmiyordur.</p>`;
+    // bölüm -> yerleşik derslik sayısı (ızgarada gösterilir)
+    const deptDerslikSay = new Map<number, number>();
+    for (const r of state.rooms) {
+      if ((r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId !== null) {
+        deptDerslikSay.set(r.deptId, (deptDerslikSay.get(r.deptId) ?? 0) + 1);
+      }
+    }
+    html += '<table><tr><th>Bölüm</th><th>🏫 Derslik</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';
     const programSlots = state.dersProgrami ?? [];
     for (const dept of state.departments) {
       const def = deptDef(dept.defId);
-      html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`;
+      const derslikOda = dept.derslikId != null ? state.rooms.find((r) => r.id === dept.derslikId) : undefined;
+      const derslikAd = derslikOda?.ozelAd ? `⭐ ${esc(derslikOda.ozelAd)}` : '🏫 Derslik';
+      const derslikSay = deptDerslikSay.get(dept.id) ?? 0;
+      html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`
+        + `<td><small>${derslikSay > 0 ? `${derslikAd}${derslikSay > 1 ? ` <b>×${derslikSay}</b>` : ''}` : '<span style="color:#f4a09c">derslik yok</span>'}</small></td>`;
       for (let blok = 0; blok < 4; blok++) {
         const slot = blokDersi(state, dept.id, blok);
         if (!slot) {
@@ -2210,7 +2222,9 @@ function programGovde(state: GameState): string {
         const kilitRozet = slot.kilit
           ? `<button class="cip-cikar" data-action="slot-kilit-ac" data-id="${dept.id}" data-blok="${blok}"
               title="📌 Bu slot kilitli: elle atadığın hoca gece yeniden kurulumda değişmez. Tıkla: kilidi aç.">📌</button>`
-          : '';
+          : slot.sabit
+            ? '<span title="🔒 Yerleşik: bu ders/saat bölüm silinene dek sabit; hoca ayrılırsa yeniden atanır." style="opacity:.6">🔒</span>'
+            : '';
         html += `<td><b>${ders.kod}</b> ${ders.ad} ${kilitRozet}<br><small>${hoca}</small><br>
           <select class="kontenjan-input ders-ekle" style="width:150px;font-size:11px;${seciciStil}"
             data-action="slot-hoca" data-id="${dept.id}" data-blok="${blok}"

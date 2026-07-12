@@ -144,6 +144,11 @@ export interface DersSlot {
   academicId: number;
   /** 📌 oyuncu kilidi: elle atanan hoca gece yeniden kurulumda değişmez */
   kilit?: boolean;
+  /**
+   * 🔒 yerleşik: bölüm açılınca kurulan sabit hücre. Ders + hoca + saat bölüm
+   * silinene dek korunur (yalnız hocası kadrodan ayrılırsa yeniden atanır).
+   */
+  sabit?: boolean;
 }
 
 export const RANK_LABEL: Record<AcademicRank, string> = {
@@ -338,6 +343,11 @@ export interface Department {
   sonGeriCevrilen: number;
   /** kademeli kapanış: yeni kayıt alınmaz, son öğrenci mezun olunca bölüm silinir */
   kapaniyor: boolean;
+  /**
+   * 🏫 bölümün yerleşik (birincil) dersliği — assignClassrooms atar, oda yıkılana
+   * ya da bölüm kapanana dek korunur. Program ızgarasında gösterilir. null = yok.
+   */
+  derslikId?: number | null;
 }
 
 /** Yıllık YKS yerleştirme töreni verisi (açıklanınca null'a çekilir). */

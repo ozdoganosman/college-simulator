@@ -196,15 +196,18 @@ export function toggleGradProgram(state: GameState, deptId: number, level: 'yl' 
 }
 
 export function assignClassrooms(state: GameState): void {
-  // Derslikler her çağrıda SIFIRDAN, ihtiyaç oranına göre dengelenerek dağıtılır —
-  // böylece yeni açılan bölüm de mevcut stoktan adil pay alır.
+  // YERLEŞİK: mevcut geçerli atamalar KORUNUR (bölüm silinene / oda bozulana dek
+  // değişmez). Yalnız atamasız/boş odalar en çok ihtiyacı olan bölüme verilir —
+  // böylece derslik yeri sabit kalır ama yeni oda kurulunca aç bölüme akar.
   for (const r of state.rooms) {
-    if (sinifMi(r) || r.deptId !== null) {
-      if (sinifMi(r)) r.deptId = null;
-      else if (!r.valid || !state.departments.some((d) => d.id === r.deptId)) r.deptId = null;
+    if (r.deptId !== null && (!r.valid || !state.departments.some((d) => d.id === r.deptId))) {
+      r.deptId = null;
     }
   }
-  if (state.departments.length === 0) return;
+  if (state.departments.length === 0) {
+    for (const d of state.departments) d.derslikId = null;
+    return;
+  }
 
   // oda -> sıra sayısı (tek geçiş)
   const odaSira = new Map<number, number>();
@@ -220,17 +223,55 @@ export function assignClassrooms(state: GameState): void {
     }
   }
 
+  // KORUNAN atamalardan mevcut doluluğu say (sıfırdan değil)
   const koltuk = new Map<number, number>();
   const odaAdedi = new Map<number, number>();
   for (const d of state.departments) {
     koltuk.set(d.id, 0);
     odaAdedi.set(d.id, 0);
   }
+  for (const r of state.rooms) {
+    if (sinifMi(r) && r.valid && r.deptId !== null && koltuk.has(r.deptId)) {
+      koltuk.set(r.deptId, (koltuk.get(r.deptId) ?? 0) + (odaSira.get(r.id) ?? 0));
+      odaAdedi.set(r.deptId, (odaAdedi.get(r.deptId) ?? 0) + 1);
+    }
+  }
 
-  // Geçerli derslik/amfileri tek tek, doyma oranı en düşük bölüme ver.
+  // minDerslik GÜVENCESİ: hiçbir açık bölüm derslik yoksun kalmasın. Önce atamasız
+  // geçerli derslikten al; yoksa FAZLASI olan bir bölümün BİRİNCİL OLMAYAN dersliğini
+  // devret (yeni açılan bölüm aç kalmasın; bölümlerin birincil dersliği hiç oynamaz).
+  for (const d of state.departments) {
+    const minOda = deptDef(d.defId).minDerslik;
+    let guard = 0;
+    while ((odaAdedi.get(d.id) ?? 0) < minOda && guard++ < 64) {
+      let oda = state.rooms.find((r) => sinifMi(r) && r.valid && r.deptId === null);
+      if (!oda) {
+        let kaynakOda: Room | undefined;
+        for (const src of state.departments) {
+          if (src.id === d.id) continue;
+          if ((odaAdedi.get(src.id) ?? 0) <= deptDef(src.defId).minDerslik) continue; // fazlası yok
+          kaynakOda = state.rooms.find(
+            (r) => sinifMi(r) && r.valid && r.deptId === src.id && r.id !== src.derslikId,
+          );
+          if (kaynakOda) {
+            odaAdedi.set(src.id, (odaAdedi.get(src.id) ?? 0) - 1);
+            koltuk.set(src.id, (koltuk.get(src.id) ?? 0) - (odaSira.get(kaynakOda.id) ?? 0));
+            break;
+          }
+        }
+        oda = kaynakOda;
+      }
+      if (!oda) break; // fiziken derslik yetmiyor
+      oda.deptId = d.id;
+      odaAdedi.set(d.id, (odaAdedi.get(d.id) ?? 0) + 1);
+      koltuk.set(d.id, (koltuk.get(d.id) ?? 0) + (odaSira.get(oda.id) ?? 0));
+    }
+  }
+
+  // Yalnız ATAMASIZ geçerli derslikleri, doyma oranı en düşük bölüme ver.
   // Bölüm doymuş sayılır: koltuk >= öğrenci + kontenjan VE oda >= minDerslik.
   for (const r of state.rooms) {
-    if (!sinifMi(r) || !r.valid) continue;
+    if (!sinifMi(r) || !r.valid || r.deptId !== null) continue;
     let secilen: Department | null = null;
     let enKotu = Infinity;
     for (const d of state.departments) {
@@ -244,6 +285,14 @@ export function assignClassrooms(state: GameState): void {
         secilen = d;
       }
     }
+    // hepsi doyduysa bile atamasız oda kalmasın: en az odalı bölüme ver
+    if (!secilen) {
+      let enAz = Infinity;
+      for (const d of state.departments) {
+        const oda = odaAdedi.get(d.id) ?? 0;
+        if (oda < enAz) { enAz = oda; secilen = d; }
+      }
+    }
     if (secilen) {
       r.deptId = secilen.id;
       koltuk.set(secilen.id, (koltuk.get(secilen.id) ?? 0) + (odaSira.get(r.id) ?? 0));
@@ -251,12 +300,23 @@ export function assignClassrooms(state: GameState): void {
     }
   }
 
-  // Lablar: lab gerektiren bölümlere sırayla dağıt (ortak kullanım — atama kozmetik)
+  // Her bölümün YERLEŞİK (birincil) dersliği: hâlâ geçerliyse koru, değilse ilk atanan.
+  for (const d of state.departments) {
+    const gecerli = d.derslikId != null && state.rooms.some(
+      (r) => r.id === d.derslikId && sinifMi(r) && r.valid && r.deptId === d.id,
+    );
+    if (!gecerli) {
+      const ilk = state.rooms.find((r) => sinifMi(r) && r.valid && r.deptId === d.id);
+      d.derslikId = ilk ? ilk.id : null;
+    }
+  }
+
+  // Lablar: sticky — yalnız atamasız/geçersiz olanları lab gerektiren bölümlere dağıt
   const labBolumler = state.departments.filter((d) => deptDef(d.defId).labGerekli);
   if (labBolumler.length > 0) {
     let i = 0;
     for (const r of state.rooms) {
-      if (r.type !== 'laboratuvar' || !r.valid) continue;
+      if (r.type !== 'laboratuvar' || !r.valid || r.deptId !== null) continue;
       r.deptId = labBolumler[i % labBolumler.length].id;
       i++;
     }
