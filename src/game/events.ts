@@ -294,6 +294,146 @@ export const OLAYLAR: OlayTanim[] = [
       },
     ],
   },
+  {
+    id: 'deprem-tatbikati',
+    emoji: '🚨',
+    baslik: 'AFAD Deprem Tatbikatı',
+    metin: 'AFAD, kampüste kapsamlı bir deprem tatbikatı yapılmasını öneriyor.',
+    kosul: (s) => s.rooms.length >= 8,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Tatbikatı yap (₺20.000)',
+        ipucu: 'Prestij + güven; ders yarım gün aksar',
+        uygula: (s) => { s.para -= 20000; addPrestij(s, 2); tumOgrMutluluk(s, 2); return 'Tatbikat kusursuz geçti — basında övgü (+2 prestij), veliler rahat (+2 mutluluk).'; },
+      },
+      {
+        etiket: 'Ertele',
+        ipucu: 'Ya gerçeği olursa?',
+        uygula: (s) => {
+          if (chance(s, 0.3)) { addPrestij(s, -4); return 'Küçük bir sarsıntıda kampüs panik yaşadı — hazırlıksızlık manşet oldu (-4 prestij).'; }
+          return 'Tatbikat ertelendi; kimse fark etmedi... şimdilik.';
+        },
+      },
+    ],
+  },
+  {
+    id: 'unlu-mezun-ziyaret',
+    emoji: '🌟',
+    baslik: 'Ünlü Mezun Ziyareti',
+    metin: 'Ünlü bir mezunun kampüsü ziyaret edip söyleşi yapmak istiyor — organizasyon ister.',
+    kosul: (s) => s.mezunlar.length >= 5,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Ağırla (₺15.000)',
+        ipucu: 'Mutluluk + 📣 influencer gelişimi',
+        uygula: (s) => { s.para -= 15000; tumOgrMutluluk(s, 5); nitelikVer(s, 'influencer', 2); return 'Söyleşi salonu doldu taştı — mutluluk +5, 📣 nitelik +2, fotoğraflar sosyal medyada.'; },
+      },
+      { etiket: 'Takvim müsait değil', ipucu: 'Fırsat kaçar', uygula: () => 'Ziyaret gerçekleşmedi; mezun söyleşiyi rakip üniversitede yaptı.' },
+    ],
+  },
+  {
+    id: 'veri-sizintisi',
+    emoji: '🔐',
+    baslik: 'Siber Saldırı Girişimi',
+    metin: 'BT ekibi, öğrenci bilgi sistemine yönelik saldırı girişimi tespit etti.',
+    kosul: (s) => s.departments.length >= 2,
+    varsayilan: 0,
+    secenekler: [
+      {
+        etiket: 'Güvenliği güçlendir (₺40.000)',
+        ipucu: 'Sistem kapanır, veri güvende',
+        uygula: (s) => { s.para -= 40000; return 'Açık kapatıldı, sistem güçlendirildi — veri güvende.'; },
+      },
+      {
+        etiket: 'Abartmayın',
+        ipucu: 'Riskli: sızıntı olursa prestij çöker',
+        uygula: (s) => {
+          if (chance(s, 0.35)) { addPrestij(s, -6); tumOgrMutluluk(s, -4); return 'VERİ SIZDI! Öğrenci bilgileri forumlarda — -6 prestij, -4 mutluluk.'; }
+          return 'Saldırı savuşturuldu; BT ekibi haklı çıkmadığına sevindi.';
+        },
+      },
+    ],
+  },
+  {
+    id: 'konsey-secimi',
+    emoji: '🗳️',
+    baslik: 'Öğrenci Konseyi Seçimi',
+    metin: 'Konsey seçimi kızıştı; taraflar rektörlükten destek bekliyor.',
+    kosul: (s) => ogrenciler(s).length >= 25,
+    varsayilan: 0,
+    secenekler: [
+      {
+        etiket: 'Tarafsız kal, sandığı destekle (₺8.000)',
+        ipucu: 'Demokrasi şenliği: mutluluk artar',
+        uygula: (s) => { s.para -= 8000; tumOgrMutluluk(s, 4); nitelikVer(s, 'filozof', 1); return 'Seçim şenlik havasında geçti — mutluluk +4, 📜 nitelik +1.'; },
+      },
+      {
+        etiket: 'Favorini destekle',
+        ipucu: 'Riskli: kaybeden taraf küser',
+        uygula: (s) => {
+          if (chance(s, 0.5)) { tumOgrMutluluk(s, 2); addPrestij(s, 1); return 'Desteklediğin aday kazandı — yönetimle uyumlu konsey (+1 prestij).'; }
+          tumOgrMutluluk(s, -5);
+          return 'Desteklediğin aday KAYBETTİ — yeni konsey rektörlüğe mesafeli (-5 mutluluk).';
+        },
+      },
+    ],
+  },
+  {
+    id: 'firtina',
+    emoji: '🌪️',
+    baslik: 'Şiddetli Fırtına',
+    metin: 'Gece kampüsü fırtına vurdu: çatılar, dış mekân eşyaları hasarlı.',
+    kosul: (s) => s.objects.length >= 20,
+    varsayilan: 1,
+    secenekler: [
+      {
+        etiket: 'Acil onarım ekibi (₺45.000)',
+        ipucu: 'Hasar anında giderilir',
+        uygula: (s) => { s.para -= 45000; return 'Ekipler sabaha kadar çalıştı — kampüste iz kalmadı.'; },
+      },
+      {
+        etiket: 'Tamirciler halleder',
+        ipucu: 'Bedava ama eşyalar yıpranır, kampüs kirlenir',
+        uygula: (s) => {
+          let n = 0;
+          for (const o of s.objects) {
+            if (n >= 12) break;
+            if (randInt(s, 0, 3) === 0) { o.yipranma = Math.min(100, (o.yipranma ?? 0) + 45); n++; }
+          }
+          for (let i = 0; i < s.dirt.length && i < 3000; i += randInt(s, 2, 9)) {
+            if (s.floor[i] !== null) s.dirt[i] = Math.min(100, s.dirt[i] + 30);
+          }
+          return `Fırtına ${n} eşyayı hırpaladı, kampüs dağınık — tamirci ve temizlikçiler mesaide.`;
+        },
+      },
+    ],
+  },
+  {
+    id: 'tv-programi',
+    emoji: '📺',
+    baslik: 'TV Tartışma Programı Daveti',
+    metin: 'Ünlü bir tartışma programı, en bilinen profesörünü canlı yayına istiyor.',
+    kosul: (s) => s.agents.some((a) => a.kind === 'akademisyen' && (a.rank === 'prof' || a.rank === 'docent')),
+    varsayilan: 0,
+    secenekler: [
+      {
+        etiket: 'İzin ver',
+        ipucu: 'Prestij + kadro morali; küçük gaf riski',
+        uygula: (s) => {
+          if (chance(s, 0.15)) { addPrestij(s, -3); return 'Canlı yayında talihsiz bir gaf — kliplendi (-3 prestij).'; }
+          addPrestij(s, 3); tumHocaMoral(s, 4);
+          return 'Profesör yayını salladı — +3 prestij, kadro gururlu (+4 moral).';
+        },
+      },
+      {
+        etiket: 'Akademisyen ekrana çıkmaz',
+        ipucu: 'Kadro morali düşer',
+        uygula: (s) => { tumHocaMoral(s, -4); return 'Yasak kararı kadroda soğuk duş etkisi yarattı (-4 moral).'; },
+      },
+    ],
+  },
 ];
 
 /**

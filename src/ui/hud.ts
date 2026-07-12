@@ -17,6 +17,7 @@ import { DERS_LIMIT, asistanlari, dersYukuVerimi } from '../game/schedule';
 import { bolumUcreti } from '../game/economy';
 import { sonrakiDenetimGunu } from '../game/accreditation';
 import { deptDef } from '../data/departments';
+import { BALANCE } from '../data/balance';
 import { deleteRoom } from '../game/build';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
@@ -348,7 +349,12 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
     const egilimEtiket = a.egilim >= 115 ? 'çalışkan' : a.egilim >= 85 ? 'normal' : 'zorlanıyor';
     const hoca = a.asistani !== -1 ? state.agents.find((x) => x.id === a.asistani) : undefined;
     const takipte = state.yildizlar.includes(a.ad);
-    let html = `<span class="baslik">${takipte ? '⭐ ' : ''}🎓 ${a.ad} — ${LEVEL_LABEL[a.level]} · ${bolum}</span>`;
+    // lisansüstü aşama rozeti: ders dönemi / tez (ilerleme yüzdesiyle)
+    const tezHedef = a.level === 'doktora' ? BALANCE.TEZ_HEDEF * 1.6 : BALANCE.TEZ_HEDEF;
+    const asamaEk = a.level === 'lisans' ? ''
+      : a.asama === 'tez' ? ` · 📜 Tez %${Math.min(99, Math.round(100 * (a.tezPuan ?? 0) / tezHedef))}`
+        : a.level === 'doktora' ? ' · 📖 Ders (yeterlik bekliyor)' : ' · 📖 Ders dönemi';
+    let html = `<span class="baslik">${takipte ? '⭐ ' : ''}🎓 ${a.ad} — ${LEVEL_LABEL[a.level]}${asamaEk} · ${bolum}</span>`;
     html += `<button class="eylem" data-yildiz="${a.ad.replace(/"/g, '')}"
       title="${takipte ? 'Takipten çıkar' : 'Yıldız öğrenci olarak takip et: mezuniyeti, işi ve terfileri sana bildirilir (en çok 5)'}">
       ${takipte ? '⭐ Takipte — çıkar' : '☆ Takip Et'}</button>`;

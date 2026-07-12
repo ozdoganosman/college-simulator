@@ -220,6 +220,10 @@ export interface Student extends AgentBase {
   burs: number;
   /** kişilik — davranış ve gelişim çarpanları (kartta rozet) */
   kisilik: Kisilik;
+  /** lisansüstü aşama: ders → (doktora: yeterlik sınavı) → tez → savunma/mezuniyet */
+  asama?: 'ders' | 'tez';
+  /** tez ilerlemesi (araştırma dakikalarıyla birikir; hedefe ulaşınca savunma) */
+  tezPuan?: number;
 }
 
 export const LEVEL_LABEL: Record<StudentLevel, string> = {
@@ -605,6 +609,14 @@ export interface GameState {
   arastirmaOtoYenile: boolean;
   /** girişe-ulaşılamıyor uyarısının son verildiği gün (günde bir uyarı) */
   sonErisimUyariGunu: number;
+  /** kulüp üyeleri (kulüp id -> öğrenci id listesi) — üyelik artık gerçek */
+  kulupUyeListe: Record<string, number[]>;
+  /** denetim karnesi için günlük ortalama izleme (tek günlük şansa son) */
+  denetimIzleme: { ac: number; cazibe: number; gun: number };
+  /** KALDI sonrası planlanan takip denetimi günü (null = yok) */
+  takipDenetimGunu: number | null;
+  /** üst üste KALDI sayısı — 2. kez kalınca YÖK zayıf bölümü kapatır */
+  ustUsteKaldi: number;
   /** son YÖK akreditasyon denetimi sonucu (hiç olmadıysa null) */
   sonDenetim: { gun: number; puan: number; sonuc: string } | null;
   /** dönemlik trend fotoğrafları (son 24 dönem) — Raporlar grafikleri */

@@ -66,6 +66,10 @@ export function createInitialState(): GameState {
     olayKuyrugu: [],
     arastirmaOtoYenile: true,
     sonErisimUyariGunu: 0,
+    kulupUyeListe: {},
+    denetimIzleme: { ac: 0, cazibe: 0, gun: 0 },
+    takipDenetimGunu: null,
+    ustUsteKaldi: 0,
     sonDenetim: null,
     trend: [],
     aktifOlay: null,
@@ -196,6 +200,12 @@ export function eskiKayitUyumu(s: GameState): void {
   if (!Array.isArray(s.olayKuyrugu)) s.olayKuyrugu = [];
   if (typeof s.arastirmaOtoYenile !== 'boolean') s.arastirmaOtoYenile = true;
   if (typeof s.sonErisimUyariGunu !== 'number') s.sonErisimUyariGunu = 0;
+  if (!s.kulupUyeListe || typeof s.kulupUyeListe !== 'object') s.kulupUyeListe = {};
+  if (!s.denetimIzleme || typeof s.denetimIzleme !== 'object') {
+    s.denetimIzleme = { ac: 0, cazibe: 0, gun: 0 };
+  }
+  if (s.takipDenetimGunu === undefined) s.takipDenetimGunu = null;
+  if (typeof s.ustUsteKaldi !== 'number') s.ustUsteKaldi = 0;
   // ömürlük sayaçlar sonradan eklendi: eldeki listelerden tohumla
   if (typeof s.toplamYayin !== 'number') s.toplamYayin = s.publications?.length ?? 0;
   if (typeof s.toplamUluslararasiYayin !== 'number') {
@@ -296,6 +306,10 @@ export function eskiKayitUyumu(s: GameState): void {
         a.kisilik = r < 8 ? 'dahi' : r < 18 ? 'tembel' : r < 30 ? 'sosyal'
           : r < 40 ? 'kitapkurdu' : r < 50 ? 'girisimci' : 'normal';
       }
+      // lisansüstü aşamalar sonradan eklendi: eski kayıtlar doğrudan tez
+      // aşamasından devam eder (yeterlik sürpriziyle cezalandırılmaz)
+      if (a.level !== 'lisans' && a.asama !== 'ders' && a.asama !== 'tez') a.asama = 'tez';
+      if (a.level !== 'lisans' && typeof a.tezPuan !== 'number') a.tezPuan = 0;
     }
   }
   if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç

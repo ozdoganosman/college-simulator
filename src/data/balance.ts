@@ -93,6 +93,9 @@ export const BALANCE = {
   // İnşaat: hazır bina kare başına şantiye süresi (dk) — ustalar hızlandırır
   INSAAT_DK_KARE: 5,
 
+  // Lisansüstü tez hedefi (araştırma dakikası) — doktora ×1.6
+  TEZ_HEDEF: 1100,
+
   // Öğrenci
   DERS_ILERLEME: 1.2,          // ders periyodu başına ilerleme puanı (öğretmenli)
   OGRETMENSIZ_CARPAN: 0.3,

@@ -66,12 +66,15 @@ export function denetimKarnesi(state: GameState): DenetimKriter[] {
   const bolum = Math.max(1, state.departments.length);
   const kutPuan = koleksiyon >= bolum * 2 ? 15 : koleksiyon >= bolum ? 8 : koleksiyon > 0 ? 4 : 0;
 
-  // 5) Kampüs düzeni (10p): geçersiz oda yok (5) + kimse aç kalmadı (5)
-  const gecersiz = state.rooms.filter((r) => !r.valid).length;
-  const duzenPuan = (gecersiz === 0 ? 5 : gecersiz <= 2 ? 2 : 0) + (state.dunAcKalan === 0 ? 5 : 0);
+  // 5) Kampüs düzeni (10p): geçersiz oda yok (5) + açlık ORTALAMASI (5) —
+  // tek şanslı/şanssız günün karneyi belirlemesine son: dönem ortalaması esas
+  const izleme = state.denetimIzleme ?? { ac: 0, cazibe: 0, gun: 0 };
+  const ortAc = izleme.gun > 0 ? izleme.ac / izleme.gun : state.dunAcKalan;
+  const gecersiz = state.rooms.filter((r) => !r.valid && (r.insaat ?? 0) <= 0).length;
+  const duzenPuan = (gecersiz === 0 ? 5 : gecersiz <= 2 ? 2 : 0) + (ortAc < 0.5 ? 5 : ortAc < 3 ? 2 : 0);
 
-  // 6) Kampüs yaşamı (10p): cazibe puanı
-  const cazibe = cazibePuani(state);
+  // 6) Kampüs yaşamı (10p): cazibe ORTALAMASI
+  const cazibe = izleme.gun > 0 ? Math.round(izleme.cazibe / izleme.gun) : cazibePuani(state);
   const cazibePuan = cazibe >= 40 ? 10 : cazibe >= 20 ? 5 : 0;
 
   return [
@@ -88,23 +91,54 @@ export function denetimPuani(state: GameState): number {
   return denetimKarnesi(state).reduce((t, k) => t + k.puan, 0);
 }
 
-/** Denetimi uygular — game.ts yıl dönümünde (2 yılda bir) çağırır. */
-export function denetimUygula(state: GameState): void {
+/**
+ * Denetimi uygular — game.ts yıl dönümünde (2 yılda bir) çağırır.
+ * takip=true: KALDI sonrası 20 gün içinde gelen TAKİP denetimi.
+ * Üst üste 2. KALDI'da YÖK en zayıf bölümü kapatmaya zorlar.
+ */
+export function denetimUygula(state: GameState, takip = false): void {
   const puan = denetimPuani(state);
+  const on = takip ? '🏛️ YÖK TAKİP DENETİMİ' : '🏛️ YÖK AKREDİTASYON DENETİMİ';
   if (puan >= BALANCE.DENETIM_GECME) {
     addPrestij(state, BALANCE.DENETIM_ODUL_PRESTIJ);
     state.sonDenetim = { gun: state.gun, puan, sonuc: 'GEÇTİ' };
-    notify(state, `🏛️ YÖK AKREDİTASYON DENETİMİ: ${puan}/100 — GEÇTİN! Kalite belgesi yenilendi (+${BALANCE.DENETIM_ODUL_PRESTIJ} prestij).`, 'odul');
+    state.ustUsteKaldi = 0;
+    state.takipDenetimGunu = null;
+    notify(state, `${on}: ${puan}/100 — GEÇTİN! Kalite belgesi yenilendi (+${BALANCE.DENETIM_ODUL_PRESTIJ} prestij).`, 'odul');
   } else if (puan >= BALANCE.DENETIM_KOSULLU) {
     addPrestij(state, -5);
     state.sonDenetim = { gun: state.gun, puan, sonuc: 'KOŞULLU' };
-    notify(state, `🏛️ YÖK DENETİMİ: ${puan}/100 — KOŞULLU geçtin (-5 prestij). Karneyi Raporlar'dan incele, ${DENETIM_ARALIK} gün sonra tekrar gelecekler!`, 'kotu');
+    state.ustUsteKaldi = 0;
+    state.takipDenetimGunu = null;
+    notify(state, `${on}: ${puan}/100 — KOŞULLU geçtin (-5 prestij). Karneyi Raporlar'dan incele, tekrar gelecekler!`, 'kotu');
   } else {
-    addPrestij(state, -15);
-    for (const d of state.departments) {
-      d.kontenjan = Math.max(5, Math.round(d.kontenjan * 0.8));
-    }
+    state.ustUsteKaldi = (state.ustUsteKaldi ?? 0) + 1;
     state.sonDenetim = { gun: state.gun, puan, sonuc: 'KALDI' };
-    notify(state, `🏛️ YÖK DENETİMİ FELAKETİ: ${puan}/100 — KALDIN! Prestij -15 ve TÜM bölümlerde kontenjan %20 kesildi. Karneye bak, toparlan!`, 'kotu');
+    if (state.ustUsteKaldi >= 2) {
+      // ikinci kez KALDI: ağır yaptırım — en az öğrencili bölüm kapatılır
+      addPrestij(state, -25);
+      for (const d of state.departments) d.kontenjan = Math.max(5, Math.round(d.kontenjan * 0.7));
+      const sayilar = new Map<number, number>();
+      for (const a of state.agents) {
+        if (a.kind === 'ogrenci') sayilar.set(a.deptId, (sayilar.get(a.deptId) ?? 0) + 1);
+      }
+      const kurban = [...state.departments].filter((d) => !d.kapaniyor)
+        .sort((a, b) => (sayilar.get(a.id) ?? 0) - (sayilar.get(b.id) ?? 0))[0];
+      if (kurban) {
+        kurban.kapaniyor = true;
+        notify(state, `${on}: ${puan}/100 — İKİNCİ KEZ KALDIN! YÖK insafsız: prestij -25, kontenjanlar %30 kesildi ve en zayıf bölümün (öğrenci alımı durduruldu) KAPATILIYOR.`, 'kotu');
+      } else {
+        notify(state, `${on}: ${puan}/100 — İKİNCİ KEZ KALDIN! Prestij -25, kontenjanlar %30 kesildi.`, 'kotu');
+      }
+      state.takipDenetimGunu = null;
+      state.ustUsteKaldi = 0; // ceza kesildi, sayaç başa
+    } else {
+      addPrestij(state, -15);
+      for (const d of state.departments) d.kontenjan = Math.max(5, Math.round(d.kontenjan * 0.8));
+      state.takipDenetimGunu = state.gun + 20;
+      notify(state, `${on} FELAKETİ: ${puan}/100 — KALDIN! Prestij -15, kontenjanlar %20 kesildi. 20 GÜN SONRA TAKİP DENETİMİ var — yine kalırsan bölüm kapatırlar!`, 'kotu');
+    }
   }
+  // yeni gözlem dönemi: ortalamalar sıfırdan birikmeye başlar
+  state.denetimIzleme = { ac: 0, cazibe: 0, gun: 0 };
 }

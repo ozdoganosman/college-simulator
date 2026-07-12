@@ -772,6 +772,10 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * tez, 0, 100);
       s.kaliteToplam += 1.1 * tez * dtMin;
       s.dersDakika += dtMin;
+      // 📜 tez aşamasındaki lisansüstü: araştırma dakikaları teze birikir
+      if (s.level !== 'lisans' && s.asama === 'tez') {
+        s.tezPuan = (s.tezPuan ?? 0) + dtMin * tez;
+      }
       if (kutuphanede && alan) {
         s.nitelik[alan] = clamp(s.nitelik[alan] + (1.4 / BLOK_SURE) * dtMin * tez, 0, 100);
       }
@@ -1291,6 +1295,8 @@ export function spawnStudent(
     sermaye: 0,
     burs,
     kisilik,
+    asama: level === 'lisans' ? undefined : 'ders',
+    tezPuan: 0,
   };
   state.agents.push(s);
   if (level !== 'lisans') s.danisman = danismanSec(state, deptId);

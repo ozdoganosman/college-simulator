@@ -57,8 +57,12 @@ export function rakipBilgi(r: import('../core/types').RakipUni): string {
   return `${r.sehir} · ${r.kurulus}'te kuruldu · ${alanAd[r.uzmanlik]} alanında güçlü · mezun istihdamı %${r.istihdam} · ${karakter}`;
 }
 
-/** Yıl dönümünde rakipleri geliştirir (güç karakteri de yavaşça sürüklenir). */
-export function rakipleriGelistir(state: GameState): void {
+/**
+ * Yıl dönümünde rakipleri geliştirir (güç karakteri de yavaşça sürüklenir) ve
+ * 1-2 rakip GÖRÜNÜR bir hamle yapar — haber metinleri döndürülür (game.ts
+ * bildirir; bu modül döngü olmasın diye notify'a erişmez).
+ */
+export function rakipleriGelistir(state: GameState): string[] {
   for (const r of state.rakipler) {
     r.prestij = clamp(Math.round(r.prestij + randRange(state, -10, 26) * r.guc), 30, 1000);
     r.yayin += Math.max(0, Math.round(randRange(state, 2, 14) * r.guc));
@@ -66,6 +70,39 @@ export function rakipleriGelistir(state: GameState): void {
     r.guc = clamp(r.guc + randRange(state, -0.08, 0.08), 0.6, 1.5);
     r.istihdam = clamp(Math.round(r.istihdam + randRange(state, -3, 3) + (r.guc - 1) * 4), 42, 96);
   }
+
+  // rakip hamleleri: sadece sayılar sürüklenmez — rakipler görünür işler yapar
+  const haberler: string[] = [];
+  const alanAd: Record<Alan, string> = {
+    muhendis: 'mühendislik', artist: 'sanat', filozof: 'sosyal bilimler', pratik: 'işletme',
+  };
+  const adaylar = [...state.rakipler].sort((a, b) => b.prestij - a.prestij).slice(0, 10);
+  const hamleSayisi = 1 + (randInt(state, 0, 1));
+  for (let i = 0; i < hamleSayisi && adaylar.length > 0; i++) {
+    const r = adaylar.splice(randInt(state, 0, adaylar.length - 1), 1)[0];
+    switch (randInt(state, 0, 3)) {
+      case 0:
+        r.mezun += 40;
+        r.guc = clamp(r.guc + 0.05, 0.6, 1.5);
+        haberler.push(`🏫 RAKİP HAMLESİ: ${r.ad}, ${alanAd[r.uzmanlik]} alanında yeni bölüm açtı — kadrosu ve mezun ordusu büyüyor.`);
+        break;
+      case 1:
+        r.prestij = clamp(r.prestij + 12, 30, 1000);
+        haberler.push(`🏗️ RAKİP HAMLESİ: ${r.ad} dev bir kampüs binası açtı (prestiji sıçradı).`);
+        break;
+      case 2:
+        r.yayin += 18;
+        r.prestij = clamp(r.prestij + 5, 30, 1000);
+        haberler.push(`🎓 RAKİP HAMLESİ: ${r.ad} yıldız bir profesör transfer etti — yayın üretimi hızlanacak.`);
+        break;
+      default:
+        r.istihdam = clamp(r.istihdam + 3, 42, 96);
+        state.sonrakiTalepCarpan = Math.max(0.6, state.sonrakiTalepCarpan * 0.96);
+        haberler.push(`🎗 RAKİP HAMLESİ: ${r.ad} dev burs programı ilan etti — bir sonraki YKS'de talebin biraz kayabilir (×0.96).`);
+        break;
+    }
+  }
+  return haberler;
 }
 
 /** Güncel sıralama — oyuncu dahil, skora göre azalan. */

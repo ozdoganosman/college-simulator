@@ -22,6 +22,7 @@ import { kontrolBasarimlar } from './goals';
 import { denetimUygula } from './accreditation';
 import { olayGuncelle, olayOner } from './events';
 import { gunlukYipranma } from './maintenance';
+import { cazibePuani } from './campus';
 import { gunlukKulupEtkisi, kulupSenligi } from './clubs';
 import { addPrestij, notify, saveGame, talepCarp } from './state';
 
@@ -85,6 +86,12 @@ function endOfDay(state: GameState): void {
   gunlukYipranma(state); // eşyalar eskir; bozulanlar tamirci bekler
   gunlukKulupEtkisi(state); // kulüp üyeleri nitelik/moral kazanır
 
+  // denetim karnesi ortalama izlemesi: tek günlük şans yerine dönem ortalaması
+  // (acKalanBugun az önce dunAcKalan'a devredildi — bugünün gerçek sayısı odur)
+  state.denetimIzleme.ac += state.dunAcKalan;
+  state.denetimIzleme.cazibe += cazibePuani(state);
+  state.denetimIzleme.gun += 1;
+
   state.gun += 1;
 
   // Önce gün içinde yapılan inşaatı işle ki yerleştirme güncel kapasiteyi görsün
@@ -139,7 +146,7 @@ function endOfDay(state: GameState): void {
         state.siraGecmisi.push(sonuc.sira);
         if (state.siraGecmisi.length > 12) state.siraGecmisi.shift();
         state.yilBasi = { mezun: state.toplamMezun, yayin: state.toplamYayin };
-        rakipleriGelistir(state); // rakipler de boş durmuyor
+        for (const haber of rakipleriGelistir(state)) notify(state, haber, 'bilgi'); // rakipler boş durmuyor
         yillikMezunGuncelle(state); // mezun kariyerleri + dernek bağışı + haberler
         yillikYaslanma(state); // yaş +1; emeklilik yaşına gelen ayrılır
         // YÖK akreditasyon denetimi: 3. yıldan itibaren 2 yılda bir
@@ -154,6 +161,12 @@ function endOfDay(state: GameState): void {
         state.sonrakiTalepCarpan = 1 + (state.sonrakiTalepCarpan - 1) * 0.5;
       }
     }
+  }
+
+  // KALDI sonrası takip denetimi: günü geldiyse YÖK tekrar kapıda
+  if (state.takipDenetimGunu !== null && state.gun >= state.takipDenetimGunu) {
+    state.takipDenetimGunu = null;
+    denetimUygula(state, true);
   }
 
   // Kampüs olay kartları: süresi dolanı kapat, sırası geldiyse yenisini çıkar

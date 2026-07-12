@@ -571,14 +571,44 @@ export function semesterEnd(state: GameState): void {
 
   // önce topla (removeAgent diziyi değiştirir), sonra çıkar.
   // önlisans 2 yıllıktır: mezuniyet eşiği yarısıdır.
+  // LİSANSÜSTÜ dersleri bitirmek yetmez: YL tez yazar, doktora önce YETERLİK
+  // sınavını geçer, sonra tez — tez araştırma dakikalarıyla ilerler.
   const mezunlar: Student[] = [];
+  let tezeGecen = 0, yeterlikGecen = 0, yeterlikKalan = 0;
   for (const a of state.agents) {
     if (a.kind !== 'ogrenci') continue;
     const dept = deptMap.get(a.deptId);
     const esik = dept && deptDef(dept.defId).tur === 'onlisans'
       ? BALANCE.MEZUNIYET_ESIK / 2
       : BALANCE.MEZUNIYET_ESIK;
-    if (a.ilerleme >= esik) mezunlar.push(a);
+    if (a.ilerleme < esik) continue;
+    if (a.level === 'lisans') { mezunlar.push(a); continue; }
+
+    const asama = a.asama ?? 'ders';
+    if (asama === 'ders') {
+      if (a.level === 'doktora') {
+        // yeterlik sınavı: GNO + eğilim şansı belirler; kalan dönem tekrar dener
+        const gno = gnoHesapla(a) ?? 2;
+        const sans = clamp(0.3 + gno * 0.16 + (a.egilim - 100) / 250, 0.25, 0.92);
+        if (chance(state, sans)) { a.asama = 'tez'; yeterlikGecen++; }
+        else { a.ilerleme = Math.max(70, a.ilerleme - 8); yeterlikKalan++; }
+      } else {
+        a.asama = 'tez';
+        tezeGecen++;
+      }
+      continue;
+    }
+    // tez savunması: tez puanı hedefe ulaştıysa mezun
+    const tezHedef = a.level === 'doktora' ? BALANCE.TEZ_HEDEF * 1.6 : BALANCE.TEZ_HEDEF;
+    if ((a.tezPuan ?? 0) >= tezHedef) mezunlar.push(a);
+  }
+  if (tezeGecen + yeterlikGecen + yeterlikKalan > 0) {
+    notify(state,
+      `📜 Lisansüstü: ${tezeGecen > 0 ? `${tezeGecen} YL öğrencisi tez aşamasına geçti · ` : ''}`
+      + `${yeterlikGecen > 0 ? `${yeterlikGecen} doktora adayı YETERLİĞİ geçti · ` : ''}`
+      + `${yeterlikKalan > 0 ? `${yeterlikKalan} aday yeterlikte KALDI (gelecek dönem tekrar)` : ''}`
+        .replace(/ · $/, ''),
+      yeterlikKalan > yeterlikGecen ? 'kotu' : 'iyi');
   }
   if (mezunlar.length === 0) return;
 

@@ -45,7 +45,7 @@ import { krediCek } from '../game/economy';
 import { cazibePuani, estetikPuani, faaliyetPuani, ulasimSeviyesi, yurtKapasitesi } from '../game/campus';
 import { denetimKarnesi, sonrakiDenetimGunu } from '../game/accreditation';
 import { bozukSayisi } from '../game/maintenance';
-import { KULUPLER, kulupKapat, kulupKur, kulupKurulabilir } from '../game/clubs';
+import { KULUPLER, kulupAktif, kulupKapat, kulupKur, kulupKurulabilir, kulupUyeleri } from '../game/clubs';
 import {
   KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
   toplamKoleksiyon,
@@ -1314,13 +1314,19 @@ function stratejiGovde(state: GameState): string {
     </div>
 
     <h3>🎭 Öğrenci Kulüpleri</h3>
-    <div class="aciklama">Kulüpler kampüsü topluluğa çevirir: ilgili niteliği en yüksek <b>12 öğrenci
-    üye</b> sayılır — her gün nitelik +0.4 ve moral kazanırlar, dönem sonunda 🎪 şenlik yapılır.
+    <div class="aciklama">Kulüpler kampüsü topluluğa çevirir: kuruluşta <b>12 öğrenci üye yazılır</b>
+    (mezun olan düşer, dönem sonunda koltuklar en yeteneklilerle dolar) — üyeler her gün nitelik +0.4
+    ve moral kazanır, dönem sonunda 🎪 şenlik yapılır. Gerekli aktivite alanı BOZULURSA kulüp askıya alınır.
     Kurulum ${formatMoney(BALANCE.KULUP_KURULUM)} + günlük ${formatMoney(BALANCE.KULUP_GIDER)}.
     <br>${KULUPLER.map((k) => {
     const aktif = state.kulupler.includes(k.id);
     if (aktif) {
-      return `<span class="rozet" style="background:#2c4a33;color:#9fd3a8" title="${k.aciklama}">${k.emoji} ${k.ad} AKTİF</span>
+      const calisiyor = kulupAktif(state, k);
+      const uyeler = kulupUyeleri(state, k);
+      const uyeOnizleme = uyeler.slice(0, 3).map((u) => u.ad.split(' ')[0]).join(', ');
+      return `<span class="rozet" style="background:${calisiyor ? '#2c4a33' : '#4a3a2c'};color:${calisiyor ? '#9fd3a8' : '#f0c674'}"
+        title="${k.aciklama}&#10;Üyeler: ${esc(uyeler.map((u) => u.ad).join(', ') || '—')}">
+        ${k.emoji} ${k.ad} ${calisiyor ? `· ${uyeler.length} üye (${esc(uyeOnizleme)}…)` : '⏸ ASKIDA (obje bozuk!)'}</span>
         <button class="cip-cikar" data-action="kulup-kapat" data-id="${k.id}" title="Kapat — gider kesilir">×</button>`;
     }
     const kontrol = kulupKurulabilir(state, k);
