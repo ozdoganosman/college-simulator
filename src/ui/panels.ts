@@ -18,8 +18,8 @@ import {
 import { courseDef, dersEtki } from '../data/courses';
 import {
   ASISTAN_LIMIT, DERS_LIMIT, acikDersler, akilliOtoSec, asistanlari, blokDersi, bolumuHedefle,
-  dersYukuVerimi, hocaDersCikar, hocaDersEkle, otoDersSec, slotKilidiAc, slotaHocaAta,
-  verilemeyenDersler, yukVerimi,
+  dersYukuVerimi, hocaDersCikar, hocaDersEkle, hocaDersSlotAyarla, otoDersSec, slotKilidiAc,
+  slotaHocaAta, verilemeyenDersler, yukVerimi,
 } from '../game/schedule';
 import { COURSES } from '../data/courses';
 import { formatClock, formatMoney } from '../core/util';
@@ -530,6 +530,11 @@ function onPanelChange(e: Event): void {
   } else if (action === 'ders-ekle') {
     const sec = hedef as HTMLSelectElement;
     if (sec.value) hocaDersEkle(state, id, sec.value);
+    render(state);
+  } else if (action === 'hoca-ders-sec') {
+    const sec = hedef as HTMLSelectElement;
+    const slot = Number(hedef.dataset.slot ?? '-1');
+    if (slot >= 0) hocaDersSlotAyarla(state, id, slot, sec.value);
     render(state);
   } else if (action === 'asistan-ata') {
     const sec = hedef as HTMLSelectElement;
@@ -1968,15 +1973,25 @@ function uyumYuzde(courseId: string, alan: Alan): number {
 }
 
 /** Hocanın henüz seçmediği dersler için "+ ders ekle" seçicisi. */
-function dersEkleSecici(hocaId: number, alan: Alan, secili: string[]): string {
-  let html = `<select class="kontenjan-input ders-ekle" data-action="ders-ekle" data-id="${hocaId}">`;
-  html += '<option value="">＋ ders ekle…</option>';
+/**
+ * Izgara hücresi: hocanın slotIndex'teki dersi için seçici. Mevcut ders seçili
+ * gelir; başka ders seçince değişir, "— boşalt —" ile silinir. Zaten (başka
+ * hücrede) seçili dersler listede gösterilmez.
+ */
+function hocaDersHucre(hocaId: number, alan: Alan, dersler: string[], i: number): string {
+  const mevcut = dersler[i]; // courseId | undefined
+  const renk = mevcut ? ALAN_META[courseDef(mevcut).birincil].renk : '#3a4252';
+  const tip = mevcut ? `data-tip-ders="${mevcut}" data-tip-alan="${alan}"` : '';
+  let html = `<select class="kontenjan-input hucre-ders${mevcut ? '' : ' bos'}" data-action="hoca-ders-sec"
+    data-id="${hocaId}" data-slot="${i}" ${tip} style="width:118px;border-color:${renk}"
+    title="${mevcut ? `${courseDef(mevcut).ad} — dersi değiştir ya da boşalt` : 'Bu slota ders ata'}">`;
+  html += `<option value="">${mevcut ? '— boşalt —' : '＋ ders'}</option>`;
   for (const a of Object.keys(ALAN_META) as Alan[]) {
-    const grup = COURSES.filter((c) => c.birincil === a && !secili.includes(c.id));
+    const grup = COURSES.filter((c) => c.birincil === a && (!dersler.includes(c.id) || c.id === mevcut));
     if (grup.length === 0) continue;
     html += `<optgroup label="${ALAN_META[a].emoji} ${ALAN_META[a].ad}">`;
     for (const c of grup) {
-      html += `<option value="${c.id}">${c.kod} ${c.ad} — %${uyumYuzde(c.id, alan)}</option>`;
+      html += `<option value="${c.id}" ${c.id === mevcut ? 'selected' : ''}>${c.kod} · %${uyumYuzde(c.id, alan)}</option>`;
     }
     html += '</optgroup>';
   }
@@ -2008,8 +2023,8 @@ function programGovde(state: GameState): string {
     doktora öğrencilerini <b>🧑‍🔬 asistan</b> atayarak yükü hafiflet — her asistan 1 dersin yükünü
     alır (okul asistana günlük ${formatMoney(BALANCE.ASISTAN_MAAS)} maaş öder).</div>`;
 
-  // --- 1) Hoca ders seçimi (çip editörü) ---
-  html += `<h3>1) Hoca Ders Seçimi
+  // --- 1) Hoca ders seçimi (ızgara: hoca × 4 ders slotu) ---
+  html += `<h3>1) Hoca Ders Seçimi <small style="opacity:.7">(hoca × ders slotu ızgarası)</small>
     <button class="eylem" data-action="oto-ders-tum" style="margin-left:10px"
       title="Tüm seçimleri sıfırlar ve tamamlaması en kolay bölümlerin müfredatlarını hocalara dağıtır">
       🪄 Akıllı Seçim (bölümleri hedefle)</button></h3>`;
@@ -2019,6 +2034,8 @@ function programGovde(state: GameState): string {
     const lisansustu = state.agents.filter(
       (a): a is import('../core/types').Student => a.kind === 'ogrenci' && a.level !== 'lisans',
     );
+    html += '<table class="ders-izgara"><tr><th>Hoca</th>'
+      + '<th>Ders 1</th><th>Ders 2</th><th>Ders 3</th><th>Ders 4</th><th>⚡ Yük</th><th>🧑‍🔬 Asistan</th></tr>';
     for (const h of hocalar) {
       const dersler = h.verdigiDersler ?? [];
       const dolu = dersler.length >= DERS_LIMIT;
@@ -2037,21 +2054,18 @@ function programGovde(state: GameState): string {
           ${bosAdaylar.map((s) => `<option value="${s.id}">${esc(s.ad)} (${LEVEL_LABEL[s.level]})</option>`).join('')}
         </select>`;
       }
-      html += `<div class="hoca-satir">
-        <span class="hoca-ad"><b>${RANK_LABEL[h.rank]} ${esc(h.ad)}</b><br>
-          <small>${ALAN_META[h.alan].emoji} ${ALAN_META[h.alan].ad} · eğitim ${h.egitim}</small></span>
-        <span class="hoca-dersler">
-          ${dersler.map((d) => dersCipi(d, h.alan, h.id)).join('')}
-          ${dolu ? '' : dersEkleSecici(h.id, h.alan, dersler)}
-          ${asistanCipleri}${asistanSecici}
-        </span>
-        <span class="yuk-rozet ${verimSinif}"
+      html += `<tr>
+        <td><b>${RANK_LABEL[h.rank]} ${esc(h.ad)}</b><br>
+          <small>${ALAN_META[h.alan].emoji} ${ALAN_META[h.alan].ad} · eğitim ${h.egitim}</small></td>
+        ${[0, 1, 2, 3].map((i) => `<td>${hocaDersHucre(h.id, h.alan, dersler, i)}</td>`).join('')}
+        <td><span class="yuk-rozet ${verimSinif}"
           title="Ders yükü verimi: ders kalitesi ve araştırma hızı çarpanı. ${dersler.length} ders${asistanlarim.length > 0 ? `, ${asistanlarim.length} asistan` : ''} — asistan atayarak yükseltebilirsin">⚡ %${verim}</span>
-        <span class="hoca-kota ${dolu ? 'dolu' : ''}">${dersler.length}/${DERS_LIMIT}</span>
-        <button class="eylem" data-action="oto-ders" data-id="${h.id}" ${dolu ? 'disabled' : ''}
-          title="Boş kotayı alanına uygun derslerle doldur">Doldur</button>
-      </div>`;
+          ${dolu ? '' : `<br><button class="eylem" data-action="oto-ders" data-id="${h.id}" style="margin-top:4px"
+            title="Boş slotları alanına uygun derslerle doldur">Doldur</button>`}</td>
+        <td>${asistanCipleri}${asistanSecici || (asistanlarim.length === 0 ? '<small style="opacity:.5">—</small>' : '')}</td>
+      </tr>`;
     }
+    html += '</table>';
   }
 
   // --- 2) Açık dersler ---
@@ -2148,94 +2162,76 @@ function programGovde(state: GameState): string {
     html += '</table>';
   }
 
-  // --- 4) Bugünün takvimi ---
+  // --- 4) Yerleşik ders programı — DERSLİK × SAAT ızgarası (sketch) ---
   if (state.departments.length > 0) {
     const hocaAd = new Map<number, string>();
     const hocaAlan = new Map<number, Alan>();
-    for (const h of hocalar) {
-      hocaAd.set(h.id, h.ad);
-      hocaAlan.set(h.id, h.alan);
-    }
-    // açık bölümlerin müfredat dersleri: kotası dolu bir hocanın "yedek" (boşa giden)
-    // dersi = bu kümede OLMAYAN ders → takas edilebilir, hoca yine de atanabilir
+    for (const h of hocalar) { hocaAd.set(h.id, h.ad); hocaAlan.set(h.id, h.alan); }
+    // açık bölüm dersleri: kotası dolu bir hocanın "yedek" dersi = bu kümede OLMAYAN ders
     const acikBolumDersleri = new Set<string>();
-    for (const d of state.departments) {
-      for (const c of deptDef(d.defId).dersler) acikBolumDersleri.add(c);
-    }
-    html += '<h3>4) Yerleşik Ders Programı <small style="opacity:.7">(bölüm × saat ızgarası)</small></h3>';
-    html += `<p class="aciklama">🔒 <b>Yerleşik ızgara:</b> bir bölüm açılınca her hücrenin
-      <b>dersi, hocası ve dersliği sabitlenir</b> — bölüm silinene dek değişmez (yalnız hoca
-      kadrodan ayrılırsa o hücre yeniden atanır). Hücredeki seçiciden <b>sonradan hoca atayabilirsin</b> —
-      atadığın hoca 📌 kilitlenir ve gece yeniden kurulumda korunur. Hocasız kalan hücreyi program
-      kendi onarmayı dener; yine de boşsa kadro fiziken yetmiyordur.</p>`;
-    // bölüm -> yerleşik derslik sayısı (ızgarada gösterilir)
-    const deptDerslikSay = new Map<number, number>();
-    for (const r of state.rooms) {
-      if ((r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId !== null) {
-        deptDerslikSay.set(r.deptId, (deptDerslikSay.get(r.deptId) ?? 0) + 1);
-      }
-    }
-    html += '<table><tr><th>Bölüm</th><th>🏫 Derslik</th>' + BLOK_SAAT.map((s) => `<th>${s}</th>`).join('') + '</tr>';
+    for (const d of state.departments) for (const c of deptDef(d.defId).dersler) acikBolumDersleri.add(c);
     const programSlots = state.dersProgrami ?? [];
+
+    // bir (bölüm, blok) hücresi: ders + hoca + 🔒 + hoca seçici
+    const programHucre = (dept: import('../core/types').Department, blok: number): string => {
+      const slot = blokDersi(state, dept.id, blok);
+      if (!slot) return '<span style="opacity:.35">—</span>';
+      const ders = courseDef(slot.courseId);
+      let hoca = '<span style="color:#f4a09c"><b>hoca yok!</b></span>';
+      if (slot.academicId !== -1 && hocaAd.has(slot.academicId)) {
+        const alan = hocaAlan.get(slot.academicId)!;
+        const hocaObj = hocalar.find((x) => x.id === slot.academicId);
+        const verim = hocaObj ? Math.round(dersYukuVerimi(state, hocaObj) * 100) : 100;
+        hoca = `${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!)} <small>(%${uyumYuzde(slot.courseId, alan)}${verim < 100 ? ` · ⚡%${verim}` : ''})</small>`;
+      }
+      const secenekler = hocalar.map((h) => {
+        const cakisma = programSlots.some((s2) => s2.blok === blok && s2.academicId === h.id && s2.deptId !== dept.id);
+        const liste = h.verdigiDersler ?? [];
+        const dersiVar = liste.includes(slot.courseId);
+        const kotaDolu = !dersiVar && liste.length >= DERS_LIMIT;
+        const yedekVar = kotaDolu && liste.some((d) => !acikBolumDersleri.has(d));
+        const devreDisi = cakisma || (kotaDolu && !yedekVar);
+        const neden = cakisma ? ' — aynı saatte başka derste'
+          : (kotaDolu && !yedekVar) ? ' — kotası dolu' : (kotaDolu && yedekVar) ? ' — yedek bırakır' : '';
+        const etiket = dersiVar ? '' : (kotaDolu && yedekVar) ? ' (♻)' : ' (+ders)';
+        return `<option value="${h.id}" ${slot.academicId === h.id ? 'selected' : ''} ${devreDisi ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${etiket}${neden}</option>`;
+      }).join('');
+      const seciciStil = slot.academicId === -1 ? 'border-color:#c25450;background:#3a2426' : '';
+      const rozet = slot.kilit
+        ? `<button class="cip-cikar" data-action="slot-kilit-ac" data-id="${dept.id}" data-blok="${blok}" title="📌 Kilitli — tıkla: kilidi aç.">📌</button>`
+        : slot.sabit ? '<span title="🔒 Yerleşik: bu ders/saat bölüm silinene dek sabit" style="opacity:.6">🔒</span>' : '';
+      return `<b>${ders.kod}</b> ${rozet}<br><small>${hoca}</small><br>
+        <select class="kontenjan-input ders-ekle" style="width:140px;font-size:11px;${seciciStil}"
+          data-action="slot-hoca" data-id="${dept.id}" data-blok="${blok}" title="Bu derse hoca ata (📌 kilitlenir)">
+          <option value="-1" ${slot.academicId === -1 ? 'selected' : ''}>— hoca ata —</option>${secenekler}
+        </select>`;
+    };
+
+    // derslik sütunları: her bölüm bir sütun (yerleşik dersliğiyle etiketli). Bir
+    // bölümde birden çok derslik varsa ×N rozetiyle gösterilir — bir bölüm blok
+    // başına tek ders işlediğinden derslikler aynı programı paylaşır.
+    const sutunlar: { dept: import('../core/types').Department; etiket: string }[] = [];
     for (const dept of state.departments) {
       const def = deptDef(dept.defId);
-      const derslikOda = dept.derslikId != null ? state.rooms.find((r) => r.id === dept.derslikId) : undefined;
-      const derslikAd = derslikOda?.ozelAd ? `⭐ ${esc(derslikOda.ozelAd)}` : '🏫 Derslik';
-      const derslikSay = deptDerslikSay.get(dept.id) ?? 0;
-      html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`
-        + `<td><small>${derslikSay > 0 ? `${derslikAd}${derslikSay > 1 ? ` <b>×${derslikSay}</b>` : ''}` : '<span style="color:#f4a09c">derslik yok</span>'}</small></td>`;
-      for (let blok = 0; blok < 4; blok++) {
-        const slot = blokDersi(state, dept.id, blok);
-        if (!slot) {
-          html += '<td>—</td>';
-          continue;
-        }
-        const ders = courseDef(slot.courseId);
-        let hoca = '<span style="color:#f4a09c"><b>hoca yok!</b> aşağıdan ata ↓</span>';
-        if (slot.academicId !== -1 && hocaAd.has(slot.academicId)) {
-          const alan = hocaAlan.get(slot.academicId)!;
-          const hocaObj = hocalar.find((x) => x.id === slot.academicId);
-          const verim = hocaObj ? Math.round(dersYukuVerimi(state, hocaObj) * 100) : 100;
-          hoca = `${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!)} <small>(%${uyumYuzde(slot.courseId, alan)}${verim < 100 ? ` · ⚡%${verim}` : ''})</small>`;
-        }
-        // slot hoca seçici: aynı saatte başka sınıfta olanlar ve kotası dolu
-        // (dersi olmayan) hocalar devre dışı gösterilir
-        const secenekler = hocalar.map((h) => {
-          const cakisma = programSlots.some(
-            (s2) => s2.blok === blok && s2.academicId === h.id && s2.deptId !== dept.id,
-          );
-          const liste = h.verdigiDersler ?? [];
-          const dersiVar = liste.includes(slot.courseId);
-          const kotaDolu = !dersiVar && liste.length >= DERS_LIMIT;
-          // kota dolu ama açık bölüme bağlı olmayan bir "yedek" dersi varsa: takasla atanır
-          const yedekVar = kotaDolu && liste.some((d) => !acikBolumDersleri.has(d));
-          const devreDisi = cakisma || (kotaDolu && !yedekVar);
-          const neden = cakisma ? ' — aynı saatte başka derste'
-            : (kotaDolu && !yedekVar) ? ' — kotası dolu, dört dersi de bölüm dersi'
-              : (kotaDolu && yedekVar) ? ' — kota dolu, yedek dersini bırakır'
-                : '';
-          const etiket = dersiVar ? '' : (kotaDolu && yedekVar) ? ' (♻ takas)' : ' (+ders)';
-          return `<option value="${h.id}" ${slot.academicId === h.id ? 'selected' : ''}
-            ${devreDisi ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${etiket}${neden}</option>`;
-        }).join('');
-        const seciciStil = slot.academicId === -1 ? 'border-color:#c25450;background:#3a2426' : '';
-        const kilitRozet = slot.kilit
-          ? `<button class="cip-cikar" data-action="slot-kilit-ac" data-id="${dept.id}" data-blok="${blok}"
-              title="📌 Bu slot kilitli: elle atadığın hoca gece yeniden kurulumda değişmez. Tıkla: kilidi aç.">📌</button>`
-          : slot.sabit
-            ? '<span title="🔒 Yerleşik: bu ders/saat bölüm silinene dek sabit; hoca ayrılırsa yeniden atanır." style="opacity:.6">🔒</span>'
-            : '';
-        html += `<td><b>${ders.kod}</b> ${ders.ad} ${kilitRozet}<br><small>${hoca}</small><br>
-          <select class="kontenjan-input ders-ekle" style="width:150px;font-size:11px;${seciciStil}"
-            data-action="slot-hoca" data-id="${dept.id}" data-blok="${blok}"
-            title="Bu derse hoca ata (📌 kilitlenir) — %uyum: alan-ders uygunluğu; (+ders) hocanın yıllık programına eklenir">
-            <option value="-1" ${slot.academicId === -1 ? 'selected' : ''}>— hoca ata —</option>
-            ${secenekler}
-          </select></td>`;
-      }
-      html += '</tr>';
+      const odalar = state.rooms.filter((r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId === dept.id);
+      const birincil = dept.derslikId != null ? odalar.find((r) => r.id === dept.derslikId) : odalar[0];
+      const ad = odalar.length === 0
+        ? '<small style="color:#f4a09c">⚠ derslik yok</small>'
+        : `<small>${birincil?.ozelAd ? `⭐ ${esc(birincil.ozelAd)}` : '🏫 Derslik'}${odalar.length > 1 ? ` <b>×${odalar.length}</b>` : ''}</small>`;
+      sutunlar.push({ dept, etiket: `<b style="color:${def.renk}">${def.ad}</b><br>${ad}` });
     }
-    html += '</table>';
+
+    html += '<h3>4) Yerleşik Ders Programı <small style="opacity:.7">(derslik × saat ızgarası)</small></h3>';
+    html += `<p class="aciklama">🔒 <b>Yerleşik ızgara:</b> her sütun bir <b>derslik</b>, her satır bir <b>saat</b>.
+      Bölüm açılınca hücrenin dersi + hocası + dersliği sabitlenir; bölüm silinene dek değişmez (yalnız hoca
+      ayrılırsa yeniden atanır). Hücreden <b>sonradan hoca atayabilirsin</b> — atadığın hoca 📌 kilitlenir.</p>`;
+    html += '<div style="overflow-x:auto"><table class="derslik-izgara"><tr><th>Saat \\ Derslik</th>'
+      + sutunlar.map((s) => `<th>${s.etiket}</th>`).join('') + '</tr>';
+    for (let blok = 0; blok < 4; blok++) {
+      html += `<tr><td><b>${BLOK_SAAT[blok]}</b></td>`
+        + sutunlar.map((s) => `<td>${programHucre(s.dept, blok)}</td>`).join('') + '</tr>';
+    }
+    html += '</table></div>';
   }
 
   return html;

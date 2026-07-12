@@ -9,7 +9,7 @@
  * derse, o dersi SEÇMİŞ hocalar arasından en uygunu atanır (günde en çok 2 blok).
  */
 import { Academic, DersSlot, GameState, Student } from '../core/types';
-import { COURSES, courseDef, dersEtki } from '../data/courses';
+import { COURSES, courseDef, courseExists, dersEtki } from '../data/courses';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { notify } from './state';
 
@@ -90,6 +90,33 @@ export function hocaDersEkle(state: GameState, academicId: number, courseId: str
   a.verdigiDersler = [...liste, courseId];
   rebuildDersProgrami(state);
   return true;
+}
+
+/**
+ * Izgara hücresi: hocanın slotIndex'teki dersini yeni ders ile değiştirir.
+ * yeniDers === '' → o hücreyi boşaltır. Zaten (başka hücrede) seçili ders eklenmez.
+ */
+export function hocaDersSlotAyarla(
+  state: GameState, academicId: number, slotIndex: number, yeniDers: string,
+): void {
+  const a = state.agents.find((x) => x.id === academicId);
+  if (!a || a.kind !== 'akademisyen' || slotIndex < 0 || slotIndex >= DERS_LIMIT) return;
+  const liste = [...(a.verdigiDersler ?? [])];
+  const eski = liste[slotIndex];
+  if (yeniDers === '') {
+    if (eski === undefined) return;
+    liste.splice(slotIndex, 1);
+  } else {
+    if (!courseExists(yeniDers) || (liste.includes(yeniDers) && eski !== yeniDers)) return;
+    if (eski === undefined) {
+      if (liste.length >= DERS_LIMIT) return;
+      liste.push(yeniDers);
+    } else {
+      liste[slotIndex] = yeniDers;
+    }
+  }
+  a.verdigiDersler = liste;
+  rebuildDersProgrami(state);
 }
 
 /** Hocadan ders çıkar. */

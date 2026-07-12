@@ -13,7 +13,7 @@ import { hireStaff, spawnAcademic, updateAgents } from './agents';
 import { updateResearch } from './research';
 import { dailyAcademicUpdate, refreshCandidatePools } from './academics';
 import { assignClassrooms, dailyDepartmentUpdate, donemDestegi, semesterEnd } from './departments';
-import { rebuildDersProgrami, tumunuOtoSec } from './schedule';
+import { rebuildDersProgrami } from './schedule';
 import { dailyEconomy } from './economy';
 import { kurRakipler, rakipleriGelistir, siralama, yilSonuHesapla } from './rivals';
 import { yillikMezunGuncelle } from './alumni';
@@ -328,8 +328,8 @@ function kurHazirKampus(state: GameState): void {
       BALANCE.MAAS[rank],
     );
   }
-  // Başlangıç ders seçimleri akıllı yapılır: birkaç bölüm ilk günden açılabilir olsun
-  tumunuOtoSec(state);
+  // Ders seçimleri BOŞ başlar (0/4): oyuncu kendi kurar — 📅 Program panelindeki
+  // "🎯 Tavsiye Bölüm" listesi ve 🪄 Akıllı Seçim yol gösterir. (Otomatik doldurma yok.)
 
   state.para = paraOnce;
 }
