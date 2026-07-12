@@ -75,7 +75,10 @@ export type ObjectTypeId =
   | 'cicek_tarhi'   // dekor: kampüs estetiği
   | 'heykel'        // dekor: kampüs estetiği (prestijli görünüm)
   | 'sus_havuzu'    // dekor: kampüs estetiği
-  | 'fidan';        // dekor: kampüs estetiği (ucuz yeşillik)
+  | 'fidan'         // dekor: kampüs estetiği (ucuz yeşillik)
+  | 'jenerator'     // altyapı: elektrik kapasitesi sağlar
+  | 'su_deposu'     // altyapı: su kapasitesi sağlar
+  | 'yangin_dolabi';// güvenlik: yakındaki yangını hızla söndürür
 
 export interface PlacedObject {
   id: number;
@@ -92,7 +95,7 @@ export interface PlacedObject {
 
 // --- Ajanlar -----------------------------------------------------------------
 
-export type AgentKind = 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci' | 'tamirci';
+export type AgentKind = 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci' | 'tamirci' | 'guvenlik';
 
 export type StudentLevel = 'lisans' | 'yl' | 'doktora';
 
@@ -264,10 +267,26 @@ export interface Academic extends AgentBase {
 }
 
 export interface StaffAgent extends AgentBase {
-  kind: 'asci' | 'temizlikci' | 'tamirci';
+  kind: 'asci' | 'temizlikci' | 'tamirci' | 'guvenlik';
   maas: number;
   /** 0-100 iş becerisi — çalıştıkça artar, hız çarpanı verir (0.7 + beceri/125) */
   beceri: number;
+}
+
+/** Haritada aktif yangın: konumu, şiddeti (0-100), çıkış günü. */
+export interface Yangin {
+  x: number;
+  y: number;
+  siddet: number;
+}
+
+/** Makro ekonomi durumu — yıllık olaylarla değişir, gider/gelir çarpanı verir. */
+export interface MakroDurum {
+  ad: string;
+  emoji: string;
+  giderCarpan: number;
+  gelirCarpan: number;
+  kalanYil: number;
 }
 
 export type Agent = Student | Academic | StaffAgent;
@@ -617,6 +636,16 @@ export interface GameState {
   takipDenetimGunu: number | null;
   /** üst üste KALDI sayısı — 2. kez kalınca YÖK zayıf bölümü kapatır */
   ustUsteKaldi: number;
+  /** altyapı kesinti durumu (endOfDay hesaplar, ceza + HUD okur) */
+  altyapi: { gucKesinti: boolean; suKesinti: boolean };
+  /** haritada aktif yangınlar */
+  yanginlar: Yangin[];
+  /** aktif salgın (null = yok) */
+  salgin: { ad: string; kalanGun: number; siddet: number } | null;
+  /** makro ekonomi durumu (null = normal) */
+  makro: MakroDurum | null;
+  /** prestij kampanyalarının son kullanım günleri (id -> gün) */
+  prestijKampanya: Record<string, number>;
   /** son YÖK akreditasyon denetimi sonucu (hiç olmadıysa null) */
   sonDenetim: { gun: number; puan: number; sonuc: string } | null;
   /** dönemlik trend fotoğrafları (son 24 dönem) — Raporlar grafikleri */

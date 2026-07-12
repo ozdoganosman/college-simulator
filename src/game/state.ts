@@ -70,6 +70,11 @@ export function createInitialState(): GameState {
     denetimIzleme: { ac: 0, cazibe: 0, gun: 0 },
     takipDenetimGunu: null,
     ustUsteKaldi: 0,
+    altyapi: { gucKesinti: false, suKesinti: false },
+    yanginlar: [],
+    salgin: null,
+    makro: null,
+    prestijKampanya: {},
     sonDenetim: null,
     trend: [],
     aktifOlay: null,
@@ -206,6 +211,11 @@ export function eskiKayitUyumu(s: GameState): void {
   }
   if (s.takipDenetimGunu === undefined) s.takipDenetimGunu = null;
   if (typeof s.ustUsteKaldi !== 'number') s.ustUsteKaldi = 0;
+  if (!s.altyapi || typeof s.altyapi !== 'object') s.altyapi = { gucKesinti: false, suKesinti: false };
+  if (!Array.isArray(s.yanginlar)) s.yanginlar = [];
+  if (s.salgin === undefined) s.salgin = null;
+  if (s.makro === undefined) s.makro = null;
+  if (!s.prestijKampanya || typeof s.prestijKampanya !== 'object') s.prestijKampanya = {};
   // ömürlük sayaçlar sonradan eklendi: eldeki listelerden tohumla
   if (typeof s.toplamYayin !== 'number') s.toplamYayin = s.publications?.length ?? 0;
   if (typeof s.toplamUluslararasiYayin !== 'number') {
@@ -286,7 +296,7 @@ export function eskiKayitUyumu(s: GameState): void {
       if (typeof a.yetistirdigi !== 'number') a.yetistirdigi = 0;
       if (typeof a.memnuniyet !== 'number') a.memnuniyet = 70;
       if (typeof a.yas !== 'number') a.yas = 35 + (a.id % 20);
-    } else if (a.kind === 'asci' || a.kind === 'temizlikci' || a.kind === 'tamirci') {
+    } else if (a.kind === 'asci' || a.kind === 'temizlikci' || a.kind === 'tamirci' || a.kind === 'guvenlik') {
       if (typeof a.beceri !== 'number') a.beceri = 40 + (a.id % 21); // beceri sonradan eklendi
     } else if (a.kind === 'ogrenci') {
       if (typeof a.egilim !== 'number') a.egilim = 70 + ((a.id * 37) % 61); // 70-130

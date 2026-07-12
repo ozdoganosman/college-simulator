@@ -51,6 +51,7 @@ import { asistanSayilari, yukVerimi } from './schedule';
 import { kitapCarpani } from './library';
 import { bolumBaskinAlan } from '../data/departments';
 import { ulasimSeviyesi, yurtKapasitesi } from './campus';
+import { gucCarpani } from './infrastructure';
 import { findPath } from '../core/pathfinding';
 import { libraryLevel, roomCenter, walkable } from '../core/grid';
 import { BALANCE } from '../data/balance';
@@ -64,6 +65,7 @@ const SPEED: Record<AgentKind, number> = {
   asci: 0.42,
   temizlikci: 0.42,
   tamirci: 0.42,
+  guvenlik: 0.48, // güvenlik hızlı — yangına koşar
 };
 
 const DERS_BLOKLARI: number[] = [T.DERS1, T.DERS2, T.DERS3, T.DERS4];
@@ -171,6 +173,8 @@ interface Ctx {
   ogrenciSayisi: number;
   /** Pazar tatili: ders yok, kampüs sosyalleşir (sınav haftası hariç) */
   tatil: boolean;
+  /** elektrik kesintisi öğrenme/araştırma/üretim çarpanı (0.7 kesintide) */
+  gucCarpan: number;
 }
 
 function buildCtx(state: GameState, dk: number): Ctx {
@@ -363,6 +367,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     copYakini: copYakiniSet(state),
     ogrenciSayisi,
     tatil: tatilMi(state.gun),
+    gucCarpan: gucCarpani(state),
   };
 }
 
@@ -683,7 +688,7 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
       // öğrencinin kendi öğrenme eğilimi de hızı ve not ortalamasını belirler;
       // dönemin son 3 günü SINAV HAFTASI: herkes asılır (×1.25)
       const sinavHaftasi = donemGunu(state.gun) > DONEM_GUN - 3 ? 1.25 : 1;
-      const efektif = kalite * (s.egilim / 100) * ctx.ogrenmeCarpan * sinavHaftasi;
+      const efektif = kalite * (s.egilim / 100) * ctx.ogrenmeCarpan * sinavHaftasi * ctx.gucCarpan;
       s.ilerleme = clamp(s.ilerleme + (BALANCE.DERS_ILERLEME / BLOK_SURE) * dtMin * efektif, 0, 100);
       s.kaliteToplam += efektif * dtMin;
       s.dersDakika += dtMin;
@@ -1117,6 +1122,34 @@ function updateRepairman(state: GameState, a: StaffAgent, dtMin: number, ctx: Ct
   idleWander(state, a, dtMin);
 }
 
+/**
+ * Güvenlik: kampüsü devriye gezer; aktif yangın varsa en yakınına koşar
+ * (yakınlığı yangını söndürür — incidents.ts okur). Salgında da hijyen sağlar.
+ */
+function updateGuard(state: GameState, a: StaffAgent, dtMin: number, ctx: Ctx): void {
+  if (personelMola(state, a, ctx, T.OGLE + 20, T.DERS3)) return;
+  // yangına müdahale: en yakın yangına yönel
+  if (state.yanginlar.length > 0) {
+    let hedef = state.yanginlar[0];
+    let enYakin = Infinity;
+    for (const y of state.yanginlar) {
+      const d = Math.abs(y.x - a.x) + Math.abs(y.y - a.y);
+      if (d < enYakin) { enYakin = d; hedef = y; }
+    }
+    if (enYakin > 2) {
+      if (a.path.length === 0) goTo(state, a, { x: Math.round(hedef.x), y: Math.round(hedef.y) });
+      a.activity = 'calisiyor';
+      return;
+    }
+    a.activity = 'calisiyor'; // yangının başında — söndürüyor
+    beceriGelis(a, dtMin);
+    return;
+  }
+  // devriye
+  a.activity = 'bosta';
+  idleWander(state, a, dtMin);
+}
+
 // --- Ana güncelleme --------------------------------------------------------------
 
 export function updateAgents(state: GameState, dtMin: number): void {
@@ -1208,6 +1241,9 @@ export function updateAgents(state: GameState, dtMin: number): void {
         break;
       case 'tamirci':
         updateRepairman(state, a, dtMin, ctx);
+        break;
+      case 'guvenlik':
+        updateGuard(state, a, dtMin, ctx);
         break;
     }
   }
@@ -1343,8 +1379,11 @@ export function spawnAcademic(
   return a;
 }
 
-export function hireStaff(state: GameState, kind: 'asci' | 'temizlikci' | 'tamirci'): StaffAgent | null {
-  const unvan = kind === 'asci' ? 'Aşçı' : kind === 'temizlikci' ? 'Temizlikçi' : 'Tamirci';
+export function hireStaff(
+  state: GameState, kind: 'asci' | 'temizlikci' | 'tamirci' | 'guvenlik',
+): StaffAgent | null {
+  const unvan = kind === 'asci' ? 'Aşçı' : kind === 'temizlikci' ? 'Temizlikçi'
+    : kind === 'tamirci' ? 'Tamirci' : 'Güvenlik';
   if (!spend(state, BALANCE.PERSONEL_ALIM[kind], `${unvan} alımı`)) return null;
   const p: StaffAgent = {
     id: newId(state),

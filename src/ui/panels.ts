@@ -46,6 +46,8 @@ import { cazibePuani, estetikPuani, faaliyetPuani, ulasimSeviyesi, yurtKapasites
 import { denetimKarnesi, sonrakiDenetimGunu } from '../game/accreditation';
 import { bozukSayisi } from '../game/maintenance';
 import { KULUPLER, kulupAktif, kulupKapat, kulupKur, kulupKurulabilir, kulupUyeleri } from '../game/clubs';
+import { altyapiOzet } from '../game/infrastructure';
+import { PRESTIJ_KAMPANYALARI, kampanyaDurum, prestijKampanyaKullan } from '../game/macro';
 import {
   KITAP_MAX, RAF_PER_SEVIYE, kitapAl, kitapCarpani, kitaplikSayisi, koleksiyonKapasitesi,
   toplamKoleksiyon,
@@ -340,10 +342,13 @@ function onPanelClick(e: Event): void {
       notify(state, `⏹️ ${strategyDef(id).ad} durduruldu — günlük gideri kesildi (yeniden başlatmak tam maliyet ister).`, 'bilgi');
       break;
     case 'personel-al':
-      hireStaff(state, id as 'asci' | 'temizlikci' | 'tamirci');
+      hireStaff(state, id as 'asci' | 'temizlikci' | 'tamirci' | 'guvenlik');
+      break;
+    case 'prestij-kampanya':
+      prestijKampanyaKullan(state, id);
       break;
     case 'personel-cikar': {
-      const kind = id as 'asci' | 'temizlikci' | 'tamirci';
+      const kind = id as 'asci' | 'temizlikci' | 'tamirci' | 'guvenlik';
       for (let i = state.agents.length - 1; i >= 0; i--) {
         const p = state.agents[i];
         if (p.kind === kind) {
@@ -805,13 +810,15 @@ function kadroGovde(state: GameState): string {
 
   // Destek personeli
   let asci = 0, temizlikci = 0, tamirci = 0;
-  const beceriToplam: Record<string, number> = { asci: 0, temizlikci: 0, tamirci: 0 };
+  let guvenlik = 0;
+  const beceriToplam: Record<string, number> = { asci: 0, temizlikci: 0, tamirci: 0, guvenlik: 0 };
   for (const a of state.agents) {
     if (a.kind === 'asci') { asci++; beceriToplam.asci += a.beceri ?? 40; }
     else if (a.kind === 'temizlikci') { temizlikci++; beceriToplam.temizlikci += a.beceri ?? 40; }
     else if (a.kind === 'tamirci') { tamirci++; beceriToplam.tamirci += a.beceri ?? 40; }
+    else if (a.kind === 'guvenlik') { guvenlik++; beceriToplam.guvenlik += a.beceri ?? 40; }
   }
-  const personelSatir = (kind: 'asci' | 'temizlikci' | 'tamirci', ad: string, adet: number): string => {
+  const personelSatir = (kind: 'asci' | 'temizlikci' | 'tamirci' | 'guvenlik', ad: string, adet: number): string => {
     const alim = BALANCE.PERSONEL_ALIM[kind];
     return `<tr>
       <td><b>${ad}</b></td>
@@ -847,13 +854,16 @@ function kadroGovde(state: GameState): string {
       <small>şans: düşük prestijli rakipte yüksek, devlere karşı düşük</small></p>
     <h3>Destek Personeli</h3>
     <p class="aciklama">Aşçı olmadan yemekhane servis yapamaz; temizlikçiler kampüs kirini temizler;
-      tamirciler bozulan eşyaları onarır (bozuk eşya işlev görmez!).
-      ${bozukSayisi(state) > 0 ? `<span class="rozet" style="background:#8f3535">🔧 ${bozukSayisi(state)} bozuk eşya</span>` : ''}</p>
+      tamirciler bozulan eşyaları onarır (bozuk eşya işlev görmez!); güvenlik yangına koşar ve salgında
+      hijyeni artırır.
+      ${bozukSayisi(state) > 0 ? `<span class="rozet" style="background:#8f3535">🔧 ${bozukSayisi(state)} bozuk eşya</span>` : ''}
+      ${state.yanginlar.length > 0 ? `<span class="rozet" style="background:#b04020">🔥 ${state.yanginlar.length} aktif yangın</span>` : ''}</p>
     <table>
       <tr><th>Personel</th><th>Sayı</th><th>Maaş/gün</th><th></th></tr>
       ${personelSatir('asci', 'Aşçı', asci)}
       ${personelSatir('temizlikci', 'Temizlikçi', temizlikci)}
       ${personelSatir('tamirci', '🔧 Tamirci', tamirci)}
+      ${personelSatir('guvenlik', '👮 Güvenlik', guvenlik)}
     </table>`;
 }
 
@@ -1477,6 +1487,41 @@ function basarimBolumu(state: GameState): string {
     <div>${satirlar}</div>`;
 }
 
+/** Raporlar: elektrik/su altyapı durumu (talep vs kapasite çubukları). */
+function altyapiBolumu(state: GameState): string {
+  const o = altyapiOzet(state);
+  const cubuk = (etiket: string, talep: number, kap: number, oran: number, kesinti: boolean): string => {
+    const yuzde = Math.min(100, Math.round(oran * 100));
+    const renk = kesinti ? '#f4a09c' : oran >= 1 ? '#9fd3a8' : '#f0c674';
+    return `<tr><td>${etiket}</td>
+      <td style="min-width:120px"><div style="background:#2c3140;border-radius:4px;height:10px;overflow:hidden">
+        <div style="width:${yuzde}%;height:100%;background:${renk}"></div></div></td>
+      <td><small>kapasite ${kap} / talep ${talep} ${kesinti ? '<b style="color:#f4a09c">⚠ KESİNTİ</b>' : '✓'}</small></td></tr>`;
+  };
+  return `<h3>🔌 Altyapı</h3>
+    <p class="aciklama">Kampüs büyüdükçe elektrik ve su talebi artar. Talep kapasiteyi aşarsa kesinti
+      olur: mutluluk düşer, öğrenme/araştırma yavaşlar, cihazlar hızlı yıpranır. Eşya menüsünden
+      ⚡ Jeneratör ve 💧 Su Deposu kur.</p>
+    <table>
+      ${cubuk('⚡ Elektrik', o.gucTalep, o.gucKap, o.gucOran, state.altyapi.gucKesinti)}
+      ${cubuk('💧 Su', o.suTalep, o.suKap, o.suOran, state.altyapi.suKesinti)}
+    </table>`;
+}
+
+/** Raporlar: prestij ile satın alınan kampanyalar (geç oyun prestij sink). */
+function prestijKampanyaBolumu(state: GameState): string {
+  const kartlar = PRESTIJ_KAMPANYALARI.map((k) => {
+    const durum = kampanyaDurum(state, k);
+    return `<button class="eylem" data-action="prestij-kampanya" data-id="${k.id}"
+      ${durum.ok ? `title="${esc(k.aciklama)}"` : `disabled title="${esc(durum.neden)}"`}>
+      ${k.emoji} ${k.ad} <small>(−${k.prestijMaliyet}⭐)</small></button>`;
+  }).join(' ');
+  return `<h3>⭐ Prestij Kampanyaları</h3>
+    <p class="aciklama">Biriken prestiji somut avantaja çevir — 1 numara olduktan sonra bile prestijin
+      işe yarar. Her kampanyanın bekleme süresi vardır.</p>
+    <div>${kartlar}</div>`;
+}
+
 /** Raporlar: YÖK akreditasyon karnesi — canlı puan + sonraki denetim. */
 function denetimBolumu(state: GameState): string {
   const karne = denetimKarnesi(state);
@@ -1550,7 +1595,7 @@ function raporlarGovde(state: GameState): string {
   const tesvik = state.strategies.includes('tesvik');
   const seviye: Record<StudentLevel, number> = { lisans: 0, yl: 0, doktora: 0 };
   const unvan: Record<AcademicRank, number> = { arsgor: 0, dr: 0, docent: 0, prof: 0 };
-  let asci = 0, temizlikci = 0, tamirciSayisi = 0, maasYuku = 0, mutlulukToplam = 0, ogrenciSayisi = 0;
+  let asci = 0, temizlikci = 0, tamirciSayisi = 0, guvenlikSayisi = 0, maasYuku = 0, mutlulukToplam = 0, ogrenciSayisi = 0;
   let gnoToplam = 0, gnoSayi = 0, egilimToplam = 0, ekosistemGelir = 0;
   let yukToplam = 0, hocaSayisi = 0;
   for (const a of state.agents) {
@@ -1571,6 +1616,7 @@ function raporlarGovde(state: GameState): string {
     } else {
       if (a.kind === 'asci') asci++;
       else if (a.kind === 'tamirci') tamirciSayisi++;
+      else if (a.kind === 'guvenlik') guvenlikSayisi++;
       else temizlikci++;
       maasYuku += a.maas;
     }
@@ -1637,6 +1683,11 @@ function raporlarGovde(state: GameState): string {
       ${state.krediBorcu > 0 ? satir('🏦 Kalan kredi borcu', `<b style="color:#f4a09c">${formatMoney(state.krediBorcu)}</b> (günlük ${formatMoney(BALANCE.KREDI_TAKSIT)})`) : ''}
       ${satir('Günlük net (ödenekler hariç)', `<b style="color:${gunlukNet >= 0 ? '#9fd3a8' : '#f4a09c'}">${gunlukNet >= 0 ? '+' : ''}${formatMoney(gunlukNet)}</b> <small>· YKS ödeneği ve dönem destekleri ayrıca gelir</small>`)}
     </table>
+    ${state.makro ? `<p class="aciklama" style="border-left:3px solid #d4a04a;padding-left:8px">
+      ${state.makro.emoji} <b>Makro ekonomi:</b> ${esc(state.makro.ad)} (${state.makro.kalanYil} yıl kaldı) —
+      giderler ×${state.makro.giderCarpan.toFixed(2)}, gelirler ×${state.makro.gelirCarpan.toFixed(2)}</p>` : ''}
+    ${altyapiBolumu(state)}
+    ${prestijKampanyaBolumu(state)}
     ${trendBolumu(state)}
     ${denetimBolumu(state)}
     <h3>Tehlikeli Bölge</h3>
@@ -1661,7 +1712,7 @@ function raporlarGovde(state: GameState): string {
       ${satir(RANK_LABEL.dr, String(unvan.dr))}
       ${satir(RANK_LABEL.docent, String(unvan.docent))}
       ${satir(RANK_LABEL.prof, String(unvan.prof))}
-      ${satir('Aşçı / Temizlikçi / Tamirci', `${asci} / ${temizlikci} / ${tamirciSayisi}`)}
+      ${satir('Aşçı / Temizlikçi / Tamirci / Güvenlik', `${asci} / ${temizlikci} / ${tamirciSayisi} / ${guvenlikSayisi}`)}
     </table>
     <h3>Araştırma</h3>
     <table>

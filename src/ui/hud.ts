@@ -55,6 +55,8 @@ export function initHud(getState: () => GameState, ui: UIState): void {
       title="Kampüs Cazibesi (0-100) — tıkla: 📊 Raporlar&#10;Faaliyet çeşitliliği (bank, basket, satranç, sahne, kantin...) %50&#10;+ Yurt barınması %30 + Servis durakları %20&#10;YKS talebini en çok +%40 artırır"></span>
     <span class="stat tikla" data-st="sira" data-panel="raporlar"
       title="Türkiye Üniversite Sıralaması — tıkla: 📊 Raporlar&#10;Skor = prestij + yayın + mezun · Hedef: 1 numara olmak!"></span>
+    <span class="stat tikla" data-st="altyapi" data-panel="raporlar" style="display:none"
+      title="Altyapı uyarısı — tıkla: 📊 Raporlar&#10;Elektrik/su kesintisi ya da aktif kriz (yangın/salgın) var"></span>
     <span class="stat tarih" data-st="tarih" title="Dönem 20 gün sürer (Güz + Bahar = 1 yıl)&#10;Dönem sonunda mezuniyet; yıl başında YKS ve Akademik Yıl Ödülleri&#10;Kırmızı bölge = SINAV HAFTASI (son 3 gün)">
       <span data-st="tarih-metin"></span>
       <span class="donem-bar" title="Akademik takvim: kırmızı bölge sınav haftası; 🏛 YÖK denetimi işareti">
@@ -431,6 +433,22 @@ export function refreshHud(state: GameState, ui: UIState): void {
   setStat('kutuphane', `📚 Ktp. Sv. ${libraryLevel(state)}`);
   setStat('cazibe', `✨ ${cazibePuani(state)}`);
   setStat('sira', `🏆 ${oyuncuSirasi(state)}/${state.rakipler.length + 1}`);
+  // altyapı/kriz uyarısı: yalnız sorun varken görünür
+  const altyapiEl = topEl.querySelector<HTMLElement>('[data-st="altyapi"]');
+  if (altyapiEl) {
+    const uyarilar: string[] = [];
+    if (state.altyapi.gucKesinti) uyarilar.push('⚡');
+    if (state.altyapi.suKesinti) uyarilar.push('💧');
+    if (state.yanginlar.length > 0) uyarilar.push('🔥');
+    if (state.salgin) uyarilar.push('🤒');
+    if (uyarilar.length > 0) {
+      altyapiEl.style.display = '';
+      altyapiEl.textContent = `⚠️ ${uyarilar.join('')}`;
+      altyapiEl.style.color = '#f4a09c';
+    } else {
+      altyapiEl.style.display = 'none';
+    }
+  }
   const sinavHaftasi = donemGunu(state.gun) > DONEM_GUN - 3;
   setStat('tarih-metin', `${MEVSIM_META[mevsim(state.gun)].emoji} Yıl ${yil(state.gun)} ${donemAdi(state.gun)} · ${HAFTA_KISA[haftaGunu(state.gun)]} ${donemGunu(state.gun)}/${DONEM_GUN} · ${formatClock(state.dakika)}${tatilMi(state.gun) ? ' · 🏖 TATİL' : ''}${sinavHaftasi ? ' · 📝 SINAV' : ''}${state.yksBekliyor ? ' · 🎓 YKS' : ''}`);
   const donemOran = ((donemGunu(state.gun) - 1) * 1440 + state.dakika) / (DONEM_GUN * 1440);

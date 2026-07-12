@@ -92,11 +92,14 @@ import * as events from './game/events';
 import * as accreditation from './game/accreditation';
 import * as maintenance from './game/maintenance';
 import * as clubs from './game/clubs';
+import * as infrastructure from './game/infrastructure';
+import * as incidents from './game/incidents';
+import * as macro from './game/macro';
 (window as unknown as Record<string, unknown>).__sim = {
   state: () => state,
   advance: (dk: number) => advance(state, dk),
   build, departments, academics, research, agents, library, prefab, rivals, alumni, campus,
-  economy, schedule, events, accreditation, maintenance, clubs,
+  economy, schedule, events, accreditation, maintenance, clubs, infrastructure, incidents, macro,
   ui, cam,
 };
 

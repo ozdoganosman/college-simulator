@@ -15,6 +15,7 @@ import { formatMoney } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { strategyDef } from '../data/strategies';
 import { mutevelliBonusu } from './alumni';
+import { makroGelirCarpan, makroGiderCarpan } from './macro';
 import { addPrestij, earn, notify } from './state';
 
 /**
@@ -107,7 +108,9 @@ export function dailyEconomy(state: GameState): void {
   }
 
   // Kayıt ücreti geliri: burssuz/yarı burslu öğrenciler öder (yıl = 40 gün)
-  const ucretGelir = Math.round(gunlukUcretGeliri(state));
+  // makro gelir çarpanı (teşvik/kriz) burada uygulanır
+  const makroGelir = makroGelirCarpan(state);
+  const ucretGelir = Math.round(gunlukUcretGeliri(state) * makroGelir);
   if (ucretGelir > 0) earn(state, ucretGelir);
 
   // Aktif araştırma projelerinin günlük bütçesi
@@ -122,7 +125,11 @@ export function dailyEconomy(state: GameState): void {
     if (state.krediBorcu === 0) notify(state, '🏦 Kredi borcu kapandı!', 'iyi');
   }
 
-  const toplam = maas + bakim + politikaGideri + mentorlukGider + malzeme + arastirmaButce + taksit;
+  // makro ekonomi: enflasyon/kriz gider çarpanı işletme kalemlerine uygulanır
+  // (kredi taksiti sabit borç, çarpandan etkilenmez)
+  const makroGider = makroGiderCarpan(state);
+  const isletme = Math.round((maas + bakim + politikaGideri + mentorlukGider + malzeme + arastirmaButce) * makroGider);
+  const toplam = isletme + taksit;
   if (toplam > 0) {
     state.para -= toplam; // borca girebilir — spend kullanma
 

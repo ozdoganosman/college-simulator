@@ -14,8 +14,18 @@ export const BALANCE = {
   MEZUN_BONUS: 4000,           // mezun başına tek seferlik ₺
 
   // Maaşlar (günlük ₺)
-  MAAS: { arsgor: 1200, dr: 2000, docent: 3000, prof: 4500, asci: 900, temizlikci: 700, tamirci: 800 },
-  PERSONEL_ALIM: { asci: 5000, temizlikci: 3000, tamirci: 4000 }, // ilan maliyeti
+  MAAS: { arsgor: 1200, dr: 2000, docent: 3000, prof: 4500, asci: 900, temizlikci: 700, tamirci: 800, guvenlik: 750 },
+  PERSONEL_ALIM: { asci: 5000, temizlikci: 3000, tamirci: 4000, guvenlik: 3500 }, // ilan maliyeti
+
+  // Altyapı: elektrik/su kapasite ve talep birimleri
+  JENERATOR_KAPASITE: 40,     // bir jeneratörün sağladığı güç
+  SU_DEPOSU_KAPASITE: 60,     // bir su deposunun sağladığı su
+  GUC_ODA_BIRIM: 2,           // her geçerli oda için baz elektrik talebi
+  SU_OGRENCI_BIRIM: 0.3,      // öğrenci başına su talebi
+
+  // Yangın: yüksek yıpranmalı eşya tutuşabilir; şiddet yayılır, personel söndürür
+  YANGIN_TUTUSMA_YIPRANMA: 85, // bu yıpranmanın üstündeki eşya tutuşabilir
+  YANGIN_GUNLUK_SANS: 0.04,    // uygun eşya varken günlük tutuşma şansı
 
   // Eşya eskimesi: her gün yıpranır, 100'de BOZULUR (tamirci onarır)
   YIPRANMA_GUN: [0.6, 1.4] as [number, number], // günlük yıpranma aralığı

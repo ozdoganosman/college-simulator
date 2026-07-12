@@ -261,7 +261,7 @@ const SAC = ['#2b2118', '#4a3220', '#8a5a2b', '#1c1c22', '#6e4a1e', '#3d2c1c'];
 function drawPerson(
   c: CanvasRenderingContext2D, px: number, py: number, renk: string,
   id: number, yuruyor: boolean, zaman: number,
-  tip: 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci' | 'tamirci',
+  tip: 'ogrenci' | 'akademisyen' | 'asci' | 'temizlikci' | 'tamirci' | 'guvenlik',
 ): void {
   const bob = yuruyor ? Math.sin(zaman / 90 + id) * 1.2 : 0;
   const r = TILE * 0.26;
@@ -324,6 +324,14 @@ function drawPerson(
     c.arc(px, gy - r * 0.9, r * 0.48, Math.PI, 0);
     c.fill();
     c.fillRect(px - r * 0.55, gy - r * 0.92, r * 1.1, r * 0.14);
+  } else if (tip === 'guvenlik') {
+    // lacivert kasket + siperlik
+    c.fillStyle = '#2a3550';
+    c.beginPath();
+    c.arc(px, gy - r * 0.88, r * 0.5, Math.PI, 0);
+    c.fill();
+    c.fillStyle = '#1c2438';
+    c.fillRect(px - r * 0.55, gy - r * 0.86, r * 1.3, r * 0.12);
   } else {
     c.fillStyle = SAC[id % SAC.length];
     c.beginPath();
@@ -496,6 +504,7 @@ export function render(
     } else if (a.kind === 'akademisyen') renk = '#2c3444';
     else if (a.kind === 'asci') renk = '#c9cdd3';
     else if (a.kind === 'tamirci') renk = '#d97b3c';
+    else if (a.kind === 'guvenlik') renk = '#38507a';
     else renk = '#c9a227';
     drawPerson(ctx, px, py, renk, a.id, a.path.length > 0, zaman, a.kind);
 
@@ -528,6 +537,26 @@ export function render(
         ctx.fillText(derdi, px + TILE * 0.34, by + 1);
       }
     }
+  }
+
+  // --- 🔥 yangınlar: titreyen alev + şiddet halesi ---
+  for (const y of state.yanginlar) {
+    if (y.x < x0 - 2 || y.x > x1 + 2 || y.y < y0 - 2 || y.y > y1 + 2) continue;
+    const cx = y.x * TILE + TILE / 2, cy = y.y * TILE + TILE / 2;
+    const titre = 1 + Math.sin(zaman / 80 + y.x) * 0.12;
+    const yaricap = TILE * (0.5 + (y.siddet / 100) * 0.6) * titre;
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, yaricap);
+    g.addColorStop(0, 'rgba(255,230,120,0.9)');
+    g.addColorStop(0.5, 'rgba(240,110,30,0.75)');
+    g.addColorStop(1, 'rgba(180,40,20,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, yaricap, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = `${Math.round(TILE * 0.6 * titre)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔥', cx, cy);
   }
 
   // --- ısı haritası katmanı (yeşil iyi → kırmızı kötü) ---

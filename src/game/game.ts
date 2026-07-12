@@ -23,6 +23,9 @@ import { denetimUygula } from './accreditation';
 import { olayGuncelle, olayOner } from './events';
 import { gunlukYipranma } from './maintenance';
 import { cazibePuani } from './campus';
+import { altyapiGunSonu } from './infrastructure';
+import { salginGunSonu, yanginTetikle, yanginlariGuncelle } from './incidents';
+import { makroGunGuncelle } from './macro';
 import { gunlukKulupEtkisi, kulupSenligi } from './clubs';
 import { addPrestij, notify, saveGame, talepCarp } from './state';
 
@@ -41,6 +44,7 @@ function stepSim(state: GameState, dt: number): void {
   updateAgents(state, dt);
   updateResearch(state, dt);
   insaatIlerlet(state, dt);
+  yanginlariGuncelle(state, dt); // aktif yangınlar sim adımında yayılır/söner
   if (state.dakika >= GUN_DAKIKA) {
     state.dakika -= GUN_DAKIKA;
     endOfDay(state);
@@ -85,6 +89,9 @@ function endOfDay(state: GameState): void {
   dailyDepartmentUpdate(state);
   gunlukYipranma(state); // eşyalar eskir; bozulanlar tamirci bekler
   gunlukKulupEtkisi(state); // kulüp üyeleri nitelik/moral kazanır
+  altyapiGunSonu(state); // elektrik/su kesinti kontrolü + cezalar
+  yanginTetikle(state); // yıpranmış eşya düşük şansla tutuşabilir
+  salginGunSonu(state); // salgın ilerler / dönemsel yenisi çıkar
 
   // denetim karnesi ortalama izlemesi: tek günlük şans yerine dönem ortalaması
   // (acKalanBugun az önce dunAcKalan'a devredildi — bugünün gerçek sayısı odur)
@@ -149,6 +156,7 @@ function endOfDay(state: GameState): void {
         for (const haber of rakipleriGelistir(state)) notify(state, haber, 'bilgi'); // rakipler boş durmuyor
         yillikMezunGuncelle(state); // mezun kariyerleri + dernek bağışı + haberler
         yillikYaslanma(state); // yaş +1; emeklilik yaşına gelen ayrılır
+        makroGunGuncelle(state); // ülke ekonomisi: enflasyon/teşvik/kriz
         // YÖK akreditasyon denetimi: 3. yıldan itibaren 2 yılda bir
         if (yil(state.gun) > 1 && (yil(state.gun) - 1) % 2 === 0) denetimUygula(state);
       }

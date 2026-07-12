@@ -414,6 +414,59 @@ const CIZIMLER: Record<ObjectTypeId, (c: Ctx2, s: number) => void> = {
     c.fillStyle = 'rgba(255,255,255,0.5)';
     c.beginPath(); c.arc(s * 0.42, s * 0.46, s * 0.04, 0, Math.PI * 2); c.fill();
   },
+  jenerator(c, s) {
+    golge(c, s);
+    // gri gövde + havalandırma + sarı şimşek
+    c.fillStyle = '#59636f';
+    rr(c, s * 0.16, s * 0.28, s * 0.68, s * 0.46, s * 0.05); c.fill();
+    c.fillStyle = '#434c56';
+    rr(c, s * 0.16, s * 0.28, s * 0.68, s * 0.12, s * 0.05); c.fill();
+    c.strokeStyle = '#2d343c'; c.lineWidth = s * 0.02;
+    for (let i = 0; i < 3; i++) {
+      c.beginPath();
+      c.moveTo(s * 0.22, s * (0.48 + i * 0.08)); c.lineTo(s * 0.44, s * (0.48 + i * 0.08));
+      c.stroke();
+    }
+    c.fillStyle = '#f0c020';
+    c.beginPath();
+    c.moveTo(s * 0.66, s * 0.44); c.lineTo(s * 0.56, s * 0.6);
+    c.lineTo(s * 0.64, s * 0.6); c.lineTo(s * 0.58, s * 0.72);
+    c.lineTo(s * 0.74, s * 0.52); c.lineTo(s * 0.65, s * 0.52);
+    c.closePath(); c.fill();
+    // egzoz
+    c.fillStyle = '#8a939e';
+    rr(c, s * 0.66, s * 0.16, s * 0.08, s * 0.16, s * 0.02); c.fill();
+  },
+  su_deposu(c, s) {
+    golge(c, s);
+    // mavi silindir tank + su damlası
+    c.fillStyle = '#4a7fb5';
+    rr(c, s * 0.26, s * 0.2, s * 0.48, s * 0.56, s * 0.14); c.fill();
+    c.fillStyle = '#5c93c9';
+    rr(c, s * 0.3, s * 0.24, s * 0.16, s * 0.48, s * 0.08); c.fill();
+    c.fillStyle = '#8fc0e8';
+    c.beginPath();
+    c.moveTo(s * 0.5, s * 0.34);
+    c.quadraticCurveTo(s * 0.6, s * 0.5, s * 0.5, s * 0.58);
+    c.quadraticCurveTo(s * 0.4, s * 0.5, s * 0.5, s * 0.34);
+    c.closePath(); c.fill();
+    // ayaklar
+    c.fillStyle = '#3a4650';
+    c.fillRect(s * 0.3, s * 0.74, s * 0.05, s * 0.1);
+    c.fillRect(s * 0.65, s * 0.74, s * 0.05, s * 0.1);
+  },
+  yangin_dolabi(c, s) {
+    golge(c, s);
+    // kırmızı dolap + tüp
+    c.fillStyle = '#c0392b';
+    rr(c, s * 0.28, s * 0.16, s * 0.44, s * 0.62, s * 0.04); c.fill();
+    c.fillStyle = '#e8e2d4';
+    rr(c, s * 0.33, s * 0.22, s * 0.34, s * 0.5, s * 0.03); c.fill();
+    c.fillStyle = '#a5291d';
+    rr(c, s * 0.44, s * 0.3, s * 0.12, s * 0.34, s * 0.03); c.fill();
+    c.fillStyle = '#1c1c1c';
+    c.beginPath(); c.arc(s * 0.5, s * 0.28, s * 0.03, 0, Math.PI * 2); c.fill();
+  },
 };
 
 export function objectSprite(tip: ObjectTypeId): HTMLCanvasElement {
