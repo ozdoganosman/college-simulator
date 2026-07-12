@@ -2074,9 +2074,50 @@ function programGovde(state: GameState): string {
   const hazir = adaylar.filter((a) => a.eksik.length === 0);
   const yakin = adaylar.filter((a) => a.eksik.length > 0 && a.eksik.length <= 3);
 
+  // kadro alan uyumu: bölüm müfredatındaki derslerin ne kadarı kadrodaki bir
+  // hocanın BİRİNCİL alanına düşüyor (o dersler %100 verimle işlenir)
+  const kadroAlanlari = new Set(hocalar.map((h) => h.alan));
+
   html += `<h3>3) Bu Derslerle Açılabilecek Bölümler (${hazir.length})</h3>`;
   if (hazir.length === 0) {
-    html += '<div class="aciklama">Ders şartını karşılayan bölüm yok — 🪄 Akıllı Seçim kullan ya da aşağıdan bir bölümü 🎯 hedefle.</div>';
+    if (adaylar.length === 0) {
+      html += '<div class="aciklama">🎉 Tüm bölümler zaten açık.</div>';
+    } else {
+      // Hiç ders seçilmemiş olsa bile boş bırakma: en kolay/uygun bölümleri tavsiye et.
+      // Sıra: önce en az ders eksik olan, sonra kadroya en uygun, sonra en ucuz.
+      const tavsiye = adaylar
+        .map((a) => ({
+          a,
+          fit: a.def.dersler.length === 0 ? 0
+            : a.def.dersler.filter((cid) => kadroAlanlari.has(courseDef(cid).birincil)).length / a.def.dersler.length,
+        }))
+        .sort((x, y) =>
+          x.a.eksik.length - y.a.eksik.length
+          || y.fit - x.fit
+          || x.a.def.acilisMaliyeti - y.a.def.acilisMaliyeti)
+        .slice(0, 8);
+      html += `<div class="aciklama">Ders şartını tam karşılayan bölüm yok. Aşağıda <b>kadrona en uygun,
+        açması en kolay</b> bölümler var — 🎯 <b>Dersleri Ata</b> ile eksik dersleri uygun hocaların boş
+        kotalarına tek tıkla dağıt, ya da yukarıdan 🪄 <b>Akıllı Seçim</b> kullan.</div>`;
+      html += '<table><tr><th>🎯 Tavsiye Bölüm</th><th>Kadro Uyumu</th><th>Eksik Dersler</th><th></th></tr>';
+      for (const { a, fit } of tavsiye) {
+        const yuzde = Math.round(fit * 100);
+        const renk = yuzde >= 75 ? '#7bd88f' : yuzde >= 50 ? '#e6c07b' : '#f4a09c';
+        const gorunen = a.eksik.slice(0, 8);
+        const chips = gorunen.map((id) => {
+          const c = courseDef(id);
+          return `<span class="rozet" style="color:#f4a09c" data-tip-ders="${id}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
+        }).join(' ');
+        const fazla = a.eksik.length > gorunen.length ? ` <small>+${a.eksik.length - gorunen.length}</small>` : '';
+        html += `<tr>
+          <td><b style="color:${a.def.renk}">${a.def.ad}</b> <small>(${a.def.tur === 'onlisans' ? '2 yıl' : '4 yıl'} · ${formatMoney(a.def.acilisMaliyeti)})</small></td>
+          <td><b style="color:${renk}" title="Müfredat derslerinin ne kadarı kadrondaki bir hocanın birincil alanına düşüyor — o dersler %100 verimle işlenir">%${yuzde}</b></td>
+          <td>${chips}${fazla}</td>
+          <td><button class="eylem" data-action="hedefle" data-id="${a.def.id}" title="Eksik dersleri uygun hocaların boş kotalarına dağıt">🎯 Dersleri Ata</button></td>
+        </tr>`;
+      }
+      html += '</table>';
+    }
   } else {
     html += '<table><tr><th>Bölüm</th><th>Tür</th><th>Maliyet</th><th>Diğer şartlar</th><th></th></tr>';
     for (const a of hazir) {
@@ -2091,7 +2132,9 @@ function programGovde(state: GameState): string {
     html += '</table>';
   }
 
-  if (yakin.length > 0) {
+  // "Az Ders Eksik Olanlar" yalnız zaten hazır bölüm varken ayrıca gösterilir —
+  // hazır yokken üstteki tavsiye tablosu en yakınları zaten kapsar (yinelemeyi önler).
+  if (hazir.length > 0 && yakin.length > 0) {
     html += `<h3>Az Ders Eksik Olanlar</h3>
       <table><tr><th>Bölüm</th><th>Eksik dersler</th><th></th></tr>`;
     for (const a of yakin.slice(0, 14)) {
@@ -2112,6 +2155,12 @@ function programGovde(state: GameState): string {
     for (const h of hocalar) {
       hocaAd.set(h.id, h.ad);
       hocaAlan.set(h.id, h.alan);
+    }
+    // açık bölümlerin müfredat dersleri: kotası dolu bir hocanın "yedek" (boşa giden)
+    // dersi = bu kümede OLMAYAN ders → takas edilebilir, hoca yine de atanabilir
+    const acikBolumDersleri = new Set<string>();
+    for (const d of state.departments) {
+      for (const c of deptDef(d.defId).dersler) acikBolumDersleri.add(c);
     }
     html += '<h3>4) Bugünün Ders Programı</h3>';
     html += `<p class="aciklama">Hücredeki seçiciden derse <b>sonradan hoca atayabilirsin</b> —
@@ -2143,11 +2192,19 @@ function programGovde(state: GameState): string {
           const cakisma = programSlots.some(
             (s2) => s2.blok === blok && s2.academicId === h.id && s2.deptId !== dept.id,
           );
-          const dersiVar = (h.verdigiDersler ?? []).includes(slot.courseId);
-          const kotaDolu = !dersiVar && (h.verdigiDersler ?? []).length >= DERS_LIMIT;
-          const neden = cakisma ? ' — aynı saatte başka derste' : kotaDolu ? ` — yıllık kota dolu (${DERS_LIMIT})` : '';
+          const liste = h.verdigiDersler ?? [];
+          const dersiVar = liste.includes(slot.courseId);
+          const kotaDolu = !dersiVar && liste.length >= DERS_LIMIT;
+          // kota dolu ama açık bölüme bağlı olmayan bir "yedek" dersi varsa: takasla atanır
+          const yedekVar = kotaDolu && liste.some((d) => !acikBolumDersleri.has(d));
+          const devreDisi = cakisma || (kotaDolu && !yedekVar);
+          const neden = cakisma ? ' — aynı saatte başka derste'
+            : (kotaDolu && !yedekVar) ? ' — kotası dolu, dört dersi de bölüm dersi'
+              : (kotaDolu && yedekVar) ? ' — kota dolu, yedek dersini bırakır'
+                : '';
+          const etiket = dersiVar ? '' : (kotaDolu && yedekVar) ? ' (♻ takas)' : ' (+ders)';
           return `<option value="${h.id}" ${slot.academicId === h.id ? 'selected' : ''}
-            ${cakisma || kotaDolu ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${dersiVar ? '' : ' (+ders)'}${neden}</option>`;
+            ${devreDisi ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${etiket}${neden}</option>`;
         }).join('');
         const seciciStil = slot.academicId === -1 ? 'border-color:#c25450;background:#3a2426' : '';
         const kilitRozet = slot.kilit

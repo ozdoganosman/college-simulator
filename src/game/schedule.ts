@@ -100,6 +100,32 @@ export function hocaDersCikar(state: GameState, academicId: number, courseId: st
   rebuildDersProgrami(state);
 }
 
+/** Şu an açık olan tüm bölümlerin müfredat derslerinin birleşimi. */
+export function acikBolumDersSeti(state: GameState): Set<string> {
+  const set = new Set<string>();
+  for (const d of state.departments) {
+    for (const c of deptDef(d.defId).dersler) set.add(c);
+  }
+  return set;
+}
+
+/**
+ * Hocanın kotasındaki, HİÇBİR açık bölümün müfredatına girmeyen (boşa giden,
+ * bırakılması güvenli) ilk ders. Kotası dolu bir hocaya GEREKLİ bir ders açmak
+ * için bu "yedek" ders takas edilebilir — açık bir bölümü asla hocasız bırakmaz.
+ * koru: asla bırakılmayacak ders. acikSet: önceden hesaplanmış küme (döngü için).
+ */
+export function birakilabilirDers(
+  state: GameState, a: Academic, koru?: string, acikSet?: Set<string>,
+): string | null {
+  const set = acikSet ?? acikBolumDersSeti(state);
+  for (const d of a.verdigiDersler ?? []) {
+    if (d === koru) continue;
+    if (!set.has(d)) return d;
+  }
+  return null;
+}
+
 /**
  * Hoca için otomatik seçim: MEVCUT seçimleri korur, boş kotasını alan uyumu
  * yüksek ve henüz açılmamış derslerle doldurur.
@@ -129,19 +155,28 @@ export function otoDersSec(state: GameState, academicId: number): void {
 export function bolumuHedefle(state: GameState, defId: string): string[] {
   const kalan: string[] = [];
   let degisti = false;
+  const acikSet = acikBolumDersSeti(state);
   for (const dersId of verilemeyenDersler(state, defId)) {
     let secilen: Academic | null = null;
     let enIyi = -1;
+    let takas: string | null = null; // seçilen hocanın bırakacağı yedek ders
     for (const a of akademisyenler(state)) {
       const liste = a.verdigiDersler ?? [];
-      if (liste.length >= DERS_LIMIT || liste.includes(dersId)) continue;
+      const dolu = liste.length >= DERS_LIMIT;
+      // kota dolu: yalnız boşa giden (yedek) bir dersi takas edilebiliyorsa aday
+      const yedek = dolu ? birakilabilirDers(state, a, dersId, acikSet) : null;
+      if (dolu && yedek === null) continue;
       const e = dersEtki(dersId, a.alan);
       if (e > enIyi) {
         enIyi = e;
         secilen = a;
+        takas = yedek;
       }
     }
     if (secilen) {
+      if (takas !== null) {
+        secilen.verdigiDersler = (secilen.verdigiDersler ?? []).filter((d) => d !== takas);
+      }
       secilen.verdigiDersler = [...(secilen.verdigiDersler ?? []), dersId];
       degisti = true;
     } else {
@@ -164,6 +199,29 @@ export function akilliOtoSec(state: GameState): number {
 
   const acik = new Set<string>();
   const acikDefIds = new Set(state.departments.map((d) => d.defId));
+
+  // ÖNCE zaten açık bölümlerin müfredatını garanti et — akıllı seçim onları asla
+  // düşürüp "hoca yok" bırakmasın. (Artan kotayı dolduran filler dersler sonradan
+  // gerektiğinde takas edilebilir; açık bölüm dersleri korunur.)
+  for (const dept of state.departments) {
+    for (const dersId of deptDef(dept.defId).dersler) {
+      if (acik.has(dersId)) continue;
+      let secilen: Academic | null = null;
+      let enIyi = -Infinity;
+      for (const a of hocalar) {
+        if ((a.verdigiDersler ?? []).length >= DERS_LIMIT) continue;
+        const e = dersEtki(dersId, a.alan);
+        if (e > enIyi) {
+          enIyi = e;
+          secilen = a;
+        }
+      }
+      if (secilen) {
+        secilen.verdigiDersler = [...(secilen.verdigiDersler ?? []), dersId];
+        acik.add(dersId);
+      }
+    }
+  }
 
   const hedefler = DEPT_DEFS
     .filter((d) => !acikDefIds.has(d.id))
@@ -326,6 +384,7 @@ export function rebuildDersProgrami(state: GameState): void {
   // yok) o saatte MÜSAİT bir hoca varsa ders ona verilir — gerekiyorsa ders
   // yıllık seçimlerine eklenir. "Bölüm açık ama hoca yok" ancak kadro fiziken
   // yetmiyorsa kalır (danışman uyarır).
+  const acikSet = acikBolumDersSeti(state); // açık bölüm dersleri (rebuild boyunca sabit)
   for (const s of slots) {
     if (s.academicId !== -1) continue;
     let secilen: Academic | null = null;
@@ -334,7 +393,9 @@ export function rebuildDersProgrami(state: GameState): void {
       if (blokMesgul.has(`${a.id}:${s.blok}`)) continue;
       if ((gunlukBlok.get(a.id) ?? 0) >= 4) continue;
       const sahip = (a.verdigiDersler ?? []).includes(s.courseId);
-      if (!sahip && (a.verdigiDersler ?? []).length >= DERS_LIMIT) continue; // yıllık kota dolu
+      // yıllık kota dolu ve dersi yok: yalnız boşa giden bir dersi takas edilebiliyorsa aday
+      if (!sahip && (a.verdigiDersler ?? []).length >= DERS_LIMIT
+          && birakilabilirDers(state, a, s.courseId, acikSet) === null) continue;
       const puan = dersEtki(s.courseId, a.alan) * (0.5 + a.egitim / 100) + (sahip ? 0.5 : 0);
       if (puan > enIyi) {
         enIyi = puan;
@@ -343,6 +404,13 @@ export function rebuildDersProgrami(state: GameState): void {
     }
     if (!secilen) continue;
     if (!(secilen.verdigiDersler ?? []).includes(s.courseId)) {
+      // gerekiyorsa boşa giden yedek dersi bırakıp yer aç (açık bölüm dersi asla düşmez)
+      if ((secilen.verdigiDersler ?? []).length >= DERS_LIMIT) {
+        const birak = birakilabilirDers(state, secilen, s.courseId, acikSet);
+        if (birak !== null) {
+          secilen.verdigiDersler = (secilen.verdigiDersler ?? []).filter((d) => d !== birak);
+        }
+      }
       secilen.verdigiDersler = [...(secilen.verdigiDersler ?? []), s.courseId];
       notify(state, `📚 Müfredat açığı kapatıldı: ${courseDef(s.courseId).kod} dersi ${secilen.ad}'ın yıllık programına eklendi.`, 'bilgi');
     }
@@ -384,8 +452,15 @@ export function slotaHocaAta(
   }
   if (!(a.verdigiDersler ?? []).includes(slot.courseId)) {
     if ((a.verdigiDersler ?? []).length >= DERS_LIMIT) {
-      notify(state, `${a.ad}'ın yıllık ders kotası dolu (${DERS_LIMIT}) — önce bir dersini bırakın.`, 'kotu');
-      return false;
+      // kota dolu: boşa giden (hiçbir açık bölüme bağlı olmayan) bir dersi varsa
+      // onu bırakıp yer aç — açık bir bölümü asla hocasız bırakma
+      const birak = birakilabilirDers(state, a, slot.courseId);
+      if (birak === null) {
+        notify(state, `${a.ad}'ın dört dersi de açık bölümlere bağlı — kotası boş ya da yedek dersi olan bir hoca seç, yeni hoca al ya da bir bölümü kapat.`, 'kotu');
+        return false;
+      }
+      a.verdigiDersler = (a.verdigiDersler ?? []).filter((d) => d !== birak);
+      notify(state, `♻️ ${a.ad}: boşa giden ${courseDef(birak).kod} bırakıldı, yerine ${courseDef(slot.courseId).kod} eklendi.`, 'bilgi');
     }
     a.verdigiDersler = [...(a.verdigiDersler ?? []), slot.courseId];
   }
