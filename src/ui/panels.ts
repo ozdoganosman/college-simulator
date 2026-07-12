@@ -2217,27 +2217,28 @@ function programGovde(state: GameState): string {
     const kuresizNo = new Map<number, number>();
     tumSiniflar.forEach((r, i) => kuresizNo.set(r.id, i + 1));
 
-    // SÜTUNLAR = DERSLİKLER (bölümler değil): her geçerli derslik bir sütun,
-    // altında ait olduğu bölüm. Bölümün derslikleri aynı programı paylaşır
-    // (bir bölüm gün+seans başına tek ders işler); dersliği olmayan bölüm uyarı sütunu.
+    // SÜTUNLAR = BÖLÜMLER (derslikler değil): bir bölüm gün+seans başına TEK ders
+    // işler — tek hoca, tek sınıf. Birden fazla dersliği olan bölüm bunları AYNI
+    // anda paralel ayrı ders için değil, ek KAPASİTE için kullanır (daha çok öğrenci
+    // sığar), o yüzden aynı ders/hoca her derslikte tekrar gösterilmez — tek sütun,
+    // ×N rozetiyle kaç derslik kullandığı belirtilir.
     const sutunlar: { dept: import('../core/types').Department; etiket: string }[] = [];
     for (const dept of state.departments) {
       const def = deptDef(dept.defId);
       const odalar = state.rooms.filter((r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId === dept.id);
-      if (odalar.length === 0) {
-        sutunlar.push({ dept, etiket: `<b style="color:#f4a09c">⚠ Derslik yok</b><br><small>${def.ad}</small>` });
-      } else {
-        odalar.forEach((r) => {
-          const ad = r.ozelAd ? `⭐ ${esc(r.ozelAd)}` : `🏫 Derslik ${kuresizNo.get(r.id)}`;
-          sutunlar.push({ dept, etiket: `<b style="color:${def.renk}">${ad}</b><br><small>${def.ad}</small>` });
-        });
-      }
+      const birincil = dept.derslikId != null ? odalar.find((r) => r.id === dept.derslikId) : odalar[0];
+      const ad = !birincil
+        ? '<span style="color:#f4a09c">⚠ Derslik yok</span>'
+        : `${birincil.ozelAd ? `⭐ ${esc(birincil.ozelAd)}` : `🏫 Derslik ${kuresizNo.get(birincil.id)}`}${odalar.length > 1 ? ` <b>×${odalar.length}</b>` : ''}`;
+      sutunlar.push({ dept, etiket: `<b style="color:${def.renk}">${def.ad}</b><br><small>${ad}</small>` });
     }
 
-    html += '<h3>4) Yerleşik Haftalık Program <small style="opacity:.7">(derslik × gün-seans ızgarası)</small></h3>';
+    html += '<h3>4) Yerleşik Haftalık Program <small style="opacity:.7">(bölüm × gün-seans ızgarası)</small></h3>';
     html += `<p class="aciklama">🔒 <b>Yerleşik ızgara:</b> hafta içi <b>5 gün × 2 seans (08–12 / 12–16) = 10 satır</b>,
-      her sütun bir <b>derslik</b>. Bölüm açılınca her hücrenin dersi + hocası sabitlenir; bölüm silinene dek
-      değişmez (yalnız hoca ayrılırsa yeniden atanır). Hücreden <b>sonradan hoca atayabilirsin</b> — 📌 kilitlenir.</p>`;
+      her sütun bir <b>bölüm</b> — gün+seans başına tek ders, tek hoca işler (fazladan derslik ×N rozetiyle
+      gösterilir; paralel ayrı ders değil, ek kapasitedir). Bölüm açılınca her hücrenin dersi + hocası
+      sabitlenir; bölüm silinene dek değişmez (yalnız hoca ayrılırsa yeniden atanır). Hücreden
+      <b>sonradan hoca atayabilirsin</b> — 📌 kilitlenir.</p>`;
     html += '<div style="overflow-x:auto"><table class="derslik-izgara"><tr><th>Gün · Seans</th>'
       + sutunlar.map((s) => `<th>${s.etiket}</th>`).join('') + '</tr>';
     for (let gun = 0; gun < HAFTA_GUN; gun++) {
