@@ -18,8 +18,8 @@ import {
 import { courseDef, dersEtki } from '../data/courses';
 import {
   ASISTAN_LIMIT, DERS_LIMIT, acikDersler, akilliOtoSec, asistanlari, dersHucresi, bolumuHedefle,
-  dersYukuVerimi, hocaDersCikar, hocaDersEkle, hocaDersSlotAyarla, otoDersSec, slotKilidiAc,
-  slotaHocaAta, verilemeyenDersler, yukVerimi,
+  dersYukuVerimi, hocaCakisirMi, hocaDersCikar, hocaDersEkle, hocaDersSlotAyarla, otoDersSec,
+  slotKilidiAc, slotaHocaAta, verilemeyenDersler, yukVerimi,
 } from '../game/schedule';
 import { COURSES } from '../data/courses';
 import { formatClock, formatMoney } from '../core/util';
@@ -108,6 +108,12 @@ export function openPanel(name: PanelName): void {
   // fare basılıyken yeniden çizme — mousedown/mouseup arası DOM değişirse tık yutulur
   el.addEventListener('pointerdown', () => { isaretciBasili = true; });
   window.addEventListener('pointerup', () => { isaretciBasili = false; });
+  // 🖐️ hoca sürükle-bırak (Ders Programı ızgarası): kaynak = [data-drag-academic], hedef = [data-drop-dept]
+  el.addEventListener('dragstart', onPanelDragStart);
+  el.addEventListener('dragover', onPanelDragOver);
+  el.addEventListener('dragleave', onPanelDragLeave);
+  el.addEventListener('drop', onPanelDrop);
+  el.addEventListener('dragend', onPanelDragEnd);
   root.appendChild(el);
   acik = { name, el };
   render(getStateRef());
@@ -118,11 +124,12 @@ export function closePanel(): void {
   dersTipGizle();
   acik.el.remove();
   acik = null;
+  suruklenenAcademicId = -1;
 }
 
 export function refreshOpenPanel(state: GameState): void {
   if (!acik) return;
-  if (isaretciBasili) return; // tıklama sürüyor — DOM'u değiştirme
+  if (isaretciBasili || suruklenenAcademicId !== -1) return; // tıklama/sürükleme sürüyor — DOM'u değiştirme
   const simdi = performance.now();
   if (simdi - sonYenileme < 900) return; // canlı sayaçlar için ~saniyede 1 yeterli
   const ae = document.activeElement;
@@ -131,6 +138,69 @@ export function refreshOpenPanel(state: GameState): void {
   }
   sonYenileme = simdi;
   render(state);
+}
+
+// --- Hoca sürükle-bırak: [data-drag-academic] kaynağından [data-drop-dept] hücresine ---------
+
+let suruklenenAcademicId = -1;
+
+function onPanelDragStart(e: Event): void {
+  if (!(e instanceof DragEvent) || !(e.target instanceof HTMLElement)) return;
+  const kaynak = e.target.closest<HTMLElement>('[data-drag-academic]');
+  if (!kaynak) return;
+  suruklenenAcademicId = Number(kaynak.dataset.dragAcademic ?? '-1');
+  if (suruklenenAcademicId < 0) return;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(suruklenenAcademicId)); // Firefox sürüklemeyi başlatmak için veri ister
+  }
+  kaynak.classList.add('suruklenen');
+  acik?.el.classList.add('program-surukleniyor');
+}
+
+function onPanelDragOver(e: Event): void {
+  if (!(e instanceof DragEvent) || !(e.target instanceof HTMLElement) || !getStateRef) return;
+  if (suruklenenAcademicId < 0) return;
+  const hedef = e.target.closest<HTMLElement>('[data-drop-dept]');
+  if (!hedef) return;
+  e.preventDefault(); // varsayılan engellenmezse drop tetiklenmez
+  const deptId = Number(hedef.dataset.dropDept);
+  const gun = Number(hedef.dataset.dropGun);
+  const seans = Number(hedef.dataset.dropSeans);
+  const cakisma = hocaCakisirMi(getStateRef(), deptId, gun, seans, suruklenenAcademicId);
+  hedef.classList.toggle('hedef-uygun', !cakisma);
+  hedef.classList.toggle('hedef-cakisma', cakisma);
+  if (e.dataTransfer) e.dataTransfer.dropEffect = cakisma ? 'none' : 'move';
+}
+
+function onPanelDragLeave(e: Event): void {
+  if (!(e instanceof DragEvent) || !(e.target instanceof HTMLElement)) return;
+  e.target.closest<HTMLElement>('[data-drop-dept]')?.classList.remove('hedef-uygun', 'hedef-cakisma');
+}
+
+function onPanelDrop(e: Event): void {
+  if (!(e instanceof DragEvent) || !(e.target instanceof HTMLElement) || !getStateRef) return;
+  const hedef = e.target.closest<HTMLElement>('[data-drop-dept]');
+  if (!hedef || suruklenenAcademicId < 0) return;
+  e.preventDefault();
+  const deptId = Number(hedef.dataset.dropDept);
+  const gun = Number(hedef.dataset.dropGun);
+  const seans = Number(hedef.dataset.dropSeans);
+  const academicId = suruklenenAcademicId;
+  // render() innerHTML'i hemen değiştirip sürüklenen kaynağı DOM'dan koparır — bu durumda
+  // tarayıcı 'dragend'i kopmuş düğümde tetikler ve delegasyonla acik.el'e hiç ulaşmaz. O yüzden
+  // "sürükleniyor" durumunu dragend'i BEKLEMEDEN burada temizle (dragend yine de zararsızca çalışır).
+  suruklenenAcademicId = -1;
+  acik?.el.classList.remove('program-surukleniyor');
+  slotaHocaAta(getStateRef(), deptId, gun, seans, academicId);
+  render(getStateRef());
+}
+
+function onPanelDragEnd(): void {
+  suruklenenAcademicId = -1;
+  acik?.el.classList.remove('program-surukleniyor');
+  acik?.el.querySelectorAll('.suruklenen').forEach((el) => el.classList.remove('suruklenen'));
+  acik?.el.querySelectorAll('.hedef-uygun,.hedef-cakisma').forEach((el) => el.classList.remove('hedef-uygun', 'hedef-cakisma'));
 }
 
 // --- Ortak yardımcılar --------------------------------------------------------
@@ -2064,7 +2134,7 @@ function programGovde(state: GameState): string {
     const lisansustu = state.agents.filter(
       (a): a is import('../core/types').Student => a.kind === 'ogrenci' && a.level !== 'lisans',
     );
-    html += '<table class="ders-izgara"><tr><th>Hoca</th>'
+    html += '<div style="overflow-x:auto"><table class="ders-izgara"><tr><th>Hoca</th>'
       + '<th>Ders 1</th><th>Ders 2</th><th>Ders 3</th><th>Ders 4</th><th>⚡ Yük</th><th>🧑‍🔬 Asistan</th></tr>';
     for (const h of hocalar) {
       const dersler = h.verdigiDersler ?? [];
@@ -2085,7 +2155,9 @@ function programGovde(state: GameState): string {
         </select>`;
       }
       html += `<tr>
-        <td><b>${RANK_LABEL[h.rank]} ${esc(h.ad)}</b><br>
+        <td><span class="hoca-suruklenebilir" draggable="true" data-drag-academic="${h.id}"
+            title="Sürükleyerek 4) Yerleşik Haftalık Program'daki bir ders hücresine bırak — o dersin hocası olur">
+            <span class="tut" aria-hidden="true">⠿</span> <b>${RANK_LABEL[h.rank]} ${esc(h.ad)}</b></span><br>
           <small>${ALAN_META[h.alan].emoji} ${ALAN_META[h.alan].ad} · eğitim ${h.egitim}</small></td>
         ${[0, 1, 2, 3].map((i) => `<td>${hocaDersHucre(h.id, h.alan, dersler, i)}</td>`).join('')}
         <td><span class="yuk-rozet ${verimSinif}"
@@ -2095,7 +2167,7 @@ function programGovde(state: GameState): string {
         <td>${asistanCipleri}${asistanSecici || (asistanlarim.length === 0 ? '<small style="opacity:.5">—</small>' : '')}</td>
       </tr>`;
     }
-    html += '</table>';
+    html += '</table></div>';
   }
 
   // --- 2) Açık dersler ---
@@ -2211,7 +2283,10 @@ function programGovde(state: GameState): string {
         const alan = hocaAlan.get(slot.academicId)!;
         const hocaObj = hocalar.find((x) => x.id === slot.academicId);
         const verim = hocaObj ? Math.round(dersYukuVerimi(state, hocaObj) * 100) : 100;
-        hoca = `${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!.split(' ').slice(-1)[0])} <small>(%${uyumYuzde(slot.courseId, alan)}${verim < 100 ? `·⚡${verim}` : ''})</small>`;
+        hoca = `<span class="hoca-suruklenebilir" draggable="true" data-drag-academic="${slot.academicId}"
+            title="Sürükleyerek başka bir ders hücresine taşı">
+            <span class="tut" aria-hidden="true">⠿</span> ${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!.split(' ').slice(-1)[0])}
+            <small>(%${uyumYuzde(slot.courseId, alan)}${verim < 100 ? `·⚡${verim}` : ''})</small></span>`;
       }
       const secenekler = hocalar.map((h) => {
         const cakisma = programSlots.some((s2) => s2.gun === gun && s2.seans === seans && s2.academicId === h.id && s2.deptId !== dept.id);
@@ -2266,15 +2341,24 @@ function programGovde(state: GameState): string {
     html += `<p class="aciklama">🔒 <b>Yerleşik ızgara:</b> hafta içi <b>5 gün × 2 seans (08–12 / 12–16) = 10 satır</b>,
       her sütun bir <b>bölüm</b> — gün+seans başına tek ders, tek hoca işler (fazladan derslik ×N rozetiyle
       gösterilir; paralel ayrı ders değil, ek kapasitedir). Bölüm açılınca her hücrenin dersi + hocası
-      sabitlenir; bölüm silinene dek değişmez (yalnız hoca ayrılırsa yeniden atanır). Hücreden
-      <b>sonradan hoca atayabilirsin</b> — 📌 kilitlenir.</p>`;
+      sabitlenir; bölüm silinene dek değişmez (yalnız hoca ayrılırsa yeniden atanır). Bir hoca
+      hücresini ya da yukarıdaki roster'daki bir hocayı <b>sürükleyip başka bir hücreye bırak</b> —
+      aynı gün+seansta çakışma varsa hücre kırmızı olur ve bırakma kabul edilmez.</p>`;
+    html += `<div class="program-lejant">
+      <span>⠿ <b>Sürükle:</b> hoca çipini tut, hedef hücreye bırak</span>
+      <span style="color:#7bd88f">■ <b>Yeşil hücre:</b> bırakılabilir</span>
+      <span style="color:#f4a09c">■ <b>Kırmızı hücre:</b> çakışma, kabul edilmez</span>
+      <span>📌 <b>Kilitli:</b> elle atandı, gece yeniden kurulumda değişmez — tıkla: kilidi aç</span>
+      <span style="opacity:.75">🔒 <b>Yerleşik:</b> otomatik atandı, bölüm silinene dek sabit kalır</span>
+    </div>`;
+    html += '<div class="surukleme-ipucu">🖐️ Bırakınca sürüklediğin hoca bu derse atanır ve 📌 kilitlenir.</div>';
     html += '<div style="overflow-x:auto"><table class="derslik-izgara"><tr><th>Gün · Seans</th>'
       + sutunlar.map((s) => `<th>${s.etiket}</th>`).join('') + '</tr>';
     for (let gun = 0; gun < HAFTA_GUN; gun++) {
       for (let seans = 0; seans < GUNLUK_SEANS; seans++) {
         const gunBasi = seans === 0 ? ' style="border-top:2px solid #2c3550"' : '';
         html += `<tr${gunBasi}><td><b>${HAFTA_KISA[gun]}</b><br><small>${SEANS_SAAT[seans]}</small></td>`
-          + sutunlar.map((s) => `<td>${programHucre(s.dept, gun, seans)}</td>`).join('') + '</tr>';
+          + sutunlar.map((s) => `<td class="prog-hucre" data-drop-dept="${s.dept.id}" data-drop-gun="${gun}" data-drop-seans="${seans}">${programHucre(s.dept, gun, seans)}</td>`).join('') + '</tr>';
       }
     }
     html += '</table></div>';

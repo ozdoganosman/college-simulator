@@ -469,9 +469,18 @@ export function rebuildDersProgrami(state: GameState): void {
   }
 }
 
+/** Hoca aynı gün+seansta BAŞKA bir bölümde ders veriyor mu (çakışma)? Sürükle-bırak önizlemesi de kullanır. */
+export function hocaCakisirMi(
+  state: GameState, deptId: number, gun: number, seans: number, academicId: number,
+): boolean {
+  return (state.dersProgrami ?? []).some(
+    (s) => s.gun === gun && s.seans === seans && s.academicId === academicId && s.deptId !== deptId,
+  );
+}
+
 /**
- * Bugünkü programda bir slota ELLE hoca atar (📅 panelden). Ders hocanın
- * yıllık seçiminde yoksa (kota izin veriyorsa) eklenir — kalıcı çözüm olur.
+ * Bugünkü programda bir slota ELLE hoca atar (📅 panelden, tıkla ya da sürükle-bırak).
+ * Ders hocanın yıllık seçiminde yoksa (kota izin veriyorsa) eklenir — kalıcı çözüm olur.
  */
 export function slotaHocaAta(
   state: GameState, deptId: number, gun: number, seans: number, academicId: number,
@@ -481,9 +490,7 @@ export function slotaHocaAta(
     (x): x is Academic => x.id === academicId && x.kind === 'akademisyen',
   );
   if (!slot || !a) return false;
-  const cakisma = (state.dersProgrami ?? []).some(
-    (s) => s.gun === gun && s.seans === seans && s.academicId === academicId && s.deptId !== deptId,
-  );
+  const cakisma = hocaCakisirMi(state, deptId, gun, seans, academicId);
   if (cakisma) {
     notify(state, `${a.ad} aynı gün+seansta başka bir sınıfta ders veriyor — önce oradan alın.`, 'kotu');
     return false;
