@@ -26,8 +26,8 @@ import { formatClock, formatMoney } from '../core/util';
 import { libraryLevel, validRooms } from '../core/grid';
 import { clearSave, notify, spend } from '../game/state';
 import {
-  bolumKapatToggle, canOpenDepartment, openDepartment, seatCapacity, setDoktoraQuota, setQuota,
-  setYlQuota, toggleGradProgram,
+  BolumKalite, bolumKalitesi, bolumKapatToggle, canOpenDepartment, seatCapacity, setDoktoraQuota,
+  setQuota, setYlQuota, toggleGradProgram,
 } from '../game/departments';
 import {
   asistanAta, asistanBirak, beklenenMaas, fireAcademic, hedefliAyartma, hireFromPool,
@@ -54,6 +54,7 @@ import {
 } from '../game/library';
 import { gnoHesapla as gnoHesaplaUI, hireStaff, removeAgent } from '../game/agents';
 import { BALANCE } from '../data/balance';
+import type { UIState } from './uistate';
 import { DEPT_DEFS, bolumBaskinAlan, deptDef } from '../data/departments';
 import { ROOM_DEFS, ROOM_LIST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
@@ -64,6 +65,7 @@ import {
 export type PanelName = 'bolumler' | 'kadro' | 'program' | 'arastirma' | 'kutuphane' | 'mezunlar' | 'strateji' | 'raporlar' | 'yardim';
 
 let getStateRef: (() => GameState) | null = null;
+let getUiRef: (() => UIState) | null = null;
 let acik: { name: PanelName; el: HTMLDivElement } | null = null;
 
 const PANEL_BASLIK: Record<PanelName, string> = {
@@ -78,8 +80,9 @@ const PANEL_BASLIK: Record<PanelName, string> = {
   yardim: '❓ Nasıl Oynanır',
 };
 
-export function initPanels(getState: () => GameState): void {
+export function initPanels(getState: () => GameState, getUi: () => UIState): void {
   getStateRef = getState;
+  getUiRef = getUi;
 }
 
 let isaretciBasili = false;
@@ -304,9 +307,20 @@ function onPanelClick(e: Event): void {
     case 'kapat':
       closePanel();
       return;
-    case 'bolum-ac':
-      openDepartment(state, id);
-      break;
+    case 'bolum-ac': {
+      // artık doğrudan açmaz: haritadan derslik/lab seçim moduna geçer
+      const { ok, eksik } = canOpenDepartment(state, id);
+      if (!ok) { notify(state, `Bölüm açılamadı: ${eksik[0]}`, 'kotu'); break; }
+      if (getUiRef) {
+        const ui = getUiRef();
+        ui.tool = { kind: 'bolumOdaSec', defId: id, roomIds: [] };
+        ui.selectedRoomId = -1;
+        ui.selectedRoomIds = [];
+        document.dispatchEvent(new CustomEvent('tool-changed'));
+      }
+      closePanel();
+      return;
+    }
     case 'yl-toggle':
       toggleGradProgram(state, Number(id), 'yl');
       break;
@@ -552,6 +566,16 @@ function populerlikYildiz(tabanTalep: number, maxTaban: number): string {
   return `<span title="Popülerlik: YKS taban talebi ${tabanTalep} aday/yıl — popüler bölümler daha kolay dolar, prestijle talep büyür" style="letter-spacing:-2px">${'⭐'.repeat(n)}<span style="opacity:0.22">${'⭐'.repeat(5 - n)}</span></span>`;
 }
 
+function kaliteHucre(k: BolumKalite): string {
+  const renk = k.puan >= 70 ? '#7ee08a' : k.puan >= 45 ? '#f0c674' : '#f4a09c';
+  const tip = `Kadro gücü: ${k.hocaGucu}/100 (eğitim/araştırma × unvan)&#10;`
+    + `Öğrenci/hoca oranı: ${k.ogrHocaOrani}:1 (düşük iyi)&#10;`
+    + `Asistan/hoca oranı: ${k.asistanOrani}&#10;`
+    + `(YL+Dr)/lisans oranı: ${k.ylDrOrani}&#10;`
+    + `YKS talep çarpanı: ×${k.carpan}`;
+  return `<span title="${tip}"><b style="color:${renk}">${k.puan}</b>/100 <small>(×${k.carpan})</small></span>`;
+}
+
 function bolumlerGovde(state: GameState): string {
   // Paylaşılan sayımlar — tek geçiş
   const ogr = new Map<number, { lisans: number; yl: number; dok: number }>();
@@ -665,6 +689,7 @@ function bolumlerGovde(state: GameState): string {
           ${seatCapacity(state, d.id) < d.kontenjan ? `<br><span class="rozet" style="background:#8f3535" title="Kontenjan ${d.kontenjan} ama koltuk ${seatCapacity(state, d.id)} — YKS'de istekli adaylar geri çevrilir! Derslik kur / sıra ekle ya da kontenjanı düşür.">koltuk &lt; kontenjan</span>` : ''}
           ${(d.sonGeriCevrilen ?? 0) > 0 ? `<br><span class="rozet" style="background:#8f5a35" title="Geçen YKS'de ${d.sonGeriCevrilen} istekli aday koltuk yetmediği için kayıt yapamadı — kaçan ödenek ve ücret geliri!">geçen YKS: ${d.sonGeriCevrilen} aday çevrildi</span>` : ''}</td>
         <td>${k.n} / ${def.minAkademisyen}${uyeRozet}</td>
+        <td>${kaliteHucre(bolumKalitesi(state, d.id))}</td>
         <td>${prestijHucre}<br>${mezunHucre}</td>
         <td>${yl} ${dok}</td>
       </tr>`;
@@ -675,7 +700,9 @@ function bolumlerGovde(state: GameState): string {
       : `<table>
       <tr><th>Bölüm · Popülerlik</th><th>Öğrenci (L/YL/Dok)</th><th>Kontenjan</th>
         <th title="Bölüme özel yıllık kayıt ücreti — boş: okul geneli geçerli">Ücret/yıl</th><th>Talep/Kayıt</th>
-        <th>Derslik</th><th>Öğr. Üyesi</th><th title="Bölümün okula kazandırdıkları: yayın prestiji ve mezun karnesi">Prestij · Mezun</th><th>Lisansüstü</th></tr>
+        <th>Derslik</th><th>Öğr. Üyesi</th>
+        <th title="Kadro gücü + öğrenci/hoca oranı + asistan/YL/Dr oranları — YKS talebine 0.85-1.25× çarpan olarak uygulanır">🧑‍🏫 Kalite</th>
+        <th title="Bölümün okula kazandırdıkları: yayın prestiji ve mezun karnesi">Prestij · Mezun</th><th>Lisansüstü</th></tr>
       ${satirlar}
     </table>`;
   }
@@ -688,10 +715,9 @@ function bolumlerGovde(state: GameState): string {
   if (kapali.length > 0) {
     const satirlar = kapali.map((def) => {
       const { ok, eksik } = canOpenDepartment(state, def.id);
-      const gereksinim = `${def.minDerslik} derslik${def.labGerekli ? ' + laboratuvar' : ''}, `
-        + `${def.minAkademisyen} öğr. üyesi`;
+      const gereksinim = `📍 haritadan ${def.minDerslik} derslik/amfi${def.labGerekli ? ' + 1 laboratuvar' : ''} seçilecek`;
       const durum = ok
-        ? '<span style="color:#7ee08a">Hazır</span>'
+        ? '<span style="color:#7ee08a">Hazır — derslik seçebilirsin</span>'
         : `<span style="color:#f4a09c">${esc(eksik.join(', '))}</span>`;
       return `<tr>
         <td><b>${esc(def.ad)}</b></td>
@@ -700,7 +726,7 @@ function bolumlerGovde(state: GameState): string {
         <td>${formatMoney(def.acilisMaliyeti)}</td>
         <td>${durum}</td>
         <td><button class="eylem" data-action="bolum-ac" data-id="${def.id}"
-          ${ok ? '' : `disabled title="${esc(eksik.join(', '))}"`}>Aç</button></td>
+          ${ok ? '' : `disabled title="${esc(eksik.join(', '))}"`}>📍 Derslik Seç</button></td>
       </tr>`;
     }).join('');
     yeniBolum = `<table>
@@ -718,9 +744,12 @@ function bolumlerGovde(state: GameState): string {
     </div>
     ${acikTablo}
     <h3>Yeni Bölüm Aç</h3>
-    <p class="aciklama">Bölüm açmak için yeterli sayıda boş geçerli derslik (varsa laboratuvar)
-      ve bütçe gerekir. Hocalar bölümlere <b>verdikleri derslere göre otomatik</b> bağlanır —
-      📅 Program panelinden ders dağıtmak yeterli. ⭐ popülerlik = YKS taban talebi.</p>
+    <p class="aciklama">📍 <b>Derslik/lab seçimi haritada elle yapılır</b> — "Derslik Seç"e basınca
+      haritada boş bir derslik/amfiye (varsa laboratuvara) tıklayarak seçersin, sonra "Bölümü Aç"
+      ile onaylarsın. Hocalar bölümlere <b>verdikleri derslere göre otomatik</b> bağlanır —
+      📅 Program panelinden ders dağıtmak yeterli, hocayı sonradan da atayabilirsin.
+      ⭐ popülerlik = YKS taban talebi. 🧑‍🏫 Kalite = kadro gücü + öğrenci/hoca oranı + asistan/YL/Dr
+      oranları — yüksek kalite daha çok öğrenci çeker.</p>
     ${yeniBolum}`;
 }
 
@@ -2142,7 +2171,7 @@ function programGovde(state: GameState): string {
         + `<td>${a.def.tur === 'onlisans' ? '2 yıl' : '4 yıl'}</td>`
         + `<td>${formatMoney(a.def.acilisMaliyeti)}</td>`
         + `<td>${digerEksik.length === 0 ? '<span class="gerek">✔ hazır</span>' : digerEksik.map((e) => `<small style="color:#f4a09c">✖ ${e}</small>`).join('<br>')}</td>`
-        + `<td><button class="eylem" data-action="bolum-ac" data-id="${a.def.id}" ${can.ok ? '' : 'disabled'} title="${can.ok ? 'Bölümü aç' : esc(can.eksik.join(' · '))}">Aç</button></td></tr>`;
+        + `<td><button class="eylem" data-action="bolum-ac" data-id="${a.def.id}" ${can.ok ? '' : 'disabled'} title="${can.ok ? 'Haritadan derslik/lab seç' : esc(can.eksik.join(' · '))}">📍 Derslik Seç</button></td></tr>`;
     }
     html += '</table>';
   }

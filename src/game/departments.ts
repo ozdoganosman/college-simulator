@@ -1,33 +1,47 @@
 /**
  * SPEC — Bölümler: açılış, kontenjan, talep/yerleştirme, mezuniyet, prestij, YL/doktora.
  *
- * canOpenDepartment(state, defId): { ok, eksik: string[] }
- *  - Zaten açıksa eksik=['Bölüm zaten açık'].
- *  - Gerekli: def.minDerslik adet geçerli ve BÖLÜMSÜZ (deptId===null) derslik/amfi;
- *    def.labGerekli ise >=1 geçerli laboratuvar (lablar bölümler arası ortak sayılır ama
- *    en az 1 olmalı); para >= acilisMaliyeti. Eksikler Türkçe metinlerle listelenir.
- *  - minAkademisyen açılış şartı DEĞİL (sonradan atanır) ama eksikse yerleştirmede talep 0.
+ * BÖLÜM AÇMA — ELLE DERSLİK SEÇİMİ: derslik/lab ataması artık otomatik dağıtılmaz;
+ * oyuncu haritada boş (bölümsüz) geçerli derslik/amfi ve varsa laboratuvar seçer.
  *
- * openDepartment(state, defId): boolean — spend, Department kaydı (kontenjan=40,
- *   ylKontenjan=8, doktoraKontenjan=4, ylAcik/doktoraAcik=false), notify(iyi),
- *   assignClassrooms çağır, addPrestij(+5).
+ * canOpenDepartment(state, defId): { ok, eksik: string[] } — SEÇİMDEN ÖNCEKİ kapı:
+ *  - Zaten açıksa eksik=['Bölüm zaten açık'].
+ *  - Öğretim kapasitesi (kadro), müfredat şartı (dersler açık derslerde), bütçe.
+ *  - Derslik/lab burada KONTROL EDİLMEZ — oda seçimi haritada yapılır (bkz. aşağı).
+ *
+ * canFinalizeDepartment(state, defId, roomIds): { ok, eksik } — SEÇİM TAMAMLANIRKEN:
+ *  - Seçili odalar geçerli + BÖLÜMSÜZ + doğru türde olmalı.
+ *  - derslik/amfi sayısı >= def.minDerslik; labGerekli ise >=1 laboratuvar seçili olmalı.
+ *  - canOpenDepartment'in tüm şartları da hâlâ geçerli olmalı (para harcanmamış olabilir).
+ *
+ * openDepartmentWithRooms(state, defId, roomIds): boolean — canFinalizeDepartment geçerse:
+ *   spend, seçili odaların deptId'sini yaz (derslikId = ilk derslik/amfi), Department kaydı
+ *   (kontenjan=40, ylKontenjan=8, doktoraKontenjan=4), notify(iyi), rebuildDersProgrami,
+ *   addPrestij(+5).
+ *
+ * assignRoomToDept / unassignRoomFromDept: açık bir bölüme sonradan tek tek elle
+ *   derslik/lab ekleme veya bölümden ayırma (🎓 Bölümler / oda alt çubuğundan).
  *
  * setQuota(state, deptId, kontenjan): 0-300 clamp. setYlQuota/setDoktoraQuota: 0-40.
  *
  * toggleGradProgram(state, deptId, 'yl'|'doktora'): YL için bölümde >=1 docent/prof,
  *   doktora için >=1 prof VE ylAcik gerekli. Açılınca notify(iyi).
  *
- * assignClassrooms(state): geçerli derslik/amfileri bölümlere dağıtır (room.deptId yaz).
- *  - Önce mevcut atamaları koru; bölümsüz geçerli odaları öğrenci sayısı / sıra kapasitesi
- *    oranı en kötü bölüme ver. Bölüm kapanmaz ama oda yıkılırsa deptId null'a döner
- *    (geçersiz odaların deptId'sini null yap). Lablar da (varsa) bölümlere aynı mantıkla.
+ * assignClassrooms(state): artık YALNIZ BAKIM — hiçbir odayı bölümlere DAĞITMAZ.
+ *  - Geçersiz/silinmiş odaların deptId'sini null yapar (bölüm silinmişse de).
+ *  - Her bölümün "yerleşik" (birincil) dersliğini (derslikId) günceller: hâlâ geçerliyse
+ *    korunur, değilse bölümün sahip olduğu ilk geçerli derslik/amfi alınır.
  *
  * seatCapacity(state, deptId): bölüme atanmış geçerli dersliklerdeki 'sira' sayısı.
  *
- * semesterStart(state): dönem başı (game.ts çağırır).
+ * bolumKalitesi(state, deptId): 0-100 kalite puanı + talep çarpanı (0.85-1.25) —
+ *   hoca sayısı×özellikleri (eğitim/araştırma/unvan ağırlığı), öğrenci/hoca oranı
+ *   (düşükse iyi), asistan oranı, YL/Dr oranı bileşenlerinden hesaplanır.
+ *
+ * semesterStart / runYerlestirme: dönem başı YKS yerleştirmesi (game.ts çağırır).
  *  - Her bölüm: akademisyen sayısı < minAkademisyen ise talep=0, notify(kotu).
  *    Yoksa talep = tabanTalep * (prestij/100)^0.7 * strateji çarpanları
- *    ('tanitim' x1.25, 'uluslararasi_ofis' x1.15) * rastgele(0.8-1.2).
+ *    ('tanitim' x1.25, 'uluslararasi_ofis' x1.15) * bolumKalitesi çarpanı * rastgele(0.8-1.2).
  *  - Yeni kayıt = min(kontenjan, floor(talep), seatCapacity - mevcutÖğrenci) (>=0).
  *    spawnStudent ile 'lisans' öğrencileri yarat. sonTalep/sonKayit güncelle.
  *  - YL/doktora açıksa: talep*0.15 → min(ylKontenjan,...) YL; talep*0.08 → doktora.
@@ -48,8 +62,8 @@
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
 import {
-  ALAN_META, Academic, Department, GameState, MezuniyetSonuc, RANK_LABEL, Room, Student,
-  YerlestirmeSatir, donemIndex, yil,
+  ALAN_META, Academic, AcademicRank, Department, GameState, MezuniyetSonuc, RANK_LABEL, Room,
+  Student, YerlestirmeSatir, donemIndex, yil,
 } from '../core/types';
 import { courseDef, dersEtki, rebuildDersProgrami, verilemeyenDersler } from './schedule';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
@@ -72,17 +86,6 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   const def = deptDef(defId);
   const eksik: string[] = [];
 
-  // Toplam derslik, açık bölümlerin asgari ihtiyaçları + yeni bölümün ihtiyacını
-  // karşılamalı (derslikler bölümlere her gün yeniden dengelenerek dağıtılır).
-  const toplamDerslik = state.rooms.filter((r) => sinifMi(r) && r.valid).length;
-  let gerekli = def.minDerslik;
-  for (const d of state.departments) gerekli += deptDef(d.defId).minDerslik;
-  if (toplamDerslik < gerekli) {
-    eksik.push(`Toplam ${gerekli} geçerli derslik gerekli (mevcut ${toplamDerslik})`);
-  }
-  if (def.labGerekli && !state.rooms.some((r) => r.type === 'laboratuvar' && r.valid)) {
-    eksik.push('Geçerli laboratuvar yok');
-  }
   // Öğretim kapasitesi: her bölüm günde 4 blok ders ister, bir hoca günde en çok
   // 2 blok verebilir — kapasite yetmezse program "hoca yok!" ile dolar
   const hocaSayisi = state.agents.filter((a) => a.kind === 'akademisyen').length;
@@ -103,10 +106,31 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   return { ok: eksik.length === 0, eksik };
 }
 
-export function openDepartment(state: GameState, defId: string): boolean {
-  const kontrol = canOpenDepartment(state, defId);
+/** Seçilen odaların bölüm açmaya yeterli olup olmadığını denetler (haritadan elle seçim). */
+export function canFinalizeDepartment(
+  state: GameState, defId: string, roomIds: number[],
+): { ok: boolean; eksik: string[] } {
+  const temel = canOpenDepartment(state, defId);
+  const def = deptDef(defId);
+  const eksik = [...temel.eksik];
+  const odalar = roomIds
+    .map((id) => state.rooms.find((r) => r.id === id))
+    .filter((r): r is Room => !!r && r.valid && r.deptId === null);
+  const derslikSayisi = odalar.filter(sinifMi).length;
+  const labVar = odalar.some((r) => r.type === 'laboratuvar');
+  if (derslikSayisi < def.minDerslik) {
+    eksik.push(`En az ${def.minDerslik} derslik/amfi seçmelisin (şu an ${derslikSayisi})`);
+  }
+  if (def.labGerekli && !labVar) {
+    eksik.push('Bu bölüm için en az 1 laboratuvar seçmelisin');
+  }
+  return { ok: eksik.length === 0, eksik };
+}
+
+/** Bölümü, oyuncunun haritada seçtiği odalarla açar. */
+export function openDepartmentWithRooms(state: GameState, defId: string, roomIds: number[]): boolean {
+  const kontrol = canFinalizeDepartment(state, defId, roomIds);
   if (!kontrol.ok) {
-    // buton "hazır" gösterdiyse bile son durum değişmiş olabilir — sebebi söyle
     notify(state, `Bölüm açılamadı: ${kontrol.eksik[0]}`, 'kotu');
     return false;
   }
@@ -130,13 +154,54 @@ export function openDepartment(state: GameState, defId: string): boolean {
     ucret: null,
     sonGeriCevrilen: 0,
     kapaniyor: false,
+    derslikId: null,
   };
   state.departments.push(dept);
+  const odalar = roomIds
+    .map((id) => state.rooms.find((r) => r.id === id))
+    .filter((r): r is Room => !!r && r.valid && r.deptId === null);
+  for (const r of odalar) r.deptId = dept.id;
+  const ilkDerslik = odalar.find(sinifMi);
+  dept.derslikId = ilkDerslik ? ilkDerslik.id : null;
+
   addPrestij(state, 5);
-  notify(state, `🎉 ${def.ad} bölümü açıldı!`, 'iyi');
-  assignClassrooms(state);
+  notify(state, `🎉 ${def.ad} bölümü açıldı! (${odalar.length} oda seçtin)`, 'iyi');
   rebuildDersProgrami(state);
   return true;
+}
+
+/** Boşta (bölümsüz), geçerli bir derslik/amfi/laboratuvarı AÇIK bir bölüme elle ekler. */
+export function assignRoomToDept(state: GameState, roomId: number, deptId: number): boolean {
+  const room = state.rooms.find((r) => r.id === roomId);
+  const dept = state.departments.find((d) => d.id === deptId);
+  if (!room || !dept || !room.valid || room.deptId !== null
+      || (room.type !== 'derslik' && room.type !== 'amfi' && room.type !== 'laboratuvar')) {
+    return false;
+  }
+  const def = deptDef(dept.defId);
+  room.deptId = deptId;
+  if (sinifMi(room) && dept.derslikId == null) dept.derslikId = room.id;
+  notify(state, `🏫 ${odaTuruAdi(room)} ${def.ad} bölümüne eklendi.`, 'iyi');
+  return true;
+}
+
+/** Bir dersliği/labı bölümünden ayırır — oda yerinde kalır, yalnız atama boşalır. */
+export function unassignRoomFromDept(state: GameState, roomId: number): boolean {
+  const room = state.rooms.find((r) => r.id === roomId);
+  if (!room || room.deptId === null) return false;
+  const dept = state.departments.find((d) => d.id === room.deptId);
+  const def = dept ? deptDef(dept.defId) : null;
+  room.deptId = null;
+  if (dept && dept.derslikId === room.id) {
+    const yeni = state.rooms.find((r) => sinifMi(r) && r.valid && r.deptId === dept.id);
+    dept.derslikId = yeni ? yeni.id : null;
+  }
+  if (def) notify(state, `🔓 ${odaTuruAdi(room)} ${def.ad} bölümünden ayrıldı.`, 'bilgi');
+  return true;
+}
+
+function odaTuruAdi(r: Room): string {
+  return r.type === 'laboratuvar' ? 'Laboratuvar' : r.type === 'amfi' ? 'Amfi' : 'Derslik';
 }
 
 export function setQuota(state: GameState, deptId: number, kontenjan: number): void {
@@ -195,112 +260,18 @@ export function toggleGradProgram(state: GameState, deptId: number, level: 'yl' 
   return true;
 }
 
+/**
+ * Yalnız BAKIM: hiçbir odayı bölümlere dağıtmaz (atama artık tamamen elle —
+ * bkz. openDepartmentWithRooms / assignRoomToDept / unassignRoomFromDept).
+ * Geçersiz/silinmiş oda ya da kapanmış bölüm ataması varsa boşaltır; her bölümün
+ * yerleşik (birincil) dersliğini (derslikId) günceller.
+ */
 export function assignClassrooms(state: GameState): void {
-  // YERLEŞİK: mevcut geçerli atamalar KORUNUR (bölüm silinene / oda bozulana dek
-  // değişmez). Yalnız atamasız/boş odalar en çok ihtiyacı olan bölüme verilir —
-  // böylece derslik yeri sabit kalır ama yeni oda kurulunca aç bölüme akar.
   for (const r of state.rooms) {
     if (r.deptId !== null && (!r.valid || !state.departments.some((d) => d.id === r.deptId))) {
       r.deptId = null;
     }
   }
-  if (state.departments.length === 0) {
-    for (const d of state.departments) d.derslikId = null;
-    return;
-  }
-
-  // oda -> sıra sayısı (tek geçiş)
-  const odaSira = new Map<number, number>();
-  for (const o of state.objects) {
-    if (o.type === 'sira') odaSira.set(o.roomId, (odaSira.get(o.roomId) ?? 0) + 1);
-  }
-
-  // bölüm -> lisans öğrenci sayısı
-  const ogrenci = new Map<number, number>();
-  for (const a of state.agents) {
-    if (a.kind === 'ogrenci' && a.level === 'lisans') {
-      ogrenci.set(a.deptId, (ogrenci.get(a.deptId) ?? 0) + 1);
-    }
-  }
-
-  // KORUNAN atamalardan mevcut doluluğu say (sıfırdan değil)
-  const koltuk = new Map<number, number>();
-  const odaAdedi = new Map<number, number>();
-  for (const d of state.departments) {
-    koltuk.set(d.id, 0);
-    odaAdedi.set(d.id, 0);
-  }
-  for (const r of state.rooms) {
-    if (sinifMi(r) && r.valid && r.deptId !== null && koltuk.has(r.deptId)) {
-      koltuk.set(r.deptId, (koltuk.get(r.deptId) ?? 0) + (odaSira.get(r.id) ?? 0));
-      odaAdedi.set(r.deptId, (odaAdedi.get(r.deptId) ?? 0) + 1);
-    }
-  }
-
-  // minDerslik GÜVENCESİ: hiçbir açık bölüm derslik yoksun kalmasın. Önce atamasız
-  // geçerli derslikten al; yoksa FAZLASI olan bir bölümün BİRİNCİL OLMAYAN dersliğini
-  // devret (yeni açılan bölüm aç kalmasın; bölümlerin birincil dersliği hiç oynamaz).
-  for (const d of state.departments) {
-    const minOda = deptDef(d.defId).minDerslik;
-    let guard = 0;
-    while ((odaAdedi.get(d.id) ?? 0) < minOda && guard++ < 64) {
-      let oda = state.rooms.find((r) => sinifMi(r) && r.valid && r.deptId === null);
-      if (!oda) {
-        let kaynakOda: Room | undefined;
-        for (const src of state.departments) {
-          if (src.id === d.id) continue;
-          if ((odaAdedi.get(src.id) ?? 0) <= deptDef(src.defId).minDerslik) continue; // fazlası yok
-          kaynakOda = state.rooms.find(
-            (r) => sinifMi(r) && r.valid && r.deptId === src.id && r.id !== src.derslikId,
-          );
-          if (kaynakOda) {
-            odaAdedi.set(src.id, (odaAdedi.get(src.id) ?? 0) - 1);
-            koltuk.set(src.id, (koltuk.get(src.id) ?? 0) - (odaSira.get(kaynakOda.id) ?? 0));
-            break;
-          }
-        }
-        oda = kaynakOda;
-      }
-      if (!oda) break; // fiziken derslik yetmiyor
-      oda.deptId = d.id;
-      odaAdedi.set(d.id, (odaAdedi.get(d.id) ?? 0) + 1);
-      koltuk.set(d.id, (koltuk.get(d.id) ?? 0) + (odaSira.get(oda.id) ?? 0));
-    }
-  }
-
-  // Yalnız ATAMASIZ geçerli derslikleri, doyma oranı en düşük bölüme ver.
-  // Bölüm doymuş sayılır: koltuk >= öğrenci + kontenjan VE oda >= minDerslik.
-  for (const r of state.rooms) {
-    if (!sinifMi(r) || !r.valid || r.deptId !== null) continue;
-    let secilen: Department | null = null;
-    let enKotu = Infinity;
-    for (const d of state.departments) {
-      const ihtiyac = Math.max(1, (ogrenci.get(d.id) ?? 0) + d.kontenjan);
-      const mevcut = koltuk.get(d.id) ?? 0;
-      const minOda = deptDef(d.defId).minDerslik;
-      if (mevcut >= ihtiyac && (odaAdedi.get(d.id) ?? 0) >= minOda) continue; // doydu
-      const oran = mevcut / ihtiyac;
-      if (oran < enKotu) {
-        enKotu = oran;
-        secilen = d;
-      }
-    }
-    // hepsi doyduysa bile atamasız oda kalmasın: en az odalı bölüme ver
-    if (!secilen) {
-      let enAz = Infinity;
-      for (const d of state.departments) {
-        const oda = odaAdedi.get(d.id) ?? 0;
-        if (oda < enAz) { enAz = oda; secilen = d; }
-      }
-    }
-    if (secilen) {
-      r.deptId = secilen.id;
-      koltuk.set(secilen.id, (koltuk.get(secilen.id) ?? 0) + (odaSira.get(r.id) ?? 0));
-      odaAdedi.set(secilen.id, (odaAdedi.get(secilen.id) ?? 0) + 1);
-    }
-  }
-
-  // Her bölümün YERLEŞİK (birincil) dersliği: hâlâ geçerliyse koru, değilse ilk atanan.
   for (const d of state.departments) {
     const gecerli = d.derslikId != null && state.rooms.some(
       (r) => r.id === d.derslikId && sinifMi(r) && r.valid && r.deptId === d.id,
@@ -308,17 +279,6 @@ export function assignClassrooms(state: GameState): void {
     if (!gecerli) {
       const ilk = state.rooms.find((r) => sinifMi(r) && r.valid && r.deptId === d.id);
       d.derslikId = ilk ? ilk.id : null;
-    }
-  }
-
-  // Lablar: sticky — yalnız atamasız/geçersiz olanları lab gerektiren bölümlere dağıt
-  const labBolumler = state.departments.filter((d) => deptDef(d.defId).labGerekli);
-  if (labBolumler.length > 0) {
-    let i = 0;
-    for (const r of state.rooms) {
-      if (r.type !== 'laboratuvar' || !r.valid || r.deptId !== null) continue;
-      r.deptId = labBolumler[i % labBolumler.length].id;
-      i++;
     }
   }
 }
@@ -334,6 +294,69 @@ export function seatCapacity(state: GameState, deptId: number): number {
     if (o.type === 'sira' && odalar.has(o.roomId) && (o.yipranma ?? 0) < 100) sira++;
   }
   return sira;
+}
+
+const RANK_AGIRLIK: Record<AcademicRank, number> = { arsgor: 1, dr: 1.15, docent: 1.3, prof: 1.5 };
+
+export interface BolumKalite {
+  /** 0-100 gösterge puanı */
+  puan: number;
+  /** hoca sayısı × özellikleri (eğitim/araştırma/unvan) bileşeni, 0-100 */
+  hocaGucu: number;
+  /** öğrenci / hoca oranı (ham sayı — düşük iyi) */
+  ogrHocaOrani: number;
+  /** asistan / hoca oranı (ham sayı) */
+  asistanOrani: number;
+  /** (YL+doktora) / lisans oranı (ham sayı) */
+  ylDrOrani: number;
+  /** YKS talebine uygulanacak çarpan (0.85-1.25) */
+  carpan: number;
+}
+
+/**
+ * Bölüm kalitesi: hoca sayısı × özellikleri (eğitim/araştırma, unvan ağırlıklı),
+ * öğrenci başına düşen hoca sayısı, asistan oranı ve YL/doktora oranından
+ * hesaplanır. YKS talebine 0.85-1.25 arası çarpan olarak uygulanır.
+ */
+export function bolumKalitesi(state: GameState, deptId: number): BolumKalite {
+  const hocalar = state.agents.filter(
+    (a): a is Academic => a.kind === 'akademisyen' && a.deptId === deptId,
+  );
+  const hocaIds = new Set(hocalar.map((h) => h.id));
+  const hocaGucuHam = hocalar.length === 0 ? 0 : hocalar.reduce(
+    (t, h) => t + (h.egitim * 0.6 + h.arastirma * 0.4) * RANK_AGIRLIK[h.rank], 0,
+  ) / hocalar.length;
+  const hocaGucu = clamp(hocaGucuHam / 1.2, 0, 100); // ~0-90×1.5 tavanı 100'e ölçekle
+
+  let ogrenci = 0, lisans = 0, ylDr = 0, asistanSayisi = 0;
+  for (const a of state.agents) {
+    if (a.kind !== 'ogrenci' || a.deptId !== deptId) continue;
+    ogrenci++;
+    if (a.level === 'lisans') lisans++; else ylDr++;
+    if (a.asistani !== -1 && hocaIds.has(a.asistani)) asistanSayisi++;
+  }
+  const ogrHocaOrani = hocalar.length > 0 ? ogrenci / hocalar.length : ogrenci > 0 ? 99 : 0;
+  const asistanOrani = hocalar.length > 0 ? asistanSayisi / hocalar.length : 0;
+  const ylDrOrani = lisans > 0 ? ylDr / lisans : ylDr > 0 ? 1 : 0;
+
+  // öğrenci/hoca oranı: 8:1 ideal (100 puan) → 40:1 kötü (0 puan)
+  const oranPuan = clamp(100 - ((ogrHocaOrani - 8) / 32) * 100, 0, 100);
+  const puan = Math.round(clamp(
+    hocaGucu * 0.45
+    + oranPuan * 0.30
+    + clamp(asistanOrani * 100, 0, 100) * 0.15
+    + clamp(ylDrOrani * 200, 0, 100) * 0.10,
+    0, 100,
+  ));
+  const carpan = 0.85 + (puan / 100) * 0.4;
+
+  return {
+    puan, hocaGucu: Math.round(hocaGucu),
+    ogrHocaOrani: Math.round(ogrHocaOrani * 10) / 10,
+    asistanOrani: Math.round(asistanOrani * 100) / 100,
+    ylDrOrani: Math.round(ylDrOrani * 100) / 100,
+    carpan: Math.round(carpan * 100) / 100,
+  };
 }
 
 /**
@@ -402,6 +425,7 @@ export function runYerlestirme(state: GameState): boolean {
     talep *= 1 + cazibePuani(state) / 250; // kampüs cazibesi: yurt + ulaşım + faaliyet (en çok +%40)
     if (state.strategies.includes('tanitim')) talep *= 1.25;
     if (state.strategies.includes('uluslararasi_ofis')) talep *= 1.15;
+    talep *= bolumKalitesi(state, dept.id).carpan; // kadro kalitesi: 0.85-1.25
     talep *= randRange(state, 0.8, 1.2);
 
     // Kontenjan burs kademelerine bölünür (vakıf modeli); ücret 0 ise herkes burslu.

@@ -4,6 +4,7 @@ import {
 } from '../game/build';
 import { placePrefab, prefabDef, prefabOrigin, prefabRect, resizeRoom } from '../game/prefab';
 import { moveGroup, moveRoom, roomOuterRect } from '../game/build';
+import { notify } from '../game/state';
 import { Camera, clampCamera, screenToTile, zoomAt } from './camera';
 import { sesInsa } from './audio';
 import { isCeremonyOpen } from './ceremony';
@@ -83,6 +84,29 @@ export function attachInput(
             document.dispatchEvent(new CustomEvent('tool-changed'));
           }
         }
+      } else if (t.kind === 'bolumOdaSec') {
+        // bölüm açma: haritada tıklanan boş derslik/amfi/laboratuvarı seçime ekle/çıkar
+        const st = state();
+        const rid = st.roomAt[tileIndex(tile.x, tile.y)];
+        const room = rid !== -1 ? st.rooms.find((r) => r.id === rid) : undefined;
+        if (!room) return;
+        const i = t.roomIds.indexOf(room.id);
+        if (i >= 0) {
+          t.roomIds.splice(i, 1);
+          document.dispatchEvent(new CustomEvent('tool-changed'));
+          return;
+        }
+        const dogruTur = room.type === 'derslik' || room.type === 'amfi' || room.type === 'laboratuvar';
+        if (!room.valid || !dogruTur) {
+          notify(st, 'Yalnız geçerli (kullanıma hazır) derslik/amfi/laboratuvar seçilebilir.', 'kotu');
+          return;
+        }
+        if (room.deptId !== null) {
+          notify(st, 'Bu oda başka bir bölüme ait — önce ondan ayrılmalı.', 'kotu');
+          return;
+        }
+        t.roomIds.push(room.id);
+        document.dispatchEvent(new CustomEvent('tool-changed'));
       } else if (t.kind === 'sec') {
         // Shift+tık: binayı çoklu seçime ekle/çıkar
         if (e.shiftKey) {

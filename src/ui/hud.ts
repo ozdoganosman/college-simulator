@@ -10,7 +10,10 @@ import {
   PREFABS, autoFurnishCost, autoFurnishRoom, prefabCost, prefabOzet, roomFurnishPlan,
   sablonlar, sablonKaydet, sablonSil,
 } from '../game/prefab';
-import { runYerlestirme } from '../game/departments';
+import {
+  assignRoomToDept, canFinalizeDepartment, openDepartmentWithRooms, runYerlestirme,
+  unassignRoomFromDept,
+} from '../game/departments';
 import { gnoHesapla } from '../game/agents';
 import { oyuncuSirasi } from '../game/rivals';
 import { cazibePuani } from '../game/campus';
@@ -212,6 +215,53 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
     subbarEl.appendChild(b);
   };
 
+  if (ui.tool.kind === 'bolumOdaSec') {
+    // BÖLÜM AÇMA: haritadan elle derslik/lab seçim modu — toolbar kategorilerinden önce göster
+    const t = ui.tool;
+    const def = deptDef(t.defId);
+    const div = document.createElement('div');
+    div.className = 'gerek-liste';
+    const derslikSayisi = t.roomIds.filter((id) => {
+      const r = state.rooms.find((x) => x.id === id);
+      return r && (r.type === 'derslik' || r.type === 'amfi');
+    }).length;
+    const labSayisi = t.roomIds.length - derslikSayisi;
+    const cip = (etiketMetin: string, tamam: boolean) =>
+      `<span class="gerek${tamam ? '' : ' eksik'}">${tamam ? '✔' : '✖'} ${etiketMetin}</span>`;
+    let html = `<span class="baslik">📍 ${escapeHtml(def.ad)} için haritada derslik/amfi${def.labGerekli ? ' + laboratuvar' : ''} tıkla</span>`;
+    html += cip(`Derslik/amfi ${derslikSayisi}/${def.minDerslik}`, derslikSayisi >= def.minDerslik);
+    if (def.labGerekli) html += cip(`Laboratuvar ${labSayisi}/1`, labSayisi >= 1);
+    div.innerHTML = html;
+
+    const eylem = document.createElement('div');
+    eylem.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
+    const kontrol = canFinalizeDepartment(state, t.defId, t.roomIds);
+    const acBtn = document.createElement('button');
+    acBtn.className = 'sub-btn';
+    acBtn.innerHTML = `🎉 Bölümü Aç <span class="fiyat">${formatMoney(def.acilisMaliyeti)}</span>`;
+    if (!kontrol.ok) { acBtn.disabled = true; acBtn.title = kontrol.eksik.join(' · '); }
+    acBtn.addEventListener('click', () => {
+      if (openDepartmentWithRooms(state, t.defId, t.roomIds)) {
+        ui.tool = { kind: 'sec' };
+        document.dispatchEvent(new CustomEvent('tool-changed'));
+      } else {
+        renderSubbar(getState, ui);
+      }
+    });
+    eylem.appendChild(acBtn);
+    const iptalBtn = document.createElement('button');
+    iptalBtn.className = 'sub-btn';
+    iptalBtn.innerHTML = '✖ İptal';
+    iptalBtn.addEventListener('click', () => {
+      ui.tool = { kind: 'sec' };
+      document.dispatchEvent(new CustomEvent('tool-changed'));
+    });
+    eylem.appendChild(iptalBtn);
+    div.appendChild(eylem);
+    subbarEl.appendChild(div);
+    return;
+  }
+
   if (acikKategori === 'hazir') {
     for (const p of PREFABS) {
       item(
@@ -365,6 +415,33 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         ? '<span class="gerek">✔ Oda kullanıma hazır</span>'
         : '';
       div.innerHTML = html;
+
+      // 🏫 BÖLÜM BAĞLANTISI: derslik/amfi/lab'ı elle bir bölüme ekle / bölümden ayır
+      const bolumOdasi = room.type === 'derslik' || room.type === 'amfi' || room.type === 'laboratuvar';
+      if (bolumOdasi && room.valid) {
+        if (room.deptId !== null) {
+          const sahipDept = state.departments.find((d) => d.id === room.deptId);
+          const ayirBtn = document.createElement('button');
+          ayirBtn.className = 'sub-btn';
+          ayirBtn.innerHTML = `🔓 ${sahipDept ? escapeHtml(deptDef(sahipDept.defId).ad) : 'Bölümden'} Ayır`;
+          ayirBtn.title = 'Bu odayı bölümünden ayırır — oda yerinde kalır, başka bölüme eklenebilir';
+          ayirBtn.addEventListener('click', () => {
+            unassignRoomFromDept(state, room.id);
+            renderSubbar(getState, ui);
+          });
+          div.appendChild(ayirBtn);
+        } else if (state.departments.length > 0) {
+          const secici = document.createElement('select');
+          secici.className = 'kontenjan-input';
+          secici.innerHTML = '<option value="">🏫 Bölüme ekle…</option>'
+            + state.departments.map((d) => `<option value="${d.id}">${escapeHtml(deptDef(d.defId).ad)}</option>`).join('');
+          secici.addEventListener('change', () => {
+            if (secici.value) assignRoomToDept(state, room.id, Number(secici.value));
+            renderSubbar(getState, ui);
+          });
+          div.appendChild(secici);
+        }
+      }
 
       // otomatik döşeme: eksik eşyaları boyuta göre desenle yerleştir
       const plan = roomFurnishPlan(state, room);

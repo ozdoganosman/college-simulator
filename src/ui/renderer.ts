@@ -656,6 +656,33 @@ export function render(
     }
   }
 
+  // --- bölüm açma: haritada seçilebilir/seçili derslik-lab vurgusu ---
+  if (ui.tool.kind === 'bolumOdaSec') {
+    const secili = new Set(ui.tool.roomIds);
+    for (const room of state.rooms) {
+      const uygunTur = room.type === 'derslik' || room.type === 'amfi' || room.type === 'laboratuvar';
+      if (!uygunTur || !room.valid) continue;
+      if (room.deptId !== null && !secili.has(room.id)) continue; // başka bölüme ait
+      const r = roomOuterRect(state, room.id);
+      if (!r) continue;
+      const w = (r.x1 - r.x0 + 1) * TILE, h = (r.y1 - r.y0 + 1) * TILE;
+      if (secili.has(room.id)) {
+        ctx.strokeStyle = 'rgba(232,198,106,0.95)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([]);
+        ctx.strokeRect(r.x0 * TILE, r.y0 * TILE, w, h);
+        ctx.fillStyle = 'rgba(232,198,106,0.18)';
+        ctx.fillRect(r.x0 * TILE, r.y0 * TILE, w, h);
+      } else {
+        ctx.strokeStyle = 'rgba(120,220,150,0.65)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(r.x0 * TILE, r.y0 * TILE, w, h);
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
   // --- araç önizlemesi ---
   drawToolPreview(ctx, state, ui);
 

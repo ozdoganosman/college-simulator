@@ -138,6 +138,8 @@ interface Ctx {
   objById: Map<number, PlacedObject>;
   /** deptId -> boş sıra yığını (geçerli, bölüme atanmış dersliklerde) */
   freeSira: Map<number, PlacedObject[]>;
+  /** KAMPÜS GENELİ boş sıralar (hangi bölüme ait olursa olsun) — serbest çalışma için */
+  freeSiraAny: PlacedObject[];
   freeKlozet: PlacedObject[];
   freeYemekSandalye: PlacedObject[];
   freeKantinSandalye: PlacedObject[];
@@ -151,6 +153,8 @@ interface Ctx {
   bankoOf: Map<number, PlacedObject>;
   labs: Room[];
   kutuphaneler: Room[];
+  /** tüm geçerli derslik/amfiler, bölüm ayrımı yok — serbest çalışma için */
+  serbestCalismaOdalari: Room[];
   /** geçerli kütüphane oda id'leri (çalışma hızı kontrolü) */
   kutuphaneIds: Set<number>;
   /** deptId -> bölümün baskın alanı (kütüphane çalışması hangi alanda gelişir) */
@@ -184,16 +188,23 @@ function buildCtx(state: GameState, dk: number): Ctx {
   const kutuphaneler: Room[] = [];
   const yemekhaneler: Room[] = [];
   const kantinler: Room[] = [];
+  // SERBEST ÇALIŞMA: tüm geçerli derslik/amfiler, bölüm ayrımı yok — öğrenci/hoca
+  // boş vakitte kafasına göre herhangi birini kullanır (yalnız PLANLI ders saatleri
+  // yerleşik programa/bölüm sahipliğine bağlı kalır — bkz. deptClassrooms).
+  const serbestCalismaOdalari: Room[] = [];
 
   const yurtOdalar: Room[] = [];
   for (const r of state.rooms) {
     roomById.set(r.id, r);
     if (!r.valid) continue;
     if (r.type === 'yurt') yurtOdalar.push(r);
-    if ((r.type === 'derslik' || r.type === 'amfi') && r.deptId !== null) {
-      const liste = deptClassrooms.get(r.deptId);
-      if (liste) liste.push(r);
-      else deptClassrooms.set(r.deptId, [r]);
+    if (r.type === 'derslik' || r.type === 'amfi') {
+      serbestCalismaOdalari.push(r);
+      if (r.deptId !== null) {
+        const liste = deptClassrooms.get(r.deptId);
+        if (liste) liste.push(r);
+        else deptClassrooms.set(r.deptId, [r]);
+      }
     } else if (r.type === 'laboratuvar') labs.push(r);
     else if (r.type === 'kutuphane') kutuphaneler.push(r);
     else if (r.type === 'yemekhane') yemekhaneler.push(r);
@@ -202,6 +213,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
 
   const objById = new Map<number, PlacedObject>();
   const freeSira = new Map<number, PlacedObject[]>();
+  const freeSiraAny: PlacedObject[] = [];
   const freeKlozet: PlacedObject[] = [];
   const freeYemekSandalye: PlacedObject[] = [];
   const freeKantinSandalye: PlacedObject[] = [];
@@ -228,10 +240,13 @@ function buildCtx(state: GameState, dk: number): Ctx {
     const oda = o.roomId >= 0 ? roomById.get(o.roomId) : undefined;
     switch (o.type) {
       case 'sira':
-        if (oda && oda.valid && oda.deptId !== null && (oda.type === 'derslik' || oda.type === 'amfi')) {
-          const yigin = freeSira.get(oda.deptId);
-          if (yigin) yigin.push(o);
-          else freeSira.set(oda.deptId, [o]);
+        if (oda && oda.valid && (oda.type === 'derslik' || oda.type === 'amfi')) {
+          freeSiraAny.push(o); // serbest çalışma: bölüm ayrımı yok, herkes kullanabilir
+          if (oda.deptId !== null) {
+            const yigin = freeSira.get(oda.deptId);
+            if (yigin) yigin.push(o);
+            else freeSira.set(oda.deptId, [o]);
+          }
         }
         break;
       case 'klozet':
@@ -344,6 +359,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     blokDersleri,
     objById,
     freeSira,
+    freeSiraAny,
     freeKlozet,
     freeYemekSandalye,
     freeKantinSandalye,
@@ -356,6 +372,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     bankoOf,
     labs,
     kutuphaneler,
+    serbestCalismaOdalari,
     kutuphaneIds: new Set(kutuphaneler.map((r) => r.id)),
     deptAlan,
     yurtOdalar,
@@ -614,6 +631,25 @@ function tryKutuphane(state: GameState, s: Student, ctx: Ctx, bitis: number): bo
   return true;
 }
 
+/**
+ * Boş bir DERSLİĞE (bölüm ayrımı yok — kafasına göre) oturup kendi kendine
+ * çalış. Ders programındaki PLANLI dersler yerleşik programa/bölüm sahipliğine
+ * bağlı kalır; bu yalnız boş vakit/serbest çalışma içindir.
+ */
+function tryDerslikCalis(state: GameState, s: Student, ctx: Ctx, bitis: number): boolean {
+  const obj = ctx.freeSiraAny.length > 0 ? ctx.freeSiraAny.pop() : undefined;
+  if (!obj) return false;
+  obj.reservedBy = s.id;
+  if (!goTo(state, s, { x: obj.x, y: obj.y })) {
+    obj.reservedBy = -1;
+    return false;
+  }
+  s.usingObject = obj.id;
+  s.activity = 'arastirmaya_gidiyor';
+  s.activityUntil = bitis;
+  return true;
+}
+
 function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): void {
   const dk = ctx.dk;
   const n = s.needs;
@@ -639,6 +675,7 @@ function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
     if (tryClass(state, s, ctx, blok)) return;
     if (s.level !== 'lisans' && tryResearch(state, s, ctx, bitis)) return;
     if (tryKutuphane(state, s, ctx, bitis)) return; // sıra yok: kütüphanede çalış
+    if (tryDerslikCalis(state, s, ctx, bitis)) return; // kütüphane de yok/dolu: boş bir dersliğe otur
   }
 
   // 3) öğle yemeği
@@ -646,10 +683,14 @@ function decideStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
     if (trySatisfy(state, s, ctx, 'aclik')) return;
   }
 
-  // 5) yüksek (kritik olmayan) ihtiyaç, kendi kendine kütüphane çalışması ya da gezinme
+  // 5) yüksek (kritik olmayan) ihtiyaç, kendi kendine çalışma (kütüphane ya da boş
+  // bir derslik — kafasına göre) ya da gezinme
   const yuksek = enBuyukIhtiyac(n, 60);
   if (yuksek && trySatisfy(state, s, ctx, yuksek)) return;
-  if (chance(state, s.kisilik === 'kitapkurdu' ? 0.6 : 0.3) && tryKutuphane(state, s, ctx, dk + 90)) return;
+  if (chance(state, s.kisilik === 'kitapkurdu' ? 0.6 : 0.3)) {
+    if (tryKutuphane(state, s, ctx, dk + 90)) return;
+    if (tryDerslikCalis(state, s, ctx, dk + 90)) return;
+  }
   idleWander(state, s, dtMin);
 }
 
@@ -833,7 +874,12 @@ function startAcademicResearch(state: GameState, a: Academic, ctx: Ctx): void {
     a.activityUntil = -1;
     return;
   }
-  const odalar = ctx.labs.length > 0 ? ctx.labs : ctx.kutuphaneler;
+  // hocalar da kafasına göre çalışır: öncelik lab/kütüphane, ama ara sıra (ya da
+  // ikisi de yoksa) boş bir derslikte de çalışabilir — bölüm ayrımı yok.
+  let odalar = ctx.labs.length > 0 ? ctx.labs : ctx.kutuphaneler;
+  if ((odalar.length === 0 || chance(state, 0.2)) && ctx.serbestCalismaOdalari.length > 0) {
+    odalar = ctx.serbestCalismaOdalari;
+  }
   if (odalar.length > 0) {
     const hedef = randomRoomTile(state, pick(state, odalar));
     if (hedef && goTo(state, a, hedef)) {

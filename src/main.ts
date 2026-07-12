@@ -58,7 +58,7 @@ function swapState(yeni: GameState): void {
 
 attachInput(canvas, () => state, cam, ui);
 initHud(() => state, ui);
-initPanels(() => state);
+initPanels(() => state, () => ui);
 initTutorial();
 initAdvisor();
 initEventCard(() => state);

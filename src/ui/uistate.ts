@@ -12,7 +12,8 @@ export type Tool =
   | { kind: 'hazir'; prefab: string }
   | { kind: 'tasi'; roomId: number }
   | { kind: 'boyutlandir'; roomId: number; prefab: string }
-  | { kind: 'tasiGrup'; roomIds: number[] };
+  | { kind: 'tasiGrup'; roomIds: number[] }
+  | { kind: 'bolumOdaSec'; defId: string; roomIds: number[] };
 
 /** Isı haritası katmanları — haritanın üstüne renk kaplaması basar. */
 export type Katman = 'yok' | 'mutluluk' | 'aclik' | 'kir' | 'yipranma';
