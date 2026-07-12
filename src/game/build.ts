@@ -1,5 +1,5 @@
 import {
-  FloorId, GameState, MAP_W, PlacedObject, Room, RoomType,
+  FloorId, GameState, GATE, MAP_W, PlacedObject, Room, RoomType,
   WALL_DOOR, WALL_NONE, WALL_SOLID, inBounds, tileIndex,
 } from '../core/types';
 import { validateRooms } from '../core/grid';
@@ -201,6 +201,112 @@ export function deleteRoom(state: GameState, roomId: number): void {
   state.rooms.splice(idx, 1);
   validateRooms(state);
   notify(state, `${ROOM_DEFS[room.type].ad} oda ataması silindi (inşaat ve eşyalar yerinde).`, 'bilgi');
+}
+
+// --- Bina taşıma / kopyalama / tek tık yıkım ---------------------------------
+
+/** Odanın DUVARLAR DAHİL dış dikdörtgeni (iç kareler ±1). null = boş oda. */
+export function roomOuterRect(
+  state: GameState, roomId: number,
+): { x0: number; y0: number; x1: number; y1: number } | null {
+  const room = state.rooms.find((r) => r.id === roomId);
+  if (!room || room.tiles.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const t of room.tiles) {
+    const x = t % MAP_W, y = Math.floor(t / MAP_W);
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  return { x0: minX - 1, y0: minY - 1, x1: maxX + 1, y1: maxY + 1 };
+}
+
+/** Binayı yeni sol-üst köşeye (nx0,ny0) taşıyabilir miyiz? */
+export function canMoveRoom(
+  state: GameState, roomId: number, nx0: number, ny0: number,
+): { ok: boolean; neden: string } {
+  const rect = roomOuterRect(state, roomId);
+  if (!rect) return { ok: false, neden: 'oda bulunamadı' };
+  const w = rect.x1 - rect.x0 + 1, h = rect.y1 - rect.y0 + 1;
+  const dx = nx0 - rect.x0, dy = ny0 - rect.y0;
+  // kaynak dikdörtgen: yalnız bu binaya ait olmalı (başka oda karesi içermemeli)
+  const kaynak = new Set<number>();
+  for (let y = rect.y0; y <= rect.y1; y++) {
+    for (let x = rect.x0; x <= rect.x1; x++) {
+      if (!inBounds(x, y)) continue;
+      const t = tileIndex(x, y);
+      kaynak.add(t);
+      const rid = state.roomAt[t];
+      if (rid !== -1 && rid !== roomId) return { ok: false, neden: 'başka odayla iç içe — taşınamaz' };
+    }
+  }
+  // hedef dikdörtgen: kaynağa ait olmayan her kare TAMAMEN boş olmalı
+  for (let y = ny0; y < ny0 + h; y++) {
+    for (let x = nx0; x < nx0 + w; x++) {
+      if (!inBounds(x, y)) return { ok: false, neden: 'harita dışına taşar' };
+      if (x === GATE.x && y === GATE.y) return { ok: false, neden: 'girişin üstüne taşınamaz' };
+      const t = tileIndex(x, y);
+      if (kaynak.has(t)) continue; // kendi üstünde kayma
+      if (state.floor[t] !== null || state.wall[t] !== WALL_NONE || state.roomAt[t] !== -1) {
+        return { ok: false, neden: 'hedef alan dolu' };
+      }
+      if (state.objects.some((o) => o.x === x && o.y === y)) return { ok: false, neden: 'hedef alan dolu (eşya)' };
+    }
+  }
+  return { ok: dx !== 0 || dy !== 0, neden: dx === 0 && dy === 0 ? 'aynı yer' : '' };
+}
+
+/** Binayı taşı — zemin/duvar/kapı/eşya/oda ataması hep birlikte kayar. */
+export function moveRoom(state: GameState, roomId: number, nx0: number, ny0: number): boolean {
+  const kontrol = canMoveRoom(state, roomId, nx0, ny0);
+  if (!kontrol.ok) {
+    if (kontrol.neden && kontrol.neden !== 'aynı yer') notify(state, `Taşınamadı: ${kontrol.neden}.`, 'kotu');
+    return false;
+  }
+  const room = state.rooms.find((r) => r.id === roomId)!;
+  const rect = roomOuterRect(state, roomId)!;
+  const dx = nx0 - rect.x0, dy = ny0 - rect.y0;
+
+  // kaynak karelerini fotoğrafla (zemin + duvar), sonra temizle
+  const kar: { t: number; floor: FloorId | null; wall: number }[] = [];
+  for (let y = rect.y0; y <= rect.y1; y++) {
+    for (let x = rect.x0; x <= rect.x1; x++) {
+      const t = tileIndex(x, y);
+      kar.push({ t, floor: state.floor[t], wall: state.wall[t] });
+      state.floor[t] = null;
+      state.wall[t] = WALL_NONE;
+      state.roomAt[t] = -1;
+    }
+  }
+  // hedefe yaz
+  for (const s of kar) {
+    const x = (s.t % MAP_W) + dx, y = Math.floor(s.t / MAP_W) + dy;
+    const nt = tileIndex(x, y);
+    state.floor[nt] = s.floor;
+    state.wall[nt] = s.wall;
+  }
+  // oda karelerini kaydır + roomAt yeniden yaz
+  room.tiles = room.tiles.map((t) => tileIndex((t % MAP_W) + dx, Math.floor(t / MAP_W) + dy));
+  for (const t of room.tiles) state.roomAt[t] = roomId;
+  // eşyaları kaydır (kaynak dikdörtgen içindeki her eşya) + kullanıcıları serbest bırak
+  const x1 = rect.x1, y1 = rect.y1;
+  for (const o of state.objects) {
+    if (o.x >= rect.x0 && o.x <= x1 && o.y >= rect.y0 && o.y <= y1) {
+      releaseObjectUsers(state, o.id);
+      o.x += dx; o.y += dy;
+      o.reservedBy = -1;
+    }
+  }
+  state.insaatSurumu = (state.insaatSurumu ?? 0) + 1;
+  validateRooms(state);
+  notify(state, `📦 ${ROOM_DEFS[room.type].ad}${room.ozelAd ? ` "${room.ozelAd}"` : ''} taşındı.`, 'iyi');
+  return true;
+}
+
+/** Binayı tek işlemle tümüyle yık (duvarlar+zemin+eşya+oda), %25 iade. */
+export function demolishRoom(state: GameState, roomId: number): void {
+  const rect = roomOuterRect(state, roomId);
+  if (!rect) return;
+  demolish(state, rect.x0, rect.y0, rect.x1, rect.y1);
 }
 
 /** Oda atamasını kaldır (inşaat kalır). */

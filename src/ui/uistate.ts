@@ -9,7 +9,8 @@ export type Tool =
   | { kind: 'oda'; room: RoomType }
   | { kind: 'oda_kaldir' }
   | { kind: 'esya'; obj: ObjectTypeId }
-  | { kind: 'hazir'; prefab: string };
+  | { kind: 'hazir'; prefab: string }
+  | { kind: 'tasi'; roomId: number };
 
 /** Isı haritası katmanları — haritanın üstüne renk kaplaması basar. */
 export type Katman = 'yok' | 'mutluluk' | 'aclik' | 'kir' | 'yipranma';

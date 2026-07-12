@@ -20,7 +20,7 @@ import { deptDef } from '../data/departments';
 import { BALANCE } from '../data/balance';
 import { sesBildirim, sesUyari } from './audio';
 import { arkadasAdi } from '../game/social';
-import { deleteRoom } from '../game/build';
+import { deleteRoom, demolishRoom } from '../game/build';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
 
@@ -316,16 +316,58 @@ function renderSubbar(getState: () => GameState, ui: UIState): void {
         div.appendChild(b);
       }
 
-      // oda düzenleme: genişletme ipucu + silme
+      // 🏗️ BİNA AKSİYONLARI: taşı / kopyala / tek tık yık
+      const aksiyon = document.createElement('div');
+      aksiyon.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
+
+      const tasiBtn = document.createElement('button');
+      tasiBtn.className = 'sub-btn';
+      tasiBtn.innerHTML = '📦 Taşı';
+      tasiBtn.title = 'Binayı eşya, duvar ve öğrencileriyle birlikte yeni boş yere taşı (ücretsiz)';
+      tasiBtn.addEventListener('click', () => {
+        ui.tool = { kind: 'tasi', roomId: room.id };
+        document.dispatchEvent(new CustomEvent('tool-changed'));
+      });
+      aksiyon.appendChild(tasiBtn);
+
+      // kopyala: aynı türde hazır bina aracına geç (varsa)
+      const kopyaP = PREFABS.find((p) => p.room === room.type);
+      if (kopyaP) {
+        const kopyaBtn = document.createElement('button');
+        kopyaBtn.className = 'sub-btn';
+        kopyaBtn.innerHTML = '⧉ Kopyala';
+        kopyaBtn.title = `Aynı türde bir ${def.ad} daha kur (Hazır Bina aracına geçer)`;
+        kopyaBtn.addEventListener('click', () => {
+          ui.tool = { kind: 'hazir', prefab: kopyaP.id };
+          document.dispatchEvent(new CustomEvent('tool-changed'));
+        });
+        aksiyon.appendChild(kopyaBtn);
+      }
+
+      const yikBtn = document.createElement('button');
+      yikBtn.className = 'sub-btn';
+      yikBtn.innerHTML = '🧨 Yık Bina';
+      yikBtn.title = 'Binayı tümüyle yık (duvar+zemin+eşya), %25 iade';
+      yikBtn.addEventListener('click', () => {
+        if (confirm(`${def.ad} tümüyle yıkılsın mı? (eşyaların %25'i iade edilir)`)) {
+          demolishRoom(state, room.id);
+          ui.selectedRoomId = -1;
+          renderSubbar(getState, ui);
+        }
+      });
+      aksiyon.appendChild(yikBtn);
+      div.appendChild(aksiyon);
+
+      // oda düzenleme: genişletme ipucu + oda ataması silme
       const ipucu = document.createElement('span');
       ipucu.className = 'gerek';
-      ipucu.textContent = '✏️ Genişlet: Odalar aracıyla bitişiğine sürükle · Küçült: Oda Kaldır aracı';
+      ipucu.textContent = '✏️ Genişlet: Odalar aracıyla bitişiğine sürükle · Küçült: Oda Kaldır';
       div.appendChild(ipucu);
 
       const sil = document.createElement('button');
       sil.className = 'sub-btn';
-      sil.innerHTML = '🗑️ Odayı Sil';
-      sil.title = 'Oda atamasını tamamen kaldırır — duvarlar ve eşyalar yerinde kalır';
+      sil.innerHTML = '🗑️ Yalnız Oda Atamasını Sil';
+      sil.title = 'Oda atamasını kaldırır — duvarlar ve eşyalar yerinde kalır (bina durur)';
       sil.addEventListener('click', () => {
         deleteRoom(state, room.id);
         ui.selectedRoomId = -1;

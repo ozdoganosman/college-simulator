@@ -3,6 +3,7 @@ import {
   buildDoor, buildFloor, buildWallRect, demolish, designateRoom, placeObject, unassignRoom,
 } from '../game/build';
 import { placePrefab, prefabDef, prefabOrigin, prefabRect } from '../game/prefab';
+import { moveRoom, roomOuterRect } from '../game/build';
 import { Camera, clampCamera, screenToTile, zoomAt } from './camera';
 import { sesInsa } from './audio';
 import { isCeremonyOpen } from './ceremony';
@@ -39,6 +40,20 @@ export function attachInput(
         buildDoor(state(), tile.x, tile.y);
       } else if (t.kind === 'esya') {
         placeObject(state(), t.obj, tile.x, tile.y);
+      } else if (t.kind === 'tasi') {
+        // binayı imlecin gösterdiği yeni sol-üst köşeye taşı
+        const st = state();
+        const rect = roomOuterRect(st, t.roomId);
+        if (rect) {
+          const w = rect.x1 - rect.x0 + 1, h = rect.y1 - rect.y0 + 1;
+          const nx0 = tile.x - Math.floor(w / 2), ny0 = tile.y - Math.floor(h / 2);
+          if (moveRoom(st, t.roomId, nx0, ny0)) {
+            sesInsa();
+            ui.tool = { kind: 'sec' };
+            ui.selectedRoomId = t.roomId;
+            document.dispatchEvent(new CustomEvent('tool-changed'));
+          }
+        }
       } else if (t.kind === 'sec') {
         selectAt(state(), ui, tile.x, tile.y);
       } else {

@@ -9,6 +9,7 @@ import { OBJECT_DEFS } from '../data/objects';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { bushSprite, gateSprite, objectSprite, treeSprite } from './sprites';
 import { canPlacePrefab, prefabCost, prefabDef, prefabKapi, prefabOrigin, prefabRect } from '../game/prefab';
+import { canMoveRoom, roomOuterRect } from '../game/build';
 import type { Camera } from './camera';
 import type { UIState } from './uistate';
 
@@ -837,6 +838,36 @@ function drawToolPreview(ctx: CanvasRenderingContext2D, state: GameState, ui: UI
     ctx.fill();
     ctx.fillStyle = '#f2f5fa';
     ctx.fillText(etiket, ex, ey);
+    return;
+  }
+
+  // bina taşıma hayaleti — binanın izdüşümünü imleçte gösterir
+  if (t.kind === 'tasi') {
+    const rect = roomOuterRect(state, t.roomId);
+    if (rect) {
+      const w = rect.x1 - rect.x0 + 1, h = rect.y1 - rect.y0 + 1;
+      const nx0 = hover.x - Math.floor(w / 2), ny0 = hover.y - Math.floor(h / 2);
+      const ok = canMoveRoom(state, t.roomId, nx0, ny0).ok;
+      const px = nx0 * TILE, py = ny0 * TILE, pw = w * TILE, ph = h * TILE;
+      const room = state.rooms.find((r) => r.id === t.roomId);
+      ctx.fillStyle = ok ? hexA(room ? ROOM_DEFS[room.type].renk : '#888', 0.42) : 'rgba(220,60,60,0.3)';
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = ok ? 'rgba(90,220,140,0.95)' : 'rgba(255,120,110,0.95)';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(px, py, pw, ph);
+      ctx.setLineDash([]);
+      const fs = Math.max(10, TILE * 0.42);
+      ctx.font = `700 ${fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const etiket = ok ? '📦 buraya taşı (tık) · Esc: iptal' : '⛔ buraya taşınamaz';
+      const tw = ctx.measureText(etiket).width;
+      ctx.fillStyle = ok ? 'rgba(12,16,22,0.88)' : 'rgba(140,35,30,0.92)';
+      roundRectPath(ctx, px + pw / 2 - tw / 2 - 7, py - fs * 1.6, tw + 14, fs * 1.6, 5);
+      ctx.fill();
+      ctx.fillStyle = '#f2f5fa';
+      ctx.fillText(etiket, px + pw / 2, py - fs * 0.8);
+    }
     return;
   }
 
