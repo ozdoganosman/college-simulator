@@ -8,7 +8,7 @@
  * Günlük program: her bölüm için günün 4 bloğuna müfredattan ders yerleştirilir;
  * derse, o dersi SEÇMİŞ hocalar arasından en uygunu atanır (günde en çok 2 blok).
  */
-import { Academic, DersSlot, GameState, Student } from '../core/types';
+import { Academic, DersSlot, GUNLUK_SEANS, GameState, HAFTA_GUN, Student } from '../core/types';
 import { COURSES, courseDef, courseExists, dersEtki } from '../data/courses';
 import { DEPT_DEFS, deptDef } from '../data/departments';
 import { notify } from './state';
@@ -365,117 +365,103 @@ export function bolumSabitDersler(state: GameState, defId: string): string[] {
 export function rebuildDersProgrami(state: GameState): void {
   hocaBolumleriniGuncelle(state); // aidiyet derslerden türesin, sonra program kurulsun
   const slots: DersSlot[] = [];
-  const gunlukBlok = new Map<number, number>(); // academicId -> bugün verdiği blok sayısı
-  const blokMesgul = new Set<string>(); // "id:blok" — bir hoca aynı saatte İKİ sınıfa giremez
+  const seansMesgul = new Set<string>(); // "id:gun:seans" — hoca aynı gün+seansta iki sınıfa giremez
+  const gunlukSeans = new Map<string, number>(); // "id:gun" -> o gün verdiği seans sayısı
   const tumHocalar = akademisyenler(state);
+  const gs = (id: number, gun: number): string => `${id}:${gun}`;
 
-  // YERLEŞİK: (deptId:blok) hücreleri KORUNUR. Sabit (bölüm açılınca kurulan) ve
-  // 📌 elle kilitli slotların ders+hoca+saati değişmez — yalnız hocası kadrodan
-  // ayrılmış / dersi bırakmış hücreler yeniden atanır. Korunanların hoca+saatini
-  // PEŞİNEN rezerve et ki serbest dağıtım aynı hocayı aynı saate kapamasın.
+  // YERLEŞİK: (deptId:gun:seans) hücreleri KORUNUR. Sabit (bölüm açılınca kurulan) ve
+  // 📌 elle kilitli hücrelerin ders+hoca+gün+seansı değişmez — yalnız hocası kadrodan
+  // ayrılmış / dersi bırakmış hücreler yeniden atanır. Korunanları PEŞİNEN rezerve et.
   const onceki = new Map<string, DersSlot>();
   const korunan = new Map<string, DersSlot>();
   for (const s of state.dersProgrami ?? []) {
+    if (typeof s.gun !== 'number' || typeof s.seans !== 'number') continue; // eski format → atla
     if (!state.departments.some((d) => d.id === s.deptId)) continue;
-    onceki.set(`${s.deptId}:${s.blok}`, s);
+    onceki.set(`${s.deptId}:${s.gun}:${s.seans}`, s);
     if (!(s.sabit || s.kilit) || s.academicId === -1) continue;
     const h = tumHocalar.find((x) => x.id === s.academicId);
     if (!h || !(h.verdigiDersler ?? []).includes(s.courseId)) continue; // hoca yok / dersi bıraktı
-    const mesgulKey = `${s.academicId}:${s.blok}`;
-    if (blokMesgul.has(mesgulKey)) continue; // aynı hoca+saat iki kez rezerve edilemez
-    korunan.set(`${s.deptId}:${s.blok}`, s);
-    blokMesgul.add(mesgulKey);
-    gunlukBlok.set(s.academicId, (gunlukBlok.get(s.academicId) ?? 0) + 1);
+    const mesgulKey = `${s.academicId}:${s.gun}:${s.seans}`;
+    if (seansMesgul.has(mesgulKey)) continue; // aynı hoca+gün+seans iki kez rezerve edilemez
+    korunan.set(`${s.deptId}:${s.gun}:${s.seans}`, s);
+    seansMesgul.add(mesgulKey);
+    gunlukSeans.set(gs(s.academicId, s.gun), (gunlukSeans.get(gs(s.academicId, s.gun)) ?? 0) + 1);
   }
 
   for (const dept of state.departments) {
-    const tumDersler = deptDef(dept.defId).dersler;
-    if (tumDersler.length === 0) continue;
-    // bölümün 4 saat slotuna sabitlenen dersler (açılışta bir kez belirlenir, korunur)
-    const sabitDersler = bolumSabitDersler(state, dept.defId);
+    const dersler = deptDef(dept.defId).dersler;
+    if (dersler.length === 0) continue;
 
-    for (let blok = 0; blok < 4; blok++) {
-      const anahtar = `${dept.id}:${blok}`;
-      // korunan hücre: ders + hoca aynen kalır (rezervasyon yukarıda yapıldı)
-      const kor = korunan.get(anahtar);
-      if (kor) { slots.push({ ...kor, sabit: true }); continue; }
+    for (let gun = 0; gun < HAFTA_GUN; gun++) {
+      for (let seans = 0; seans < GUNLUK_SEANS; seans++) {
+        const anahtar = `${dept.id}:${gun}:${seans}`;
+        // korunan hücre: ders + hoca aynen kalır (rezervasyon yukarıda yapıldı)
+        const kor = korunan.get(anahtar);
+        if (kor) { slots.push({ ...kor, sabit: true }); continue; }
 
-      // ders SABİT: önceki sabit hücrenin dersini koru, yoksa kadroya uygun sabit dersi ata
-      const prev = onceki.get(anahtar);
-      const courseId = (prev && prev.sabit) ? prev.courseId : sabitDersler[blok % sabitDersler.length];
+        // ders SABİT: önceki sabit hücrenin dersini koru, yoksa haftalık indeksten ata —
+        // müfredat 10 hücreye yayılır (önlisans 4 ders 2-3× tekrarlar, lisans 8 dersin hepsi işlenir)
+        const prev = onceki.get(anahtar);
+        const idx = gun * GUNLUK_SEANS + seans; // 0-9
+        const courseId = (prev && prev.sabit) ? prev.courseId : dersler[idx % dersler.length];
 
-      // dersi SEÇMİŞ hocalardan en uygunu (önce bölümün kendi hocası), günde en çok 3 blok;
-      // kimse boşta değilse limit gevşer (yorgun hoca boş dersten iyidir — yük cezası var).
-      let secilen: Academic | null = null;
-      for (const blokLimit of [3, 4]) {
-        let enIyi = -1;
-        for (const a of tumHocalar) {
-          if (!(a.verdigiDersler ?? []).includes(courseId)) continue;
-          if (blokMesgul.has(`${a.id}:${blok}`)) continue; // o saatte başka sınıfta
-          if ((gunlukBlok.get(a.id) ?? 0) >= blokLimit) continue;
-          const puan = dersEtki(courseId, a.alan) * (0.5 + a.egitim / 100)
-            + (a.deptId === dept.id ? 0.6 : 0); // kendi bölümü öncelikli
-          if (puan > enIyi) {
-            enIyi = puan;
-            secilen = a;
+        // dersi SEÇMİŞ en uygun müsait hoca (önce bölümün kendi hocası); günde 1, gerekirse 2 seans
+        let secilen: Academic | null = null;
+        for (const gunLimit of [1, 2]) {
+          let enIyi = -1;
+          for (const a of tumHocalar) {
+            if (!(a.verdigiDersler ?? []).includes(courseId)) continue;
+            if (seansMesgul.has(`${a.id}:${gun}:${seans}`)) continue; // o gün+seans başka sınıfta
+            if ((gunlukSeans.get(gs(a.id, gun)) ?? 0) >= gunLimit) continue;
+            const puan = dersEtki(courseId, a.alan) * (0.5 + a.egitim / 100)
+              + (a.deptId === dept.id ? 0.6 : 0); // kendi bölümü öncelikli
+            if (puan > enIyi) { enIyi = puan; secilen = a; }
           }
+          if (secilen) break;
         }
-        if (secilen) break;
+        if (secilen) {
+          gunlukSeans.set(gs(secilen.id, gun), (gunlukSeans.get(gs(secilen.id, gun)) ?? 0) + 1);
+          seansMesgul.add(`${secilen.id}:${gun}:${seans}`);
+        }
+        slots.push({ deptId: dept.id, gun, seans, courseId, academicId: secilen ? secilen.id : -1, sabit: true });
       }
-      if (secilen) {
-        gunlukBlok.set(secilen.id, (gunlukBlok.get(secilen.id) ?? 0) + 1);
-        blokMesgul.add(`${secilen.id}:${blok}`);
-      }
-
-      slots.push({ deptId: dept.id, blok, courseId, academicId: secilen ? secilen.id : -1, sabit: true });
     }
   }
 
-  // KENDİNİ İYİLEŞTİRME: hocasız kalan slotlara acil atama. Sebep ne olursa
-  // olsun (dersi seçen hoca istifa etti, seçenler o saatte dolu, ders kimsede
-  // yok) o saatte MÜSAİT bir hoca varsa ders ona verilir — gerekiyorsa ders
-  // yıllık seçimlerine eklenir. "Bölüm açık ama hoca yok" ancak kadro fiziken
-  // yetmiyorsa kalır (danışman uyarır).
-  const acikSet = acikBolumDersSeti(state); // açık bölüm dersleri (rebuild boyunca sabit)
+  // KENDİNİ İYİLEŞTİRME: hocasız kalan hücrelere acil atama (takasla). "Bölüm açık
+  // ama hoca yok" ancak kadro fiziken yetmiyorsa kalır (danışman uyarır).
+  const acikSet = acikBolumDersSeti(state);
   for (const s of slots) {
     if (s.academicId !== -1) continue;
     let secilen: Academic | null = null;
     let enIyi = -1;
     for (const a of tumHocalar) {
-      if (blokMesgul.has(`${a.id}:${s.blok}`)) continue;
-      if ((gunlukBlok.get(a.id) ?? 0) >= 4) continue;
+      if (seansMesgul.has(`${a.id}:${s.gun}:${s.seans}`)) continue;
+      if ((gunlukSeans.get(gs(a.id, s.gun)) ?? 0) >= GUNLUK_SEANS) continue;
       const sahip = (a.verdigiDersler ?? []).includes(s.courseId);
-      // yıllık kota dolu ve dersi yok: yalnız boşa giden bir dersi takas edilebiliyorsa aday
       if (!sahip && (a.verdigiDersler ?? []).length >= DERS_LIMIT
           && birakilabilirDers(state, a, s.courseId, acikSet) === null) continue;
       const puan = dersEtki(s.courseId, a.alan) * (0.5 + a.egitim / 100) + (sahip ? 0.5 : 0);
-      if (puan > enIyi) {
-        enIyi = puan;
-        secilen = a;
-      }
+      if (puan > enIyi) { enIyi = puan; secilen = a; }
     }
     if (!secilen) continue;
     if (!(secilen.verdigiDersler ?? []).includes(s.courseId)) {
-      // gerekiyorsa boşa giden yedek dersi bırakıp yer aç (açık bölüm dersi asla düşmez)
       if ((secilen.verdigiDersler ?? []).length >= DERS_LIMIT) {
         const birak = birakilabilirDers(state, secilen, s.courseId, acikSet);
-        if (birak !== null) {
-          secilen.verdigiDersler = (secilen.verdigiDersler ?? []).filter((d) => d !== birak);
-        }
+        if (birak !== null) secilen.verdigiDersler = (secilen.verdigiDersler ?? []).filter((d) => d !== birak);
       }
       secilen.verdigiDersler = [...(secilen.verdigiDersler ?? []), s.courseId];
       notify(state, `📚 Müfredat açığı kapatıldı: ${courseDef(s.courseId).kod} dersi ${secilen.ad}'ın yıllık programına eklendi.`, 'bilgi');
     }
     s.academicId = secilen.id;
-    gunlukBlok.set(secilen.id, (gunlukBlok.get(secilen.id) ?? 0) + 1);
-    blokMesgul.add(`${secilen.id}:${s.blok}`);
+    gunlukSeans.set(gs(secilen.id, s.gun), (gunlukSeans.get(gs(secilen.id, s.gun)) ?? 0) + 1);
+    seansMesgul.add(`${secilen.id}:${s.gun}:${s.seans}`);
   }
 
   state.dersProgrami = slots;
 
-  // Aidiyet güvencesi: müfredat çakışması olmayan ama bugünkü programda fiilen
-  // ders veren bölümsüz hoca, ders verdiği bölüme bağlanır (araştırma/danışmanlık
-  // katkısı boşa gitmesin).
+  // Aidiyet güvencesi: programda fiilen ders veren bölümsüz hoca o bölüme bağlanır.
   for (const s of slots) {
     if (s.academicId === -1) continue;
     const a = tumHocalar.find((h) => h.id === s.academicId);
@@ -488,18 +474,18 @@ export function rebuildDersProgrami(state: GameState): void {
  * yıllık seçiminde yoksa (kota izin veriyorsa) eklenir — kalıcı çözüm olur.
  */
 export function slotaHocaAta(
-  state: GameState, deptId: number, blok: number, academicId: number,
+  state: GameState, deptId: number, gun: number, seans: number, academicId: number,
 ): boolean {
-  const slot = (state.dersProgrami ?? []).find((s) => s.deptId === deptId && s.blok === blok);
+  const slot = (state.dersProgrami ?? []).find((s) => s.deptId === deptId && s.gun === gun && s.seans === seans);
   const a = state.agents.find(
     (x): x is Academic => x.id === academicId && x.kind === 'akademisyen',
   );
   if (!slot || !a) return false;
   const cakisma = (state.dersProgrami ?? []).some(
-    (s) => s.blok === blok && s.academicId === academicId && s.deptId !== deptId,
+    (s) => s.gun === gun && s.seans === seans && s.academicId === academicId && s.deptId !== deptId,
   );
   if (cakisma) {
-    notify(state, `${a.ad} aynı saatte başka bir sınıfta ders veriyor — önce oradan alın.`, 'kotu');
+    notify(state, `${a.ad} aynı gün+seansta başka bir sınıfta ders veriyor — önce oradan alın.`, 'kotu');
     return false;
   }
   if (!(a.verdigiDersler ?? []).includes(slot.courseId)) {
@@ -523,17 +509,17 @@ export function slotaHocaAta(
   return true;
 }
 
-/** 📌 Slot kilidini açar — program yeniden serbest kurulur. */
-export function slotKilidiAc(state: GameState, deptId: number, blok: number): void {
-  const slot = (state.dersProgrami ?? []).find((s) => s.deptId === deptId && s.blok === blok);
+/** 📌 Hücre kilidini açar — program yeniden serbest kurulur. */
+export function slotKilidiAc(state: GameState, deptId: number, gun: number, seans: number): void {
+  const slot = (state.dersProgrami ?? []).find((s) => s.deptId === deptId && s.gun === gun && s.seans === seans);
   if (!slot) return;
   slot.kilit = false;
-  notify(state, `📌 ${courseDef(slot.courseId).kod} slot kilidi açıldı — program yarından itibaren en uygun hocayı seçecek.`, 'bilgi');
+  notify(state, `📌 ${courseDef(slot.courseId).kod} hücre kilidi açıldı — program en uygun hocayı yeniden seçecek.`, 'bilgi');
 }
 
-/** Bölümün belirli bloktaki dersi (panel ve simülasyon için). */
-export function blokDersi(state: GameState, deptId: number, blok: number): DersSlot | undefined {
-  return (state.dersProgrami ?? []).find((s) => s.deptId === deptId && s.blok === blok);
+/** Bölümün (gün, seans) hücresindeki ders (panel ve simülasyon için). */
+export function dersHucresi(state: GameState, deptId: number, gun: number, seans: number): DersSlot | undefined {
+  return (state.dersProgrami ?? []).find((s) => s.deptId === deptId && s.gun === gun && s.seans === seans);
 }
 
 export { courseDef, dersEtki };

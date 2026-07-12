@@ -43,7 +43,7 @@
 import {
   Academic, AcademicRank, Agent, AgentActivity, AgentKind, GameState, GATE, MAP_H, MAP_W,
   Needs, PlacedObject, Point, Room, StaffAgent, Student, StudentLevel, T,
-  DONEM_GUN, donemGunu, donemIndex, inBounds, tatilMi, tileIndex,
+  DONEM_GUN, donemGunu, donemIndex, inBounds, programGunu, tatilMi, tileIndex,
 } from '../core/types';
 import { chance, clamp, newId, pick, randInt, randRange } from '../core/util';
 import { courseDef, dersEtki } from '../data/courses';
@@ -269,8 +269,10 @@ function buildCtx(state: GameState, dk: number): Ctx {
   const blokNo = blokBaslangic === -1 ? -1 : DERS_BLOKLARI.indexOf(blokBaslangic);
   const blokDersleri = new Map<number, string>(); // deptId -> courseId
   if (blokNo >= 0) {
+    const seans = blokNo < 2 ? 0 : 1; // blok 0-1 = sabah (08-12), 2-3 = öğleden sonra (12-16)
+    const pg = programGunu(state.gun); // haftalık program günü (Cmt→Pzt tekrarı, Paz tatil)
     for (const s of state.dersProgrami ?? []) {
-      if (s.blok === blokNo) blokDersleri.set(s.deptId, s.courseId);
+      if (s.gun === pg && s.seans === seans) blokDersleri.set(s.deptId, s.courseId);
     }
   }
 

@@ -137,8 +137,10 @@ export const NITELIK_META: Record<Nitelik, { ad: string; emoji: string }> = {
 /** Günlük ders programı girdisi: bölümün o bloktaki dersi ve atanan hocası. */
 export interface DersSlot {
   deptId: number;
-  /** 0-3: 08-10, 10-12, 13-15, 15-17 */
-  blok: number;
+  /** haftanın günü 0-4: Pazartesi … Cuma (hafta içi 5 gün) */
+  gun: number;
+  /** günün seansı 0-1: 0 = 08:00–12:00, 1 = 12:00–16:00 */
+  seans: number;
   courseId: string;
   /** atanan akademisyen (yoksa -1) */
   academicId: number;
@@ -149,6 +151,17 @@ export interface DersSlot {
    * silinene dek korunur (yalnız hocası kadrodan ayrılırsa yeniden atanır).
    */
   sabit?: boolean;
+}
+
+/** Haftalık program: 5 gün × 2 seans = 10 hücre. */
+export const HAFTA_GUN = 5;
+export const GUNLUK_SEANS = 2;
+export const HAFTA_ICI = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'] as const;
+export const SEANS_SAAT = ['08:00–12:00', '12:00–16:00'] as const;
+
+/** Programın haftalık gün indeksi (0-4). Cumartesi Pazartesi'yi tekrarlar, Pazar tatil. */
+export function programGunu(gun: number): number {
+  return haftaGunu(gun) % HAFTA_GUN;
 }
 
 export const RANK_LABEL: Record<AcademicRank, string> = {
