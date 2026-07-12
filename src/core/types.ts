@@ -227,6 +227,8 @@ export interface Student extends AgentBase {
   asama?: 'ders' | 'tez';
   /** tez ilerlemesi (araştırma dakikalarıyla birikir; hedefe ulaşınca savunma) */
   tezPuan?: number;
+  /** en yakın arkadaşının id'si (-1 = yok). Yakınında olunca moral artar */
+  arkadas?: number;
 }
 
 export const LEVEL_LABEL: Record<StudentLevel, string> = {

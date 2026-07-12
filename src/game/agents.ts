@@ -1408,10 +1408,11 @@ export function removeAgent(state: GameState, agentId: number): void {
   releaseReservations(state, agentId);
   const i = state.agents.findIndex((a) => a.id === agentId);
   if (i !== -1) state.agents.splice(i, 1);
-  // çıkarılan bir hocaysa asistan/danışman bağlarını çöz
+  // çıkarılan bir hocaysa asistan/danışman bağlarını, öğrenciyse arkadaşlığı çöz
   for (const a of state.agents) {
     if (a.kind !== 'ogrenci') continue;
     if (a.asistani === agentId) a.asistani = -1;
     if (a.danisman === agentId) a.danisman = -1;
+    if (a.arkadas === agentId) a.arkadas = -1;
   }
 }

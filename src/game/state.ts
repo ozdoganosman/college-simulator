@@ -320,6 +320,7 @@ export function eskiKayitUyumu(s: GameState): void {
       // aşamasından devam eder (yeterlik sürpriziyle cezalandırılmaz)
       if (a.level !== 'lisans' && a.asama !== 'ders' && a.asama !== 'tez') a.asama = 'tez';
       if (a.level !== 'lisans' && typeof a.tezPuan !== 'number') a.tezPuan = 0;
+      if (typeof a.arkadas !== 'number') a.arkadas = -1; // sosyal ağ sonradan eklendi
     }
   }
   if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç

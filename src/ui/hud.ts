@@ -18,6 +18,8 @@ import { bolumUcreti } from '../game/economy';
 import { sonrakiDenetimGunu } from '../game/accreditation';
 import { deptDef } from '../data/departments';
 import { BALANCE } from '../data/balance';
+import { sesBildirim, sesUyari } from './audio';
+import { arkadasAdi } from '../game/social';
 import { deleteRoom } from '../game/build';
 import type { UIState, Tool } from './uistate';
 import { openPanel } from './panels';
@@ -377,6 +379,8 @@ function agentCard(state: GameState, a: GameState['agents'][number]): string {
         : `💳 Ücretli (${formatMoney(bolumUcreti(state, a.deptId))}/yıl)`);
     }
     html += cip(`💰 Sermaye: ${formatMoney(Math.round(a.sermaye))}`);
+    const dost = arkadasAdi(state, a);
+    if (dost) html += cip(`🤝 Yakın arkadaşı: ${dost}`);
     if (hoca && hoca.kind === 'akademisyen') {
       html += cip(`🧑‍🔬 Asistanlık: ${RANK_LABEL[hoca.rank]} ${hoca.ad}`);
     }
@@ -416,6 +420,7 @@ function setStat(anahtar: string, metin: string): void {
 }
 
 let sonBildirimHtml = '';
+let sonNoticeSayi = -1;
 
 /** Her karede çağrılır ama içerik ~saniyede 4 kez güncellenir (main.ts ayarlar). */
 export function refreshHud(state: GameState, ui: UIState): void {
@@ -480,7 +485,14 @@ export function refreshHud(state: GameState, ui: UIState): void {
   if (html !== sonBildirimHtml) {
     sonBildirimHtml = html;
     noticesEl.innerHTML = html;
+    // yeni bildirim(ler) geldiyse en yenisinin türüne göre ses çal (ilk çizim hariç)
+    if (sonNoticeSayi >= 0 && state.notices.length > sonNoticeSayi && son.length > 0) {
+      const yeni = son[son.length - 1];
+      if (yeni.kind === 'kotu' && (state.yanginlar.length > 0 || state.altyapi.gucKesinti)) sesUyari();
+      else sesBildirim(yeni.kind);
+    }
   }
+  sonNoticeSayi = state.notices.length;
 
   // seçili oda bilgisi açıkken (kategori kapalı) durumu tazele — butonsuz içerik,
   // yeniden çizim tıklama yutmaz

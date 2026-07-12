@@ -1,12 +1,15 @@
 import './styles.css';
-import { GameState } from './core/types';
+import { GameState, MAP_W, MAP_H, TILE } from './core/types';
 import { BALANCE } from './data/balance';
 import { createInitialState, loadGame } from './game/state';
 import { advance, initNewGame } from './game/game';
 import { createCamera, clampCamera } from './ui/camera';
 import { createUIState } from './ui/uistate';
 import { attachInput } from './ui/input';
-import { render } from './ui/renderer';
+import { render, renderMinimap } from './ui/renderer';
+import { AYARLAR } from './core/settings';
+import { saveGame } from './game/state';
+import { sesTik } from './ui/audio';
 import { initHud, refreshHud } from './ui/hud';
 import { initPanels, refreshOpenPanel } from './ui/panels';
 import { fastForwardTutorial, initTutorial, refreshTutorial } from './ui/tutorial';
@@ -18,6 +21,10 @@ import { invalidateGround } from './ui/renderer';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
+const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
+minimapCanvas.width = 180;
+minimapCanvas.height = 135;
+const mmCtx = minimapCanvas.getContext('2d')!;
 
 function resize(): void {
   canvas.width = window.innerWidth;
@@ -95,12 +102,13 @@ import * as clubs from './game/clubs';
 import * as infrastructure from './game/infrastructure';
 import * as incidents from './game/incidents';
 import * as macro from './game/macro';
+import * as social from './game/social';
 (window as unknown as Record<string, unknown>).__sim = {
   state: () => state,
   advance: (dk: number) => advance(state, dk),
   build, departments, academics, research, agents, library, prefab, rivals, alumni, campus,
   economy, schedule, events, accreditation, maintenance, clubs, infrastructure, incidents, macro,
-  ui, cam,
+  social, ui, cam,
 };
 
 let sonZaman = performance.now();
@@ -116,6 +124,11 @@ function frame(t: number): void {
 
   render(ctx, state, cam, ui);
 
+  // minimap: ayar açıksa ve menü/tören kapalıysa çiz
+  const mmGoster = AYARLAR.minimap && !isMenuOpen() && !isCeremonyOpen();
+  minimapCanvas.classList.toggle('gizli', !mmGoster);
+  if (mmGoster) renderMinimap(mmCtx, state, cam, canvas);
+
   hudSayac += gecenSn;
   if (hudSayac >= 0.25) {
     hudSayac = 0;
@@ -130,3 +143,42 @@ function frame(t: number): void {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// minimap tıklaması: kamerayı o noktaya taşı
+minimapCanvas.addEventListener('click', (e) => {
+  const rect = minimapCanvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
+  cam.x = mx * MAP_W * TILE - (canvas.width / cam.zoom) / 2;
+  cam.y = my * MAP_H * TILE - (canvas.height / cam.zoom) / 2;
+  clampCamera(cam, canvas);
+});
+
+// arayüz tıklama sesi: butonlara delege dinleyici (ilk etkileşim sesi de açar)
+document.addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest('button, .eylem, .menu-buton, .toolbar-btn, [data-action]')) sesTik();
+}, true);
+
+// ⌨️ hızlı kaydet: Ctrl+S / S — otomatik kayıt yuvasına anında kaydet
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    if (!isMenuOpen() && !isCeremonyOpen()) {
+      saveGame(state);
+      hizliKayitBildir();
+    }
+  }
+});
+
+let hizliKayitEl: HTMLElement | null = null;
+function hizliKayitBildir(): void {
+  if (!hizliKayitEl) {
+    hizliKayitEl = document.createElement('div');
+    hizliKayitEl.id = 'hizli-kayit-toast';
+    document.getElementById('app')?.appendChild(hizliKayitEl);
+  }
+  hizliKayitEl.textContent = '💾 Kaydedildi';
+  hizliKayitEl.classList.add('goster');
+  setTimeout(() => hizliKayitEl?.classList.remove('goster'), 1400);
+}

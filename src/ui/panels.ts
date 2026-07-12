@@ -323,9 +323,15 @@ function onPanelClick(e: Event): void {
       if (sec && sec.value) hedefliAyartma(state, sec.value);
       break;
     }
-    case 'akademisyen-cikar':
-      fireAcademic(state, Number(id));
+    case 'akademisyen-cikar': {
+      const a = state.agents.find((ag) => ag.id === Number(id));
+      const tazminat = a && a.kind === 'akademisyen' ? 30 * a.maas : 0;
+      if (a && a.kind === 'akademisyen'
+          && confirm(`${a.ad} işten çıkarılsın mı? Tazminat ${formatMoney(tazminat)} ödenecek ve programdaki dersleri boşa çıkacak.`)) {
+        fireAcademic(state, Number(id));
+      }
       break;
+    }
     case 'zam-ver':
       zamVer(state, Number(id));
       break;

@@ -26,6 +26,7 @@ import { cazibePuani } from './campus';
 import { altyapiGunSonu } from './infrastructure';
 import { salginGunSonu, yanginTetikle, yanginlariGuncelle } from './incidents';
 import { makroGunGuncelle } from './macro';
+import { sosyalGunSonu } from './social';
 import { gunlukKulupEtkisi, kulupSenligi } from './clubs';
 import { addPrestij, notify, saveGame, talepCarp } from './state';
 
@@ -92,6 +93,7 @@ function endOfDay(state: GameState): void {
   altyapiGunSonu(state); // elektrik/su kesinti kontrolü + cezalar
   yanginTetikle(state); // yıpranmış eşya düşük şansla tutuşabilir
   salginGunSonu(state); // salgın ilerler / dönemsel yenisi çıkar
+  sosyalGunSonu(state); // öğrenci arkadaşlıkları kurulur + moral etkisi
 
   // denetim karnesi ortalama izlemesi: tek günlük şans yerine dönem ortalaması
   // (acKalanBugun az önce dunAcKalan'a devredildi — bugünün gerçek sayısı odur)

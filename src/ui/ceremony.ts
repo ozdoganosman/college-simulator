@@ -7,6 +7,7 @@ import { GameState } from '../core/types';
 import { formatMoney } from '../core/util';
 import { openPanel } from './panels';
 import type { PanelName } from './panels';
+import { sesToren } from './audio';
 
 let root: HTMLElement | null = null;
 let acikMi = false;
@@ -154,6 +155,7 @@ function sira(n: number): string {
 function torenKur(state: GameState, onKapat: () => void): void {
   if (!root) return;
   root.classList.add('acik');
+  sesToren();
 
   // sayaç animasyonları: satır göründüğünde 0'dan hedefe say
   for (const el of root.querySelectorAll<HTMLElement>('.sayac')) {

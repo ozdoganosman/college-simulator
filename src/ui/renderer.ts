@@ -685,6 +685,51 @@ function isiRenk(oran: number, alpha: number): string {
   return `hsla(${Math.round(120 * (1 - t))},85%,50%,${alpha})`;
 }
 
+/**
+ * Minimap: tüm kampüsün kuşbakışı özeti (odalar renkli, ajanlar noktalar,
+ * yangın kırmızı) + görünür alan çerçevesi. Sağ altta ayrı canvas'a çizilir.
+ */
+export function renderMinimap(
+  mmCtx: CanvasRenderingContext2D, state: GameState, cam: Camera, anaCanvas: HTMLCanvasElement,
+): void {
+  const w = mmCtx.canvas.width, h = mmCtx.canvas.height;
+  const sx = w / MAP_W, sy = h / MAP_H;
+  mmCtx.clearRect(0, 0, w, h);
+  // zemin: mevsimlik çim tonu
+  mmCtx.fillStyle = CIM_PALET[mevsim(state.gun)][1];
+  mmCtx.fillRect(0, 0, w, h);
+  // yollar/zemin
+  mmCtx.fillStyle = 'rgba(150,150,140,0.5)';
+  for (let i = 0; i < state.floor.length; i++) {
+    if (state.floor[i] === null) continue;
+    mmCtx.fillRect((i % MAP_W) * sx, Math.floor(i / MAP_W) * sy, Math.ceil(sx), Math.ceil(sy));
+  }
+  // odalar: tür rengi
+  for (const r of state.rooms) {
+    mmCtx.fillStyle = hexA(ROOM_DEFS[r.type].renk, r.valid ? 0.85 : 0.45);
+    for (const t of r.tiles) {
+      mmCtx.fillRect((t % MAP_W) * sx, Math.floor(t / MAP_W) * sy, Math.ceil(sx), Math.ceil(sy));
+    }
+  }
+  // ajanlar: küçük noktalar (öğrenci açık, personel sarı)
+  for (const a of state.agents) {
+    if (!a.onCampus) continue;
+    mmCtx.fillStyle = a.kind === 'ogrenci' ? '#bcd3ff' : a.kind === 'akademisyen' ? '#e0e4ee' : '#e0c040';
+    mmCtx.fillRect(a.x * sx - 0.5, a.y * sy - 0.5, 2, 2);
+  }
+  // yangınlar: kırmızı
+  for (const y of state.yanginlar) {
+    mmCtx.fillStyle = '#ff5020';
+    mmCtx.fillRect(y.x * sx - 1, y.y * sy - 1, 3, 3);
+  }
+  // görünür alan çerçevesi
+  const vx = cam.x / TILE * sx, vy = cam.y / TILE * sy;
+  const vw = (anaCanvas.width / cam.zoom) / TILE * sx, vh = (anaCanvas.height / cam.zoom) / TILE * sy;
+  mmCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+  mmCtx.lineWidth = 1.5;
+  mmCtx.strokeRect(vx, vy, vw, vh);
+}
+
 function roundRectPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   c.beginPath();
   c.moveTo(x + r, y);

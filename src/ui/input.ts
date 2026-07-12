@@ -4,6 +4,7 @@ import {
 } from '../game/build';
 import { placePrefab, prefabDef, prefabOrigin, prefabRect } from '../game/prefab';
 import { Camera, clampCamera, screenToTile, zoomAt } from './camera';
+import { sesInsa } from './audio';
 import { isCeremonyOpen } from './ceremony';
 import type { UIState } from './uistate';
 
@@ -71,7 +72,13 @@ export function attachInput(
       const st = state();
       if (t.kind === 'zemin') buildFloor(st, s.x, s.y, h.x, h.y, t.floor);
       else if (t.kind === 'duvar') buildWallRect(st, s.x, s.y, h.x, h.y);
-      else if (t.kind === 'yikim') demolish(st, s.x, s.y, h.x, h.y);
+      else if (t.kind === 'yikim') {
+        // geniş seçimde onay iste: koca alanı yanlışlıkla silmeyi önler
+        const alan = (Math.abs(h.x - s.x) + 1) * (Math.abs(h.y - s.y) + 1);
+        if (alan < 25 || confirm(`${alan} kareyi yıkmak istediğine emin misin? (eşyaların %25'i iade edilir)`)) {
+          demolish(st, s.x, s.y, h.x, h.y);
+        }
+      }
       else if (t.kind === 'oda') designateRoom(st, t.room, s.x, s.y, h.x, h.y);
       else if (t.kind === 'oda_kaldir') unassignRoom(st, s.x, s.y, h.x, h.y);
       else if (t.kind === 'hazir') {
@@ -85,6 +92,7 @@ export function attachInput(
           placePrefab(st, def, r.x, r.y, r.w, r.h);
         }
       }
+      if (t.kind !== 'sec' && t.kind !== 'yikim') sesInsa();
       ui.dragStart = null;
     }
   });

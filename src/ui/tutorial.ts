@@ -93,8 +93,23 @@ const STEPS: TutorialStep[] = [
   },
   {
     baslik: 'YKS Yerleştirmeyi başlat!',
-    detay: 'Her şey hazır! Ekranın üstündeki altın <b>🎓 YKS Yerleştirmeyi Başlat</b> butonuna bas — sonuçlar törenle açıklanır, kazanan öğrenciler kampüse gelir ve <b>devlet ödeneği</b> yatar. Her yıl başında YKS dönemi yeniden açılır; acele etmeden hazırlanıp istediğin an başlatırsın. 💡 Bu arada <b>🔬 Araştırma</b> panelinden bir proje başlatabilirsin.',
+    detay: 'Her şey hazır! Ekranın üstündeki altın <b>🎓 YKS Yerleştirmeyi Başlat</b> butonuna bas — sonuçlar törenle açıklanır, kazanan öğrenciler kampüse gelir ve <b>devlet ödeneği</b> yatar. Her yıl başında YKS dönemi yeniden açılır; acele etmeden hazırlanıp istediğin an başlatırsın.',
     kontrol: (s) => ({ tamam: s.agents.some((a) => a.kind === 'ogrenci') }),
+  },
+  {
+    baslik: 'İlk araştırma projeni başlat',
+    detay: 'Öğrencilerin geldi — şimdi <b>bilim</b> zamanı. <b>🔬 Araştırma</b> panelini aç ve bir bölümde proje başlat. Projeler <b>başlangıç maliyeti + günlük bütçe</b> ister; tamamlanınca hibe, makale ve şansla çığır açan buluş getirir (prestij yükselir). Lider hoca atarsan risk düşer. 💡 "Otomatik yenile" anahtarını dilediğin gibi ayarla.',
+    kontrol: (s) => ({ tamam: s.projects.length >= 1 || s.toplamYayin >= 1 }),
+  },
+  {
+    baslik: 'Kütüphane kur (araştırma + öğrenme)',
+    detay: '<b>🏗️ Hazır Bina → Kütüphane</b> ya da <b>Odalar → Kütüphane</b> + <b>Kitaplık</b> rafları koy. Kütüphane seviyesi araştırmayı VE öğrenmeyi hızlandırır; <b>📚 Kütüphane</b> panelinden alan bazlı kitap koleksiyonu satın al.',
+    kontrol: (s) => ({ tamam: validRooms(s, 'kutuphane').length >= 1 }),
+  },
+  {
+    baslik: 'Tamirci al — kampüs yaşıyor',
+    detay: 'Eşyalar zamanla <b>yıpranır</b> ve bozulur (bozuk eşya işlev görmez!). <b>👩‍🏫 Kadro</b> panelinden bir <b>🔧 Tamirci</b> al — bozukları onarır, inşaatı hızlandırır. 💡 Kampüs büyüdükçe <b>Eşyalar</b> menüsünden <b>⚡ Jeneratör</b> / <b>💧 Su Deposu</b> kurmayı ve yangına karşı <b>👮 Güvenlik</b> / <b>🧯 Yangın Dolabı</b> almayı unutma. Kolay gelsin, Rektörüm!',
+    kontrol: (s) => ({ tamam: s.agents.some((a) => a.kind === 'tamirci') }),
   },
 ];
 

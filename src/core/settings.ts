@@ -4,6 +4,8 @@ export interface Ayarlar {
   isikDongusu: boolean;     // gündüz/gece ışık tonu
   izgara: boolean;          // yakınlaşınca ızgara çizgileri
   dekor: boolean;           // çimenlerde ağaç/çalı
+  minimap: boolean;         // sağ altta minimap
+  ses: number;              // ses efekti seviyesi (0-100)
 }
 
 const VARSAYILAN: Ayarlar = {
@@ -11,6 +13,8 @@ const VARSAYILAN: Ayarlar = {
   isikDongusu: true,
   izgara: true,
   dekor: true,
+  minimap: true,
+  ses: 60,
 };
 
 const ANAHTAR = 'universite-simulatoru-ayarlar';

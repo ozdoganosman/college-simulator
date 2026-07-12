@@ -7,10 +7,27 @@ import { formatMoney } from '../core/util';
 import { AYARLAR, ayarlariKaydet } from '../core/settings';
 import { SLOT_SAYISI, slotSil, slotaKaydet, slottanYukle, tumSlotlar } from '../game/saves';
 import { loadGame } from '../game/state';
+import { BASARIMLAR } from '../game/goals';
 import { invalidateGround } from './renderer';
 import { closePanel } from './panels';
 
-type MenuMode = 'ana' | 'oyunici' | 'yukle' | 'kaydet' | 'secenekler' | 'zorluk';
+/** Başarım ekranı: kazanılanlar + kilitliler (koşullar açık, spoiler değil). */
+function basarimListesiHtml(): string {
+  const kazanilan = new Set(ctx?.getState().basarimlar ?? []);
+  const toplam = BASARIMLAR.length;
+  const bar = `<div class="basarim-ozet">🏅 ${kazanilan.size} / ${toplam} başarım açıldı</div>`;
+  const satirlar = BASARIMLAR.map((b) => {
+    const acik = kazanilan.has(b.id);
+    return `<div class="basarim-satir ${acik ? 'acik' : 'kilitli'}">
+      <span class="basarim-ikon">${acik ? '🏅' : '🔒'}</span>
+      <span class="basarim-metin"><b>${acik ? b.ad : '???'}</b><br><small>${b.aciklama}</small></span>
+      ${acik ? '<span class="basarim-tik">✔</span>' : ''}
+    </div>`;
+  }).join('');
+  return bar + satirlar;
+}
+
+type MenuMode = 'ana' | 'oyunici' | 'yukle' | 'kaydet' | 'secenekler' | 'zorluk' | 'basarimlar';
 
 interface MenuCtx {
   getState: () => GameState;
@@ -32,6 +49,7 @@ export function initMenu(c: MenuCtx): void {
   ctx = c;
   root = document.getElementById('menu-root');
   root?.addEventListener('click', onClick);
+  root?.addEventListener('input', onInput);
   document.addEventListener('toggle-menu', () => {
     if (mode === null) openInGameMenu();
     else if (mode === 'oyunici') kapat();
@@ -102,6 +120,10 @@ function onClick(e: Event): void {
       mode = 'secenekler';
       render();
       break;
+    case 'basarimlar-menu':
+      mode = 'basarimlar';
+      render();
+      break;
     case 'geri':
       mode = geriMode;
       render();
@@ -145,15 +167,27 @@ function onClick(e: Event): void {
       break;
     case 'ayar': {
       const ad = hedef.dataset.ad as keyof typeof AYARLAR;
-      AYARLAR[ad] = !AYARLAR[ad];
-      ayarlariKaydet();
-      if (ad === 'dekor') invalidateGround();
-      render();
+      if (typeof AYARLAR[ad] === 'boolean') {
+        (AYARLAR[ad] as boolean) = !AYARLAR[ad];
+        ayarlariKaydet();
+        if (ad === 'dekor') invalidateGround();
+        render();
+      }
       break;
     }
     default:
       break;
   }
+}
+
+/** Ses kaydırıcısı (input event — click delegasyonundan ayrı). */
+function onInput(e: Event): void {
+  const t = e.target;
+  if (!(t instanceof HTMLInputElement) || t.dataset.menu !== 'ses-slider') return;
+  AYARLAR.ses = Number(t.value);
+  ayarlariKaydet();
+  const etiket = t.previousElementSibling?.querySelector('small');
+  if (etiket) etiket.textContent = `Arayüz ve bildirim efektleri (${AYARLAR.ses}%)`;
 }
 
 // --- Görünüm -----------------------------------------------------------------
@@ -188,6 +222,7 @@ function render(): void {
       ${buton('▶ Oyuna Dön', 'devam-oyun')}
       ${buton('💾 Oyun Kaydet', 'kaydet-menu')}
       ${buton('📂 Oyun Yükle', 'yukle-menu')}
+      ${buton('🏅 Başarımlar', 'basarimlar-menu')}
       ${buton('⚙️ Seçenekler', 'secenekler')}
       ${buton('✨ Yeni Oyun', 'yeni-oyun')}
       ${buton('🏠 Ana Menü', 'ana-menu')}
@@ -244,7 +279,20 @@ function render(): void {
         ${satir('Gündüz/gece ışığı', 'Şafak, alacakaranlık ve gece renk tonları', 'isikDongusu')}
         ${satir('Izgara çizgileri', 'Yakınlaşınca kare çizgilerini göster', 'izgara')}
         ${satir('Çevre dekoru', 'Çimenlerde ağaç ve çalılar', 'dekor')}
+        ${satir('Minimap', 'Sağ altta kampüs kuşbakışı haritası', 'minimap')}
+        <div class="ayar-satir">
+          <span><b>Ses</b><br><small>Arayüz ve bildirim efektleri (${AYARLAR.ses}%)</small></span>
+          <input type="range" min="0" max="100" value="${AYARLAR.ses}" data-menu="ses-slider"
+            style="width:130px" />
+        </div>
       </div>
+      <div style="margin-top:8px;font-size:12px;opacity:0.7">💡 Oyun içinde <b>Ctrl+S</b> ile hızlı kaydet.</div>
+      ${buton('← Geri', 'geri')}
+    `;
+  } else if (mode === 'basarimlar') {
+    icerik = `
+      <div class="menu-baslik kucuk">🏅 Başarımlar</div>
+      <div class="basarim-liste">${basarimListesiHtml()}</div>
       ${buton('← Geri', 'geri')}
     `;
   }
