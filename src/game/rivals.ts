@@ -19,15 +19,17 @@ const ALANLAR: Alan[] = ['muhendis', 'artist', 'filozof', 'pratik'];
 
 /** Sıralama skoru: prestij ağırlıklı, yayın ve mezun destekli. */
 export function uniSkor(prestij: number, yayin: number, mezun: number): number {
-  return Math.round(prestij + yayin * 0.5 + mezun * 0.1);
+  // yayın/mezun ağırlığı yükseltildi — üretken (araştırma/mezun) oyuncunun
+  // emeği sıralamaya daha çok yansısın (zirve erişilebilir olsun)
+  return Math.round(prestij + yayin * 0.8 + mezun * 0.15);
 }
 
 /** Yeni oyunda rakipleri kurar — oyuncu (100 prestij) alt sıralardan başlar. */
 export function kurRakipler(state: GameState): void {
   state.rakipler = RAKIP_UNILER.map((ad, i) => {
     // yayılım: köklü devler + orta sınıf + yeni kurulanlar
-    const taban = 70 + ((i * 137) % 380);
-    const prestij = taban + randInt(state, -25, 45);
+    const taban = 60 + ((i * 137) % 300);
+    const prestij = taban + randInt(state, -20, 40);
     // isimden ipucu: "Sanat/Sosyal/Tarih" artist-filozof, "Teknoloji/Teknik/Fen" mühendis, "İşletme" pratik
     let uzmanlik: Alan = pick(state, ALANLAR);
     if (/Teknik|Teknoloji|Fen|Politeknik|Bilim/.test(ad)) uzmanlik = 'muhendis';
@@ -37,8 +39,8 @@ export function kurRakipler(state: GameState): void {
     return {
       ad,
       prestij,
-      yayin: Math.round(prestij * randRange(state, 0.25, 0.7)),
-      mezun: Math.round(prestij * randRange(state, 0.6, 1.8)),
+      yayin: Math.round(prestij * randRange(state, 0.2, 0.5)),
+      mezun: Math.round(prestij * randRange(state, 0.5, 1.2)),
       guc: randRange(state, 0.7, 1.4),
       sehir: UNI_SEHIRLER[i % UNI_SEHIRLER.length],
       kurulus: 1955 + randInt(state, 0, 60),
@@ -61,15 +63,35 @@ export function rakipBilgi(r: import('../core/types').RakipUni): string {
  * Yıl dönümünde rakipleri geliştirir (güç karakteri de yavaşça sürüklenir) ve
  * 1-2 rakip GÖRÜNÜR bir hamle yapar — haber metinleri döndürülür (game.ts
  * bildirir; bu modül döngü olmasın diye notify'a erişmez).
+ *
+ * 🎯 LASTİK BANT: rakip büyümesi oyuncunun skoruna göre ölçeklenir. Oyuncunun
+ * ÇOK üstündeki lider rakipler rahatlar (yavaş büyür → yaklaşılabilir hedef);
+ * boyun boyuna rakipler karşı atağa geçer (kıyasıya yarış); geridekiler ılımlı.
+ * Böylece "1 numara" azimli oyuncu için ~12-16 yılda erişilebilir olur, ama
+ * zirveyi korumak da çaba ister (en yakın takipçi hep bası zorlar).
  */
 export function rakipleriGelistir(state: GameState): string[] {
-  for (const r of state.rakipler) {
-    r.prestij = clamp(Math.round(r.prestij + randRange(state, -10, 26) * r.guc), 30, 1000);
-    r.yayin += Math.max(0, Math.round(randRange(state, 2, 14) * r.guc));
-    r.mezun += Math.max(0, Math.round(randRange(state, 25, 130) * r.guc));
+  const oyuncuSkor = uniSkor(state.prestij, state.toplamYayin, state.toplamMezun);
+  const skorlar = state.rakipler.map((r) => uniSkor(r.prestij, r.yayin, r.mezun));
+  const enYuksekRakip = Math.max(1, ...skorlar);
+  const oyuncuLider = oyuncuSkor >= enYuksekRakip; // oyuncu 1 numara mı?
+
+  state.rakipler.forEach((r, i) => {
+    const rSkor = skorlar[i];
+    const d = rSkor - oyuncuSkor; // + = rakip önde, - = geride
+    // lastik bant: oyuncunun ÇOK üstündeki lider coşmaz (yaklaşılabilir);
+    // hemen üstündeki tek rakip mütevazı direnir; GEÇİLEN rakip geri sıçramaz.
+    let rb: number;
+    if (d > 0) rb = clamp(1.0 - d / 300, 0.15, 1.0); // önde: ne kadar önde o kadar yavaş
+    else rb = 0.5;                                    // geride/aynı: yavaş (leapfrog yok)
+    // oyuncu 1 numaraysa EN YÜKSEK rakip ciddi meydan okur (zirve statik kalmasın)
+    if (oyuncuLider && rSkor === enYuksekRakip) rb = 1.5;
+    r.prestij = clamp(Math.round(r.prestij + randRange(state, -10, 26) * r.guc * rb), 30, 1000);
+    r.yayin += Math.max(0, Math.round(randRange(state, 2, 14) * r.guc * rb));
+    r.mezun += Math.max(0, Math.round(randRange(state, 25, 130) * r.guc * rb));
     r.guc = clamp(r.guc + randRange(state, -0.08, 0.08), 0.6, 1.5);
     r.istihdam = clamp(Math.round(r.istihdam + randRange(state, -3, 3) + (r.guc - 1) * 4), 42, 96);
-  }
+  });
 
   // rakip hamleleri: sadece sayılar sürüklenmez — rakipler görünür işler yapar
   const haberler: string[] = [];
