@@ -2207,6 +2207,16 @@ function programGovde(state: GameState): string {
         </select>`;
     };
 
+    // KÜRESEL derslik numarası: aynı fiziksel oda HER ZAMAN aynı numarayı taşır,
+    // bölüme göre sıfırlanmaz — iki farklı bölümün dersliği asla aynı "Derslik N"
+    // adını paylaşmaz (adlandırma çakışması "aynı dersliğe iki bölüm ders veriyor"
+    // yanılgısına yol açıyordu; fiziksel oda tek bölüme aittir, yalnız etiket yanlıştı).
+    const tumSiniflar = state.rooms
+      .filter((r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid)
+      .sort((a, b) => a.id - b.id);
+    const kuresizNo = new Map<number, number>();
+    tumSiniflar.forEach((r, i) => kuresizNo.set(r.id, i + 1));
+
     // SÜTUNLAR = DERSLİKLER (bölümler değil): her geçerli derslik bir sütun,
     // altında ait olduğu bölüm. Bölümün derslikleri aynı programı paylaşır
     // (bir bölüm gün+seans başına tek ders işler); dersliği olmayan bölüm uyarı sütunu.
@@ -2217,8 +2227,8 @@ function programGovde(state: GameState): string {
       if (odalar.length === 0) {
         sutunlar.push({ dept, etiket: `<b style="color:#f4a09c">⚠ Derslik yok</b><br><small>${def.ad}</small>` });
       } else {
-        odalar.forEach((r, i) => {
-          const ad = r.ozelAd ? `⭐ ${esc(r.ozelAd)}` : `🏫 Derslik ${i + 1}`;
+        odalar.forEach((r) => {
+          const ad = r.ozelAd ? `⭐ ${esc(r.ozelAd)}` : `🏫 Derslik ${kuresizNo.get(r.id)}`;
           sutunlar.push({ dept, etiket: `<b style="color:${def.renk}">${ad}</b><br><small>${def.ad}</small>` });
         });
       }
