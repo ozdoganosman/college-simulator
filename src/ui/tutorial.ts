@@ -73,12 +73,12 @@ const STEPS: TutorialStep[] = [
   },
   {
     baslik: 'İlk bölümünü aç',
-    detay: 'Bu oyunda <b>derslerden bölümlere</b> gidilir: <b>📅 Program</b> panelinde her hocaya yıllık dersleri seçilir; bir bölüm ancak müfredatı <b>açık derslerle</b> karşılanıyorsa açılır. Program panelindeki <b>"✔ Açılabilecek Bölümler"</b> listesinden birini tek tıkla aç — ya da bir bölümü <b>🎯 Dersleri Ata</b> ile hedefleyip eksik derslerini hocalara dağıt.',
+    detay: 'Bu oyunda <b>dersliklerden bölümlere</b> gidilir: bölümü haritadan (yeterli sayıda) derslik/amfi seçerek açarsın — hoca gerekmez. Bölüm açılır açılmaz her dersliğin haftalık programı (5 gün × 4 blok) müfredattan <b>otomatik</b> kurulur. <b>🎓 Bölümler</b> panelinden aç.',
     kontrol: (s) => ({ tamam: s.departments.length >= 1 }),
   },
   {
-    baslik: 'Hocalar bölüme kendiliğinden bağlanır',
-    detay: 'Bölüm açılınca müfredatından ders veren hocalar o bölüme <b>otomatik</b> bağlanır — ayrıca atama yok. <b>👩‍🏫 Kadro</b> panelindeki Bölüm sütunundan kontrol et; "—" görünen hocaya <b>📅 Program</b> panelinden ders dağıt. Bölümde yeterli öğretim üyesi yoksa YÖK kontenjan vermez!',
+    baslik: 'Hocaları hücrelere sürükle',
+    detay: 'Derslik ızgarası hazır ama hücreler boş: <b>📅 Program</b> panelini aç, bir hocayı tut ve haftalık ızgaradaki bir hücreye <b>sürükle</b> — o hücrenin hocası olur ve bölüme otomatik bağlanır. Tek tek uğraşmak istemezsen <b>🪄 Akıllı Doldur</b> ile tüm boş hücreleri tek tıkla doldur. Bölümde yeterli öğretim üyesi yoksa YÖK kontenjan vermez!',
     kontrol: (s) => {
       const n = s.agents.filter((a) => a.kind === 'akademisyen' && a.deptId !== -1).length;
       return { tamam: n >= 2, ilerleme: `${Math.min(n, 2)}/2 bağlandı` };

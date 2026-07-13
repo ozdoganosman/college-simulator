@@ -6,7 +6,8 @@
  *
  * canOpenDepartment(state, defId): { ok, eksik: string[] } — SEÇİMDEN ÖNCEKİ kapı:
  *  - Zaten açıksa eksik=['Bölüm zaten açık'].
- *  - Öğretim kapasitesi (kadro), müfredat şartı (dersler açık derslerde), bütçe.
+ *  - Öğretim kapasitesi (kadro sayısı, minDerslik'e göre), bütçe. Ders şartı YOK —
+ *    ders programı hocasız da kurulur, hoca 📅 Program panelinden sonradan sürüklenir.
  *  - Derslik/lab burada KONTROL EDİLMEZ — oda seçimi haritada yapılır (bkz. aşağı).
  *
  * canFinalizeDepartment(state, defId, roomIds): { ok, eksik } — SEÇİM TAMAMLANIRKEN:
@@ -62,10 +63,10 @@
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
 import {
-  ALAN_META, Academic, AcademicRank, Department, GameState, MezuniyetSonuc, RANK_LABEL, Room,
+  Academic, AcademicRank, Department, GameState, MezuniyetSonuc, RANK_LABEL, Room,
   Student, YerlestirmeSatir, donemIndex, yil,
 } from '../core/types';
-import { courseDef, dersEtki, rebuildDersProgrami, verilemeyenDersler } from './schedule';
+import { GUNLUK_BLOK_LIMIT, rebuildDersProgrami } from './schedule';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { bolumBaskinAlan, deptDef } from '../data/departments';
@@ -86,19 +87,16 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   const def = deptDef(defId);
   const eksik: string[] = [];
 
-  // Öğretim kapasitesi: her bölüm günde 4 blok ders ister, bir hoca günde en çok
-  // 2 blok verebilir — kapasite yetmezse program "hoca yok!" ile dolar
+  // Öğretim kapasitesi: her derslik günde 4 blok ders ister, bir hoca günde en çok
+  // GUNLUK_BLOK_LIMIT blok verebilir — kapasite yetmezse program "hoca yok!" ile dolar.
+  // Yeni bölümün en az minDerslik derslik getireceğini varsayarız (haritadan seçilecek).
   const hocaSayisi = state.agents.filter((a) => a.kind === 'akademisyen').length;
-  const blokIhtiyac = (state.departments.length + 1) * 4;
-  if (hocaSayisi * 2 < blokIhtiyac) {
-    eksik.push(`Öğretim kapasitesi yetersiz: ${Math.ceil((blokIhtiyac - hocaSayisi * 2) / 2)} hoca daha gerek (bir hoca günde en çok 2 blok ders verir)`);
-  }
-  // Müfredat şartı: bölümün TÜM dersleri "açık derslerde" olmalı — yani her ders
-  // en az bir hocanın yıllık ders seçiminde bulunmalı (derslerden bölümlere).
-  for (const dersId of verilemeyenDersler(state, defId)) {
-    const ders = courseDef(dersId);
-    const alan = ALAN_META[ders.birincil];
-    eksik.push(`${ders.kod} ${ders.ad} açık derslerde değil — 📅 Program panelinden ${alan.emoji} ${alan.ad} bir hocaya seçtir`);
+  const mevcutDerslikSayisi = state.rooms.filter(
+    (r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId !== null,
+  ).length;
+  const blokIhtiyac = (mevcutDerslikSayisi + def.minDerslik) * 4;
+  if (hocaSayisi * GUNLUK_BLOK_LIMIT < blokIhtiyac) {
+    eksik.push(`Öğretim kapasitesi yetersiz: ${Math.ceil((blokIhtiyac - hocaSayisi * GUNLUK_BLOK_LIMIT) / GUNLUK_BLOK_LIMIT)} hoca daha gerek (bir hoca günde en çok ${GUNLUK_BLOK_LIMIT} blok ders verir)`);
   }
   if (state.para < def.acilisMaliyeti) {
     eksik.push(`Bütçe yetersiz (${formatMoney(def.acilisMaliyeti)} gerekli)`);

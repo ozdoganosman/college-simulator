@@ -168,10 +168,14 @@ interface Ctx {
   ulasim: number;
   yemekhaneler: Room[];
   kantinler: Room[];
-  /** deptId -> bölüme atanmış geçerli derslik/amfiler */
+  /** deptId -> bölüme atanmış, bu blokta ELLE ATANMAMIŞ geçerli derslik/amfiler (otomatik sıra havuzu) */
   deptClassrooms: Map<number, Room[]>;
-  /** akademisyen id -> bölümündeki kampüsteki akademisyenler arasındaki sırası */
+  /** akademisyen id -> bölümündeki (elle atanmamış) kampüsteki akademisyenler arasındaki sırası */
   academicIndex: Map<number, number>;
+  /** oda id -> Room (ELLE atanmış hocayı bu blokta hangi dersliğe göndereceğimizi bulmak için) */
+  roomById: Map<number, Room>;
+  /** akademisyen id -> bu blok için 📅 panelden SÜRÜKLENEREK atandığı derslik id'si */
+  atananOda: Map<number, number>;
   copYakini: Set<number>;
   /** toplam öğrenci sayısı (mutfak üretim tavanı için) */
   ogrenciSayisi: number;
@@ -193,6 +197,22 @@ function buildCtx(state: GameState, dk: number): Ctx {
   // yerleşik programa/bölüm sahipliğine bağlı kalır — bkz. deptClassrooms).
   const serbestCalismaOdalari: Room[] = [];
 
+  // güncel bloğun gün+blok'u — sürüklenerek atanmış hocaları/derslikleri bulmak için
+  // deptClassrooms'tan ÖNCE hesaplanır (elle atanmış derslikler otomatik sıra havuzuna girmez).
+  const blokBaslangicOnce = dersBlogu(dk);
+  const blokNoOnce = blokBaslangicOnce === -1 ? -1 : DERS_BLOKLARI.indexOf(blokBaslangicOnce);
+  const pgOnce = programGunu(state.gun);
+  const atananOda = new Map<number, number>(); // academicId -> roomId (bu blokta)
+  const claimedRoomIds = new Set<number>();
+  if (blokNoOnce >= 0) {
+    for (const s of state.dersProgrami ?? []) {
+      if (s.gun === pgOnce && s.blok === blokNoOnce && s.academicId !== -1) {
+        atananOda.set(s.academicId, s.roomId);
+        claimedRoomIds.add(s.roomId);
+      }
+    }
+  }
+
   const yurtOdalar: Room[] = [];
   for (const r of state.rooms) {
     roomById.set(r.id, r);
@@ -200,7 +220,7 @@ function buildCtx(state: GameState, dk: number): Ctx {
     if (r.type === 'yurt') yurtOdalar.push(r);
     if (r.type === 'derslik' || r.type === 'amfi') {
       serbestCalismaOdalari.push(r);
-      if (r.deptId !== null) {
+      if (r.deptId !== null && !claimedRoomIds.has(r.id)) {
         const liste = deptClassrooms.get(r.deptId);
         if (liste) liste.push(r);
         else deptClassrooms.set(r.deptId, [r]);
@@ -279,15 +299,12 @@ function buildCtx(state: GameState, dk: number): Ctx {
   }
 
   // öğretmen mevcudu + akademisyen sınıf sırası + mutfak durumu (tek geçiş)
-  // güncel bloğun bölüm dersleri (ders programından)
-  const blokBaslangic = dersBlogu(dk);
-  const blokNo = blokBaslangic === -1 ? -1 : DERS_BLOKLARI.indexOf(blokBaslangic);
+  // güncel bloğun bölüm dersleri (ders programından) — blok/gün yukarıda hesaplandı
+  const blokNo = blokNoOnce;
   const blokDersleri = new Map<number, string>(); // deptId -> courseId
   if (blokNo >= 0) {
-    const seans = blokNo < 2 ? 0 : 1; // blok 0-1 = sabah (08-12), 2-3 = öğleden sonra (12-16)
-    const pg = programGunu(state.gun); // haftalık program günü (Cmt→Pzt tekrarı, Paz tatil)
     for (const s of state.dersProgrami ?? []) {
-      if (s.gun === pg && s.seans === seans) blokDersleri.set(s.deptId, s.courseId);
+      if (s.gun === pgOnce && s.blok === blokNo) blokDersleri.set(s.deptId, s.courseId);
     }
   }
 
@@ -301,9 +318,11 @@ function buildCtx(state: GameState, dk: number): Ctx {
   for (const a of state.agents) {
     if (!a.onCampus) continue;
     if (a.kind === 'akademisyen') {
-      const liste = deptAkademik.get(a.deptId);
-      if (liste) liste.push(a);
-      else deptAkademik.set(a.deptId, [a]);
+      if (!atananOda.has(a.id)) { // elle atanmış hoca sıralamaya girmez — doğrudan kendi dersliğine gider
+        const liste = deptAkademik.get(a.deptId);
+        if (liste) liste.push(a);
+        else deptAkademik.set(a.deptId, [a]);
+      }
       if (a.activity === 'ders_veriyor') {
         const rid = state.roomAt[tileIndex(Math.round(a.x), Math.round(a.y))];
         if (rid >= 0) {
@@ -383,6 +402,8 @@ function buildCtx(state: GameState, dk: number): Ctx {
     kantinler,
     deptClassrooms,
     academicIndex,
+    roomById,
+    atananOda,
     copYakini: copYakiniSet(state),
     ogrenciSayisi,
     tatil: tatilMi(state.gun),
@@ -841,6 +862,12 @@ function updateStudent(state: GameState, s: Student, dtMin: number, ctx: Ctx): v
 // --- Akademisyen ---------------------------------------------------------------
 
 function assignedClassroom(a: Academic, ctx: Ctx): Room | null {
+  // 📅 panelden SÜRÜKLENEREK atanmışsa doğrudan o dersliğe gider (otomatik sıralama devre dışı).
+  const atananId = ctx.atananOda.get(a.id);
+  if (atananId !== undefined) {
+    const oda = ctx.roomById.get(atananId);
+    return oda && oda.valid && oda.deptId === a.deptId ? oda : null;
+  }
   const odalar = ctx.deptClassrooms.get(a.deptId);
   if (!odalar || odalar.length === 0) return null;
   const i = ctx.academicIndex.get(a.id) ?? 0;
