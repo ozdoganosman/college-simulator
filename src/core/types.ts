@@ -146,7 +146,7 @@ export interface DersSlot {
   roomId: number;
   /** haftanın günü 0-4: Pazartesi … Cuma (hafta içi 5 gün) */
   gun: number;
-  /** günün bloğu 0-3: 08:00-10:00 / 10:00-12:00 / 13:00-15:00 / 15:00-17:00 */
+  /** günün bloğu 0-1: 08:00-12:00 (sabah) / 13:00-17:00 (öğleden sonra) */
   blok: number;
   courseId: string;
   /** sürüklenerek atanan akademisyen (yoksa -1) */
@@ -155,11 +155,11 @@ export interface DersSlot {
   kilit?: boolean;
 }
 
-/** Haftalık program: 5 gün × 4 blok = derslik başına 20 hücre. */
+/** Haftalık program: 5 gün × 2 blok = derslik başına 10 hücre. */
 export const HAFTA_GUN = 5;
-export const GUNLUK_BLOK = 4;
+export const GUNLUK_BLOK = 2;
 export const HAFTA_ICI = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'] as const;
-export const BLOK_SAAT = ['08:00–10:00', '10:00–12:00', '13:00–15:00', '15:00–17:00'] as const;
+export const BLOK_SAAT = ['08:00–12:00', '13:00–17:00'] as const;
 
 /** Programın haftalık gün indeksi (0-4). Cumartesi Pazartesi'yi tekrarlar, Pazar tatil. */
 export function programGunu(gun: number): number {

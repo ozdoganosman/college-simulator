@@ -63,7 +63,7 @@
  *  - Prestij doğal sürüklenme: ortalama mutluluk > 70 ise +0.3, < 40 ise -0.5.
  */
 import {
-  Academic, AcademicRank, Department, GameState, MezuniyetSonuc, RANK_LABEL, Room,
+  Academic, AcademicRank, Department, GUNLUK_BLOK, GameState, MezuniyetSonuc, RANK_LABEL, Room,
   Student, YerlestirmeSatir, donemIndex, yil,
 } from '../core/types';
 import { GUNLUK_BLOK_LIMIT, rebuildDersProgrami } from './schedule';
@@ -87,14 +87,14 @@ export function canOpenDepartment(state: GameState, defId: string): { ok: boolea
   const def = deptDef(defId);
   const eksik: string[] = [];
 
-  // Öğretim kapasitesi: her derslik günde 4 blok ders ister, bir hoca günde en çok
+  // Öğretim kapasitesi: her derslik günde GUNLUK_BLOK ders ister, bir hoca günde en çok
   // GUNLUK_BLOK_LIMIT blok verebilir — kapasite yetmezse program "hoca yok!" ile dolar.
   // Yeni bölümün en az minDerslik derslik getireceğini varsayarız (haritadan seçilecek).
   const hocaSayisi = state.agents.filter((a) => a.kind === 'akademisyen').length;
   const mevcutDerslikSayisi = state.rooms.filter(
     (r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId !== null,
   ).length;
-  const blokIhtiyac = (mevcutDerslikSayisi + def.minDerslik) * 4;
+  const blokIhtiyac = (mevcutDerslikSayisi + def.minDerslik) * GUNLUK_BLOK;
   if (hocaSayisi * GUNLUK_BLOK_LIMIT < blokIhtiyac) {
     eksik.push(`Öğretim kapasitesi yetersiz: ${Math.ceil((blokIhtiyac - hocaSayisi * GUNLUK_BLOK_LIMIT) / GUNLUK_BLOK_LIMIT)} hoca daha gerek (bir hoca günde en çok ${GUNLUK_BLOK_LIMIT} blok ders verir)`);
   }
