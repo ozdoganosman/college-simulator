@@ -199,14 +199,17 @@ function buildCtx(state: GameState, dk: number): Ctx {
 
   // güncel bloğun gün+blok'u — sürüklenerek atanmış hocaları/derslikleri bulmak için
   // deptClassrooms'tan ÖNCE hesaplanır (elle atanmış derslikler otomatik sıra havuzuna girmez).
+  // Sim GERÇEKTE günde 4 blok çalışır (DERS_BLOKLARI); Ders Programı ızgarası bunu 2 kaba
+  // bloğa toplar (0-1 = 08-12 sabah, 2-3 = 13-17 öğleden sonra) — gridBlokOnce bu eşlemedir.
   const blokBaslangicOnce = dersBlogu(dk);
   const blokNoOnce = blokBaslangicOnce === -1 ? -1 : DERS_BLOKLARI.indexOf(blokBaslangicOnce);
+  const gridBlokOnce = blokNoOnce < 0 ? -1 : (blokNoOnce < DERS_BLOKLARI.length / 2 ? 0 : 1);
   const pgOnce = programGunu(state.gun);
   const atananOda = new Map<number, number>(); // academicId -> roomId (bu blokta)
   const claimedRoomIds = new Set<number>();
-  if (blokNoOnce >= 0) {
+  if (gridBlokOnce >= 0) {
     for (const s of state.dersProgrami ?? []) {
-      if (s.gun === pgOnce && s.blok === blokNoOnce && s.academicId !== -1) {
+      if (s.gun === pgOnce && s.blok === gridBlokOnce && s.academicId !== -1) {
         atananOda.set(s.academicId, s.roomId);
         claimedRoomIds.add(s.roomId);
       }
@@ -300,11 +303,10 @@ function buildCtx(state: GameState, dk: number): Ctx {
 
   // öğretmen mevcudu + akademisyen sınıf sırası + mutfak durumu (tek geçiş)
   // güncel bloğun bölüm dersleri (ders programından) — blok/gün yukarıda hesaplandı
-  const blokNo = blokNoOnce;
   const blokDersleri = new Map<number, string>(); // deptId -> courseId
-  if (blokNo >= 0) {
+  if (gridBlokOnce >= 0) {
     for (const s of state.dersProgrami ?? []) {
-      if (s.gun === pgOnce && s.blok === blokNo) blokDersleri.set(s.deptId, s.courseId);
+      if (s.gun === pgOnce && s.blok === gridBlokOnce) blokDersleri.set(s.deptId, s.courseId);
     }
   }
 

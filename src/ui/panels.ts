@@ -2064,7 +2064,7 @@ function programGovde(state: GameState): string {
 
   let html = `<div class="aciklama"><b>Akış: dersliklerden bölümlere.</b> Bir bölümü haritadan
     yeterli derslik/amfi seçerek açarsın — hoca GEREKMEZ. Bölüm açılınca her dersliğin haftalık
-    ızgarası (5 gün × 4 blok) müfredattan otomatik kurulur. Hocaları SONRADAN, ızgaradaki
+    ızgarası (5 gün × 2 blok) müfredattan otomatik kurulur. Hocaları SONRADAN, ızgaradaki
     hücrelere sürükleyerek (ya da 🪄 Akıllı Doldur ile) atarsın — bir hocanın hangi dersleri
     verdiği yalnız bu atamalardan görünür, elle seçilmez.
     <br><b>⚡ Yük:</b> hoca ne kadar çok FARKLI ders verirse ders kalitesi ve araştırma hızı o
@@ -2146,7 +2146,7 @@ function programGovde(state: GameState): string {
     html += '</table>';
   }
 
-  // --- 3) Yerleşik haftalık program — DERSLİK (sütun) × GÜN+BLOK (20 satır) ---
+  // --- 3) Yerleşik haftalık program — DERSLİK (sütun) × GÜN+BLOK (10 satır) ---
   if (state.departments.length > 0) {
     const hocaAd = new Map<number, string>();
     const hocaAlan = new Map<number, Alan>();
@@ -2217,7 +2217,7 @@ function programGovde(state: GameState): string {
       html += '<div class="aciklama">Hiç geçerli derslik yok — açık bölümlerin dersliğini harita üzerinden kontrol et.</div>';
     } else {
       html += `<p class="aciklama"><b>Derslik ızgarası:</b> her sütun bir FİZİKSEL derslik — hafta içi
-        <b>5 gün × 4 blok (08–10 / 10–12 / 13–15 / 15–17) = 20 satır</b>. Dersi müfredat belirler,
+        <b>5 gün × 2 blok (08:00–12:00 / 13:00–17:00) = 10 satır</b>. Dersi müfredat belirler,
         hoca GEREKMEZ. Bir hocayı (yukarıdaki Kadro'dan ya da başka bir hücreden) <b>sürükleyip
         bırak</b> — aynı gün+blokta çakışma varsa hücre kırmızı olur ve bırakma kabul edilmez.</p>`;
       html += `<div class="program-lejant">
