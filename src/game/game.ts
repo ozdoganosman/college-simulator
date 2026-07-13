@@ -328,8 +328,8 @@ function kurHazirKampus(state: GameState): void {
       BALANCE.MAAS[rank],
     );
   }
-  // Ders seçimleri BOŞ başlar (0/4): oyuncu kendi kurar — 📅 Program panelindeki
-  // "🎯 Tavsiye Bölüm" listesi ve 🪄 Akıllı Seçim yol gösterir. (Otomatik doldurma yok.)
+  // Kadro dersliksiz/bölümsüz başlar: oyuncu 🎓 Bölümler panelinden derslik seçip bölüm açar,
+  // 📅 Program panelinden hocaları haftalık ızgaraya sürükler (ya da 🪄 Akıllı Doldur kullanır).
 
   state.para = paraOnce;
 }

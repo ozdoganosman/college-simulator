@@ -4,7 +4,7 @@ import {
 import { BALANCE } from '../data/balance';
 import { DEPT_DEFS } from '../data/departments';
 import { courseExists } from '../data/courses';
-import { rebuildDersProgrami, tumunuOtoSec } from './schedule';
+import { rebuildDersProgrami } from './schedule';
 import { kurRakipler } from './rivals';
 
 export function createInitialState(): GameState {
@@ -286,18 +286,15 @@ export function eskiKayitUyumu(s: GameState): void {
     for (const r of s.rooms) if (r.deptId !== null && silinen.has(r.deptId)) r.deptId = null;
     s.projects = s.projects.filter((p) => !silinen.has(p.deptId));
   }
-  // haftalık program: eski (blok tabanlı) hücreler düşürülür — aşağıda yeniden kurulur
+  // haftalık program: eski (seans tabanlı) hücreler düşürülür — aşağıda derslikten yeniden kurulur
   s.dersProgrami = s.dersProgrami.filter((p) => courseExists(p.courseId) && !silinen.has(p.deptId)
-    && typeof (p as { gun?: number }).gun === 'number' && typeof (p as { seans?: number }).seans === 'number');
+    && typeof (p as { gun?: number }).gun === 'number' && typeof (p as { blok?: number }).blok === 'number'
+    && typeof (p as { roomId?: number }).roomId === 'number');
   const alanlar = ['muhendis', 'artist', 'filozof', 'pratik'] as const;
-  let dersSecimiEksik = false;
   for (const a of s.agents) {
     if (a.kind === 'akademisyen') {
       if (!(a as { alan?: string }).alan) a.alan = alanlar[a.id % alanlar.length];
-      if (!Array.isArray(a.verdigiDersler)) {
-        a.verdigiDersler = [];
-        dersSecimiEksik = true;
-      }
+      if (!Array.isArray(a.verdigiDersler)) a.verdigiDersler = [];
       if (typeof a.yetistirdigi !== 'number') a.yetistirdigi = 0;
       if (typeof a.memnuniyet !== 'number') a.memnuniyet = 70;
       if (typeof a.yas !== 'number') a.yas = 35 + (a.id % 20);
@@ -328,8 +325,7 @@ export function eskiKayitUyumu(s: GameState): void {
       if (typeof a.arkadas !== 'number') a.arkadas = -1; // sosyal ağ sonradan eklendi
     }
   }
-  if (dersSecimiEksik) tumunuOtoSec(s); // eski kayıt: dersleri otomatik seç (rebuild içinde)
-  else if (s.departments.length > 0) rebuildDersProgrami(s); // haftalık programı seçimlerden yeniden kur
+  if (s.departments.length > 0) rebuildDersProgrami(s); // haftalık programı dersliklerden yeniden kur
   for (const c of [...s.kpssPool, ...s.transferPool]) {
     if (!(c as { alan?: string }).alan) c.alan = alanlar[c.id % alanlar.length];
   }

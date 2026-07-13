@@ -32,7 +32,7 @@ import { chance, clamp, formatMoney, newId, pick, randInt, randRange } from '../
 import { BALANCE } from '../data/balance';
 import { AD, RAKIP_UNILER, SOYAD } from '../data/names';
 import { removeAgent, spawnAcademic } from './agents';
-import { ASISTAN_LIMIT, asistanlari, dersYukuVerimi, otoDersSec, rebuildDersProgrami } from './schedule';
+import { ASISTAN_LIMIT, asistanlari, dersYukuVerimi, rebuildDersProgrami } from './schedule';
 import { siralama } from './rivals';
 import { transferBonusCarpani } from './rivals';
 
@@ -150,7 +150,6 @@ export function hireFromPool(
     addPrestij(state, 2);
     notify(state, `🌳 ${aday.ad} kendi doktora mezunumuz olarak kadroya döndü — akademik soyağacımız büyüyor! (+2 prestij)`, 'odul');
   }
-  otoDersSec(state, yeni.id); // yıllık ders seçimi otomatik başlar — panelden değiştirilebilir
   rebuildDersProgrami(state);
   havuz.splice(idx, 1);
 

@@ -11,15 +11,14 @@
  *   (styles.css'te hazır).
  */
 import {
-  ALAN_META, AcademicRank, Alan, GUNLUK_SEANS, GameState, HAFTA_GUN, HAFTA_KISA, LEVEL_LABEL,
-  Mezun, NITELIK_META, Nitelik, NoticeKind, ProjeTip, RANK_LABEL, RoomType, SEANS_SAAT, Sektor,
+  ALAN_META, AcademicRank, Alan, BLOK_SAAT, GUNLUK_BLOK, GameState, HAFTA_GUN, HAFTA_KISA,
+  LEVEL_LABEL, Mezun, NITELIK_META, Nitelik, NoticeKind, ProjeTip, RANK_LABEL, RoomType, Sektor,
   StrategyDef, Student, StudentLevel, tileIndex,
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
 import {
-  ASISTAN_LIMIT, DERS_LIMIT, acikDersler, akilliOtoSec, asistanlari, dersHucresi, bolumuHedefle,
-  dersYukuVerimi, hocaCakisirMi, hocaDersCikar, hocaDersEkle, hocaDersSlotAyarla, otoDersSec,
-  slotKilidiAc, slotaHocaAta, verilemeyenDersler, yukVerimi,
+  ASISTAN_LIMIT, DERS_LIMIT, GUNLUK_BLOK_LIMIT, asistanlari, dersHucresi, dersYukuVerimi,
+  hocaCakisirMi, otomatikDoldur, slotaHocaAta, slotuBosalt, yukVerimi,
 } from '../game/schedule';
 import { COURSES } from '../data/courses';
 import { formatClock, formatMoney } from '../core/util';
@@ -108,7 +107,7 @@ export function openPanel(name: PanelName): void {
   // fare basılıyken yeniden çizme — mousedown/mouseup arası DOM değişirse tık yutulur
   el.addEventListener('pointerdown', () => { isaretciBasili = true; });
   window.addEventListener('pointerup', () => { isaretciBasili = false; });
-  // 🖐️ hoca sürükle-bırak (Ders Programı ızgarası): kaynak = [data-drag-academic], hedef = [data-drop-dept]
+  // 🖐️ hoca sürükle-bırak (Ders Programı ızgarası): kaynak = [data-drag-academic], hedef = [data-drop-room]
   el.addEventListener('dragstart', onPanelDragStart);
   el.addEventListener('dragover', onPanelDragOver);
   el.addEventListener('dragleave', onPanelDragLeave);
@@ -140,7 +139,7 @@ export function refreshOpenPanel(state: GameState): void {
   render(state);
 }
 
-// --- Hoca sürükle-bırak: [data-drag-academic] kaynağından [data-drop-dept] hücresine ---------
+// --- Hoca sürükle-bırak: [data-drag-academic] kaynağından [data-drop-room] hücresine ---------
 
 let suruklenenAcademicId = -1;
 
@@ -161,13 +160,13 @@ function onPanelDragStart(e: Event): void {
 function onPanelDragOver(e: Event): void {
   if (!(e instanceof DragEvent) || !(e.target instanceof HTMLElement) || !getStateRef) return;
   if (suruklenenAcademicId < 0) return;
-  const hedef = e.target.closest<HTMLElement>('[data-drop-dept]');
+  const hedef = e.target.closest<HTMLElement>('[data-drop-room]');
   if (!hedef) return;
   e.preventDefault(); // varsayılan engellenmezse drop tetiklenmez
-  const deptId = Number(hedef.dataset.dropDept);
+  const roomId = Number(hedef.dataset.dropRoom);
   const gun = Number(hedef.dataset.dropGun);
-  const seans = Number(hedef.dataset.dropSeans);
-  const cakisma = hocaCakisirMi(getStateRef(), deptId, gun, seans, suruklenenAcademicId);
+  const blok = Number(hedef.dataset.dropBlok);
+  const cakisma = hocaCakisirMi(getStateRef(), roomId, gun, blok, suruklenenAcademicId);
   hedef.classList.toggle('hedef-uygun', !cakisma);
   hedef.classList.toggle('hedef-cakisma', cakisma);
   if (e.dataTransfer) e.dataTransfer.dropEffect = cakisma ? 'none' : 'move';
@@ -175,24 +174,24 @@ function onPanelDragOver(e: Event): void {
 
 function onPanelDragLeave(e: Event): void {
   if (!(e instanceof DragEvent) || !(e.target instanceof HTMLElement)) return;
-  e.target.closest<HTMLElement>('[data-drop-dept]')?.classList.remove('hedef-uygun', 'hedef-cakisma');
+  e.target.closest<HTMLElement>('[data-drop-room]')?.classList.remove('hedef-uygun', 'hedef-cakisma');
 }
 
 function onPanelDrop(e: Event): void {
   if (!(e instanceof DragEvent) || !(e.target instanceof HTMLElement) || !getStateRef) return;
-  const hedef = e.target.closest<HTMLElement>('[data-drop-dept]');
+  const hedef = e.target.closest<HTMLElement>('[data-drop-room]');
   if (!hedef || suruklenenAcademicId < 0) return;
   e.preventDefault();
-  const deptId = Number(hedef.dataset.dropDept);
+  const roomId = Number(hedef.dataset.dropRoom);
   const gun = Number(hedef.dataset.dropGun);
-  const seans = Number(hedef.dataset.dropSeans);
+  const blok = Number(hedef.dataset.dropBlok);
   const academicId = suruklenenAcademicId;
   // render() innerHTML'i hemen değiştirip sürüklenen kaynağı DOM'dan koparır — bu durumda
   // tarayıcı 'dragend'i kopmuş düğümde tetikler ve delegasyonla acik.el'e hiç ulaşmaz. O yüzden
   // "sürükleniyor" durumunu dragend'i BEKLEMEDEN burada temizle (dragend yine de zararsızca çalışır).
   suruklenenAcademicId = -1;
   acik?.el.classList.remove('program-surukleniyor');
-  slotaHocaAta(getStateRef(), deptId, gun, seans, academicId);
+  slotaHocaAta(getStateRef(), roomId, gun, blok, academicId);
   render(getStateRef());
 }
 
@@ -449,26 +448,17 @@ function onPanelClick(e: Event): void {
       }
       break;
     }
-    case 'oto-ders':
-      otoDersSec(state, Number(id));
-      break;
-    case 'oto-ders-tum': {
-      const n = akilliOtoSec(state);
-      notify(state, `🪄 Akıllı seçim tamamlandı: ${n} bölüm açılabilir duruma geldi.`, n > 0 ? 'iyi' : 'bilgi');
-      break;
-    }
-    case 'ders-cikar':
-      hocaDersCikar(state, Number(id), hedef.dataset.ders ?? '');
-      break;
     case 'asistan-cikar':
       asistanBirak(state, Number(id));
       break;
-    case 'hedefle': {
-      const kalan = bolumuHedefle(state, id);
-      if (kalan.length === 0) notify(state, '🎯 Eksik dersler hocalara atandı — bölüm ders şartını karşılıyor!', 'iyi');
-      else notify(state, `🎯 ${kalan.length} ders atanamadı: hocaların ders kotaları dolu (kadroyu büyüt ya da ders çıkar).`, 'kotu');
+    case 'oto-doldur': {
+      const n = otomatikDoldur(state);
+      notify(state, `🪄 Akıllı Doldur: ${n} boş hücreye hoca atandı.`, n > 0 ? 'iyi' : 'bilgi');
       break;
     }
+    case 'slot-bosalt':
+      slotuBosalt(state, Number(id), Number(hedef.dataset.gun ?? '-1'), Number(hedef.dataset.blok ?? '-1'));
+      break;
     case 'kitap-al':
       kitapAl(state, id as Alan);
       break;
@@ -486,9 +476,6 @@ function onPanelClick(e: Event): void {
       break;
     case 'kulup-kapat':
       kulupKapat(state, id);
-      break;
-    case 'slot-kilit-ac':
-      slotKilidiAc(state, Number(id), Number(hedef.dataset.gun ?? '-1'), Number(hedef.dataset.seans ?? '-1'));
       break;
     case 'proje-baslat': {
       const kap = hedef.closest('div[data-proje-kap]');
@@ -609,17 +596,11 @@ function onPanelChange(e: Event): void {
     const sec = hedef as HTMLSelectElement;
     const hocaId = Number(sec.value);
     const gun = Number(hedef.dataset.gun ?? '-1');
-    const seans = Number(hedef.dataset.seans ?? '-1');
-    if (hocaId >= 0 && gun >= 0 && seans >= 0) slotaHocaAta(state, id, gun, seans, hocaId);
-    render(state);
-  } else if (action === 'ders-ekle') {
-    const sec = hedef as HTMLSelectElement;
-    if (sec.value) hocaDersEkle(state, id, sec.value);
-    render(state);
-  } else if (action === 'hoca-ders-sec') {
-    const sec = hedef as HTMLSelectElement;
-    const slot = Number(hedef.dataset.slot ?? '-1');
-    if (slot >= 0) hocaDersSlotAyarla(state, id, slot, sec.value);
+    const blok = Number(hedef.dataset.blok ?? '-1');
+    if (gun >= 0 && blok >= 0) {
+      if (hocaId >= 0) slotaHocaAta(state, id, gun, blok, hocaId);
+      else slotuBosalt(state, id, gun, blok);
+    }
     render(state);
   } else if (action === 'asistan-ata') {
     const sec = hedef as HTMLSelectElement;
@@ -816,10 +797,10 @@ function bolumlerGovde(state: GameState): string {
     <h3>Yeni Bölüm Aç</h3>
     <p class="aciklama">📍 <b>Derslik/lab seçimi haritada elle yapılır</b> — "Derslik Seç"e basınca
       haritada boş bir derslik/amfiye (varsa laboratuvara) tıklayarak seçersin, sonra "Bölümü Aç"
-      ile onaylarsın. Hocalar bölümlere <b>verdikleri derslere göre otomatik</b> bağlanır —
-      📅 Program panelinden ders dağıtmak yeterli, hocayı sonradan da atayabilirsin.
-      ⭐ popülerlik = YKS taban talebi. 🧑‍🏫 Kalite = kadro gücü + öğrenci/hoca oranı + asistan/YL/Dr
-      oranları — yüksek kalite daha çok öğrenci çeker.</p>
+      ile onaylarsın. Hoca GEREKMEZ: ızgara müfredattan otomatik kurulur. Hocalar bölümlere
+      <b>verdikleri derslere göre otomatik</b> bağlanır — 📅 Program panelinden bir hücreye hoca
+      sürükleyince aidiyet kendiliğinden oluşur. ⭐ popülerlik = YKS taban talebi. 🧑‍🏫 Kalite =
+      kadro gücü + öğrenci/hoca oranı + asistan/YL/Dr oranları — yüksek kalite daha çok öğrenci çeker.</p>
     ${yeniBolum}`;
 }
 
@@ -829,8 +810,8 @@ function bolumlerGovde(state: GameState): string {
 function bolumRozeti(state: GameState, deptId: number): string {
   const dept = state.departments.find((d) => d.id === deptId);
   return dept
-    ? `<span class="rozet" title="Bölüm aidiyeti verdiği derslerden OTOMATİK türetilir — ${esc(deptDef(dept.defId).ad)} müfredatına ders veriyor. Değiştirmek için 📅 Program panelinden derslerini değiştir.">${esc(deptDef(dept.defId).kisa)}</span>`
-    : '<span style="color:#8f9ab0" title="Bölümsüz: açık bir bölümün müfredatından ders vermiyor. 📅 Program panelinden ders dağıtın — aidiyet kendiliğinden oluşur.">—</span>';
+    ? `<span class="rozet" title="Bölüm aidiyeti programdaki hücre atamalarından OTOMATİK türetilir — ${esc(deptDef(dept.defId).ad)} müfredatına ders veriyor. Değiştirmek için 📅 Program panelinden bir hücreye başka hoca sürükle.">${esc(deptDef(dept.defId).kisa)}</span>`
+    : '<span style="color:#8f9ab0" title="Bölümsüz: henüz hiçbir ders hücresine atanmadı. 📅 Program panelinden bir hücreye sürükle — aidiyet kendiliğinden oluşur.">—</span>';
 }
 
 function kadroGovde(state: GameState): string {
@@ -2066,68 +2047,34 @@ function yardimGovde(): string {
 
 // --- Ders Programı ---------------------------------------------------------------
 
-const BLOK_SAAT = ['08:00-10:00', '10:00-12:00', '13:00-15:00', '15:00-17:00'];
-
 function uyumYuzde(courseId: string, alan: Alan): number {
   return Math.round((dersEtki(courseId, alan) / 1.25) * 100);
 }
 
-/** Hocanın henüz seçmediği dersler için "+ ders ekle" seçicisi. */
 /**
- * Izgara hücresi: hocanın slotIndex'teki dersi için seçici. Mevcut ders seçili
- * gelir; başka ders seçince değişir, "— boşalt —" ile silinir. Zaten (başka
- * hücrede) seçili dersler listede gösterilmez.
+ * Ders Programı paneli: DERSLİKTEN kurulur, hoca sonradan sürüklenir.
+ * 1) Kadro — salt görüntüleme, sürükleme kaynağı (ders seçimi burada YAPILMAZ).
+ * 2) Açılabilecek Bölümler — yalnız kapasite + bütçe şartı (ders şartı YOK).
+ * 3) Yerleşik Haftalık Program — derslik × gün-blok ızgarası, hoca buraya sürüklenir.
  */
-function hocaDersHucre(hocaId: number, alan: Alan, dersler: string[], i: number): string {
-  const mevcut = dersler[i]; // courseId | undefined
-  const renk = mevcut ? ALAN_META[courseDef(mevcut).birincil].renk : '#3a4252';
-  const tip = mevcut ? `data-tip-ders="${mevcut}" data-tip-alan="${alan}"` : '';
-  let html = `<select class="kontenjan-input hucre-ders${mevcut ? '' : ' bos'}" data-action="hoca-ders-sec"
-    data-id="${hocaId}" data-slot="${i}" ${tip} style="width:118px;border-color:${renk}"
-    title="${mevcut ? `${courseDef(mevcut).ad} — dersi değiştir ya da boşalt` : 'Bu slota ders ata'}">`;
-  html += `<option value="">${mevcut ? '— boşalt —' : '＋ ders'}</option>`;
-  for (const a of Object.keys(ALAN_META) as Alan[]) {
-    const grup = COURSES.filter((c) => c.birincil === a && (!dersler.includes(c.id) || c.id === mevcut));
-    if (grup.length === 0) continue;
-    html += `<optgroup label="${ALAN_META[a].emoji} ${ALAN_META[a].ad}">`;
-    for (const c of grup) {
-      html += `<option value="${c.id}" ${c.id === mevcut ? 'selected' : ''}>${c.kod} · %${uyumYuzde(c.id, alan)}</option>`;
-    }
-    html += '</optgroup>';
-  }
-  return html + '</select>';
-}
-
-function dersCipi(courseId: string, alan: Alan, hocaId?: number): string {
-  const c = courseDef(courseId);
-  const uyum = uyumYuzde(courseId, alan);
-  const dusuk = uyum < 70 ? ' dusuk' : '';
-  const cikar = hocaId !== undefined
-    ? `<button class="cip-cikar" data-action="ders-cikar" data-id="${hocaId}" data-ders="${courseId}" title="Dersi bırak">×</button>`
-    : '';
-  return `<span class="ders-cip${dusuk}" style="border-color:${ALAN_META[c.birincil].renk}" data-tip-ders="${courseId}" ${alan ? `data-tip-alan="${alan}"` : ''}>`
-    + `${ALAN_META[c.birincil].emoji} <b>${c.kod}</b> <small>%${uyum}</small>${cikar}</span>`;
-}
-
 function programGovde(state: GameState): string {
   const hocalar = state.agents.filter(
     (a): a is import('../core/types').Academic => a.kind === 'akademisyen',
   );
 
-  let html = `<div class="aciklama"><b>Akış: derslerden bölümlere.</b> Her hocaya bu yıl vereceği
-    dersleri seç (en çok ${DERS_LIMIT}) — bir bölüm ancak müfredatındaki TÜM dersler bir hocada
-    seçiliyse açılabilir (önlisans 4, lisans 8 ders). Uyum yüzdesi öğrenme hızını belirler:
-    birincil alan %100, ikincil %76, alan dışı %44.
-    <br><b>⚡ Yük:</b> hoca ne kadar çok ders verirse ders kalitesi ve araştırma hızı o kadar düşer
-    (1 ders %100 → ${DERS_LIMIT} ders %${Math.round(yukVerimi(DERS_LIMIT) * 100)}). Yüksek lisans /
-    doktora öğrencilerini <b>🧑‍🔬 asistan</b> atayarak yükü hafiflet — her asistan 1 dersin yükünü
-    alır (okul asistana günlük ${formatMoney(BALANCE.ASISTAN_MAAS)} maaş öder).</div>`;
+  let html = `<div class="aciklama"><b>Akış: dersliklerden bölümlere.</b> Bir bölümü haritadan
+    yeterli derslik/amfi seçerek açarsın — hoca GEREKMEZ. Bölüm açılınca her dersliğin haftalık
+    ızgarası (5 gün × 4 blok) müfredattan otomatik kurulur. Hocaları SONRADAN, ızgaradaki
+    hücrelere sürükleyerek (ya da 🪄 Akıllı Doldur ile) atarsın — bir hocanın hangi dersleri
+    verdiği yalnız bu atamalardan görünür, elle seçilmez.
+    <br><b>⚡ Yük:</b> hoca ne kadar çok FARKLI ders verirse ders kalitesi ve araştırma hızı o
+    kadar düşer (1 ders %100 → ${DERS_LIMIT} ders %${Math.round(yukVerimi(DERS_LIMIT) * 100)}).
+    Yüksek lisans / doktora öğrencilerini <b>🧑‍🔬 asistan</b> atayarak yükü hafiflet — her asistan
+    1 dersin yükünü alır (okul asistana günlük ${formatMoney(BALANCE.ASISTAN_MAAS)} maaş öder).
+    Bir hoca günde en çok ${GUNLUK_BLOK_LIMIT} blok ders verebilir.</div>`;
 
-  // --- 1) Hoca ders seçimi (ızgara: hoca × 4 ders slotu) ---
-  html += `<h3>1) Hoca Ders Seçimi <small style="opacity:.7">(hoca × ders slotu ızgarası)</small>
-    <button class="eylem" data-action="oto-ders-tum" style="margin-left:10px"
-      title="Tüm seçimleri sıfırlar ve tamamlaması en kolay bölümlerin müfredatlarını hocalara dağıtır">
-      🪄 Akıllı Seçim (bölümleri hedefle)</button></h3>`;
+  // --- 1) Kadro (sürükle-bırak kaynağı) ---
+  html += '<h3>1) Kadro <small style="opacity:.7">(hocayı tut, aşağıdaki ızgaraya sürükle)</small></h3>';
   if (hocalar.length === 0) {
     html += '<div class="aciklama">Kadroda akademisyen yok — önce 👩‍🏫 Kadro panelinden alım yap.</div>';
   } else {
@@ -2135,14 +2082,19 @@ function programGovde(state: GameState): string {
       (a): a is import('../core/types').Student => a.kind === 'ogrenci' && a.level !== 'lisans',
     );
     html += '<div style="overflow-x:auto"><table class="ders-izgara"><tr><th>Hoca</th>'
-      + '<th>Ders 1</th><th>Ders 2</th><th>Ders 3</th><th>Ders 4</th><th>⚡ Yük</th><th>🧑‍🔬 Asistan</th></tr>';
+      + '<th>Verdiği Dersler</th><th>⚡ Yük</th><th>🧑‍🔬 Asistan</th></tr>';
     for (const h of hocalar) {
       const dersler = h.verdigiDersler ?? [];
-      const dolu = dersler.length >= DERS_LIMIT;
       const asistanlarim = asistanlari(state, h.id);
       const verim = Math.round(yukVerimi(dersler.length, asistanlarim.length) * 100);
       const verimSinif = verim >= 90 ? 'iyi' : verim >= 75 ? 'orta' : 'dusuk';
       const bosAdaylar = lisansustu.filter((s) => s.asistani === -1);
+      const dersCipleri = dersler.length === 0
+        ? '<small style="opacity:.5">henüz bir hücreye atanmadı</small>'
+        : dersler.map((cid) => {
+          const c = courseDef(cid);
+          return `<span class="rozet" data-tip-ders="${cid}" data-tip-alan="${h.alan}">${ALAN_META[c.birincil].emoji} ${c.kod} <small>%${uyumYuzde(cid, h.alan)}</small></span>`;
+        }).join(' ');
       const asistanCipleri = asistanlarim.map((s) =>
         `<span class="ders-cip asistan" title="${esc(s.ad)} — ${LEVEL_LABEL[s.level]} · asistanlığı bırakması için ×">
           🧑‍🔬 ${esc(s.ad.split(' ')[0])} <small>${s.level === 'yl' ? 'YL' : 'Dr'}</small>
@@ -2156,212 +2108,136 @@ function programGovde(state: GameState): string {
       }
       html += `<tr>
         <td><span class="hoca-suruklenebilir" draggable="true" data-drag-academic="${h.id}"
-            title="Sürükleyerek 4) Yerleşik Haftalık Program'daki bir ders hücresine bırak — o dersin hocası olur">
+            title="Sürükleyerek 3) Yerleşik Haftalık Program'daki bir hücreye bırak">
             <span class="tut" aria-hidden="true">⠿</span> <b>${RANK_LABEL[h.rank]} ${esc(h.ad)}</b></span><br>
           <small>${ALAN_META[h.alan].emoji} ${ALAN_META[h.alan].ad} · eğitim ${h.egitim}</small></td>
-        ${[0, 1, 2, 3].map((i) => `<td>${hocaDersHucre(h.id, h.alan, dersler, i)}</td>`).join('')}
+        <td>${dersCipleri}</td>
         <td><span class="yuk-rozet ${verimSinif}"
-          title="Ders yükü verimi: ders kalitesi ve araştırma hızı çarpanı. ${dersler.length} ders${asistanlarim.length > 0 ? `, ${asistanlarim.length} asistan` : ''} — asistan atayarak yükseltebilirsin">⚡ %${verim}</span>
-          ${dolu ? '' : `<br><button class="eylem" data-action="oto-ders" data-id="${h.id}" style="margin-top:4px"
-            title="Boş slotları alanına uygun derslerle doldur">Doldur</button>`}</td>
+          title="Ders yükü verimi: ders kalitesi ve araştırma hızı çarpanı. ${dersler.length} farklı ders${asistanlarim.length > 0 ? `, ${asistanlarim.length} asistan` : ''}">⚡ %${verim}</span></td>
         <td>${asistanCipleri}${asistanSecici || (asistanlarim.length === 0 ? '<small style="opacity:.5">—</small>' : '')}</td>
       </tr>`;
     }
     html += '</table></div>';
   }
 
-  // --- 2) Açık dersler ---
-  const acik = acikDersler(state);
-  html += `<h3>2) Açık Dersler (${acik.size})</h3><div class="aciklama">`;
-  html += acik.size === 0
-    ? 'Henüz ders seçilmedi.'
-    : [...acik].map((id) => {
-      const c = courseDef(id);
-      return `<span class="rozet" data-tip-ders="${id}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
-    }).join(' ');
-  html += '</div>';
-
-  // --- 3) Bu derslerle açılabilecek bölümler (tek tık açma) ---
+  // --- 2) Açılabilecek bölümler (yalnız kapasite + bütçe — ders şartı YOK) ---
   const acikDefIds = new Set(state.departments.map((d) => d.defId));
   const adaylar = DEPT_DEFS
     .filter((d) => !acikDefIds.has(d.id))
-    .map((d) => ({ def: d, eksik: d.dersler.filter((x) => !acik.has(x)) }))
-    .sort((a, b) => a.eksik.length - b.eksik.length || a.def.acilisMaliyeti - b.def.acilisMaliyeti);
-  const hazir = adaylar.filter((a) => a.eksik.length === 0);
-  const yakin = adaylar.filter((a) => a.eksik.length > 0 && a.eksik.length <= 3);
+    .map((d) => ({ def: d, can: canOpenDepartment(state, d.id) }))
+    .sort((a, b) => Number(b.can.ok) - Number(a.can.ok) || a.def.acilisMaliyeti - b.def.acilisMaliyeti);
+  const hazir = adaylar.filter((a) => a.can.ok);
 
-  // kadro alan uyumu: bölüm müfredatındaki derslerin ne kadarı kadrodaki bir
-  // hocanın BİRİNCİL alanına düşüyor (o dersler %100 verimle işlenir)
-  const kadroAlanlari = new Set(hocalar.map((h) => h.alan));
-
-  html += `<h3>3) Bu Derslerle Açılabilecek Bölümler (${hazir.length})</h3>`;
-  if (hazir.length === 0) {
-    if (adaylar.length === 0) {
-      html += '<div class="aciklama">🎉 Tüm bölümler zaten açık.</div>';
-    } else {
-      // Hiç ders seçilmemiş olsa bile boş bırakma: en kolay/uygun bölümleri tavsiye et.
-      // Sıra: önce en az ders eksik olan, sonra kadroya en uygun, sonra en ucuz.
-      const tavsiye = adaylar
-        .map((a) => ({
-          a,
-          fit: a.def.dersler.length === 0 ? 0
-            : a.def.dersler.filter((cid) => kadroAlanlari.has(courseDef(cid).birincil)).length / a.def.dersler.length,
-        }))
-        .sort((x, y) =>
-          x.a.eksik.length - y.a.eksik.length
-          || y.fit - x.fit
-          || x.a.def.acilisMaliyeti - y.a.def.acilisMaliyeti)
-        .slice(0, 8);
-      html += `<div class="aciklama">Ders şartını tam karşılayan bölüm yok. Aşağıda <b>kadrona en uygun,
-        açması en kolay</b> bölümler var — 🎯 <b>Dersleri Ata</b> ile eksik dersleri uygun hocaların boş
-        kotalarına tek tıkla dağıt, ya da yukarıdan 🪄 <b>Akıllı Seçim</b> kullan.</div>`;
-      html += '<table><tr><th>🎯 Tavsiye Bölüm</th><th>Kadro Uyumu</th><th>Eksik Dersler</th><th></th></tr>';
-      for (const { a, fit } of tavsiye) {
-        const yuzde = Math.round(fit * 100);
-        const renk = yuzde >= 75 ? '#7bd88f' : yuzde >= 50 ? '#e6c07b' : '#f4a09c';
-        const gorunen = a.eksik.slice(0, 8);
-        const chips = gorunen.map((id) => {
-          const c = courseDef(id);
-          return `<span class="rozet" style="color:#f4a09c" data-tip-ders="${id}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
-        }).join(' ');
-        const fazla = a.eksik.length > gorunen.length ? ` <small>+${a.eksik.length - gorunen.length}</small>` : '';
-        html += `<tr>
-          <td><b style="color:${a.def.renk}">${a.def.ad}</b> <small>(${a.def.tur === 'onlisans' ? '2 yıl' : '4 yıl'} · ${formatMoney(a.def.acilisMaliyeti)})</small></td>
-          <td><b style="color:${renk}" title="Müfredat derslerinin ne kadarı kadrondaki bir hocanın birincil alanına düşüyor — o dersler %100 verimle işlenir">%${yuzde}</b></td>
-          <td>${chips}${fazla}</td>
-          <td><button class="eylem" data-action="hedefle" data-id="${a.def.id}" title="Eksik dersleri uygun hocaların boş kotalarına dağıt">🎯 Dersleri Ata</button></td>
-        </tr>`;
-      }
-      html += '</table>';
-    }
+  html += `<h3>2) Açılabilecek Bölümler (${hazir.length})</h3>`;
+  if (adaylar.length === 0) {
+    html += '<div class="aciklama">🎉 Tüm bölümler zaten açık.</div>';
   } else {
-    html += '<table><tr><th>Bölüm</th><th>Tür</th><th>Maliyet</th><th>Diğer şartlar</th><th></th></tr>';
-    for (const a of hazir) {
-      const can = canOpenDepartment(state, a.def.id);
-      const digerEksik = can.eksik.filter((e) => !e.includes('açık derslerde değil'));
-      html += `<tr><td><b style="color:${a.def.renk}">${a.def.ad}</b></td>`
-        + `<td>${a.def.tur === 'onlisans' ? '2 yıl' : '4 yıl'}</td>`
-        + `<td>${formatMoney(a.def.acilisMaliyeti)}</td>`
-        + `<td>${digerEksik.length === 0 ? '<span class="gerek">✔ hazır</span>' : digerEksik.map((e) => `<small style="color:#f4a09c">✖ ${e}</small>`).join('<br>')}</td>`
-        + `<td><button class="eylem" data-action="bolum-ac" data-id="${a.def.id}" ${can.ok ? '' : 'disabled'} title="${can.ok ? 'Haritadan derslik/lab seç' : esc(can.eksik.join(' · '))}">📍 Derslik Seç</button></td></tr>`;
+    html += `<div class="aciklama">Bölüm açmak için hoca GEREKMEZ — yalnız yeterli öğretim
+      kapasitesi (kadro) ve bütçe. Haritadan derslik seçtiğinde ızgara otomatik kurulur.</div>`;
+    html += '<table><tr><th>Bölüm</th><th>Tür</th><th>Maliyet</th><th>Şart</th><th></th></tr>';
+    for (const { def, can } of adaylar.slice(0, 20)) {
+      html += `<tr><td><b style="color:${def.renk}">${def.ad}</b></td>`
+        + `<td>${def.tur === 'onlisans' ? '2 yıl' : '4 yıl'}</td>`
+        + `<td>${formatMoney(def.acilisMaliyeti)}</td>`
+        + `<td>${can.ok ? '<span class="gerek">✔ hazır</span>' : can.eksik.map((e) => `<small style="color:#f4a09c">✖ ${esc(e)}</small>`).join('<br>')}</td>`
+        + `<td><button class="eylem" data-action="bolum-ac" data-id="${def.id}" ${can.ok ? '' : 'disabled'} title="${can.ok ? 'Haritadan derslik/lab seç' : esc(can.eksik.join(' · '))}">📍 Derslik Seç</button></td></tr>`;
     }
+    if (adaylar.length > 20) html += '<tr><td colspan="5"><small style="opacity:.6">+' + (adaylar.length - 20) + ' bölüm daha</small></td></tr>';
     html += '</table>';
   }
 
-  // "Az Ders Eksik Olanlar" yalnız zaten hazır bölüm varken ayrıca gösterilir —
-  // hazır yokken üstteki tavsiye tablosu en yakınları zaten kapsar (yinelemeyi önler).
-  if (hazir.length > 0 && yakin.length > 0) {
-    html += `<h3>Az Ders Eksik Olanlar</h3>
-      <table><tr><th>Bölüm</th><th>Eksik dersler</th><th></th></tr>`;
-    for (const a of yakin.slice(0, 14)) {
-      const chips = a.eksik.map((id) => {
-        const c = courseDef(id);
-        return `<span class="rozet" style="color:#f4a09c" data-tip-ders="${id}">${ALAN_META[c.birincil].emoji} ${c.kod}</span>`;
-      }).join(' ');
-      html += `<tr><td><b>${a.def.ad}</b> <small>(${a.def.tur === 'onlisans' ? '2 yıl' : '4 yıl'})</small></td><td>${chips}</td>`
-        + `<td><button class="eylem" data-action="hedefle" data-id="${a.def.id}" title="Eksik dersleri uygun hocaların boş kotalarına dağıt">🎯 Dersleri Ata</button></td></tr>`;
-    }
-    html += '</table>';
-  }
-
-  // --- 4) Yerleşik haftalık program — DERSLİK (sütun) × GÜN+SEANS (10 satır) ---
+  // --- 3) Yerleşik haftalık program — DERSLİK (sütun) × GÜN+BLOK (20 satır) ---
   if (state.departments.length > 0) {
     const hocaAd = new Map<number, string>();
     const hocaAlan = new Map<number, Alan>();
     for (const h of hocalar) { hocaAd.set(h.id, h.ad); hocaAlan.set(h.id, h.alan); }
-    const acikBolumDersleri = new Set<string>();
-    for (const d of state.departments) for (const c of deptDef(d.defId).dersler) acikBolumDersleri.add(c);
     const programSlots = state.dersProgrami ?? [];
 
-    // bir (bölüm, gün, seans) hücresi: ders + hoca + 🔒 + hoca seçici
-    const programHucre = (dept: import('../core/types').Department, gun: number, seans: number): string => {
-      const slot = dersHucresi(state, dept.id, gun, seans);
+    // bir (derslik, gün, blok) hücresi: ders + hoca çipi + hoca seçici
+    const programHucre = (oda: import('../core/types').Room, gun: number, blok: number): string => {
+      const slot = dersHucresi(state, oda.id, gun, blok);
       if (!slot) return '<span style="opacity:.3">—</span>';
       const ders = courseDef(slot.courseId);
-      let hoca = '<span style="color:#f4a09c"><b>hoca yok!</b></span>';
+      let hoca = '<span style="opacity:.45">boş — sürükle ya da seç</span>';
       if (slot.academicId !== -1 && hocaAd.has(slot.academicId)) {
         const alan = hocaAlan.get(slot.academicId)!;
         const hocaObj = hocalar.find((x) => x.id === slot.academicId);
         const verim = hocaObj ? Math.round(dersYukuVerimi(state, hocaObj) * 100) : 100;
         hoca = `<span class="hoca-suruklenebilir" draggable="true" data-drag-academic="${slot.academicId}"
-            title="Sürükleyerek başka bir ders hücresine taşı">
+            title="Sürükleyerek başka bir hücreye taşı">
             <span class="tut" aria-hidden="true">⠿</span> ${ALAN_META[alan].emoji} ${esc(hocaAd.get(slot.academicId)!.split(' ').slice(-1)[0])}
             <small>(%${uyumYuzde(slot.courseId, alan)}${verim < 100 ? `·⚡${verim}` : ''})</small></span>`;
       }
       const secenekler = hocalar.map((h) => {
-        const cakisma = programSlots.some((s2) => s2.gun === gun && s2.seans === seans && s2.academicId === h.id && s2.deptId !== dept.id);
+        const cakisma = programSlots.some((s2) => s2.gun === gun && s2.blok === blok && s2.academicId === h.id && s2.roomId !== oda.id);
         const liste = h.verdigiDersler ?? [];
         const dersiVar = liste.includes(slot.courseId);
         const kotaDolu = !dersiVar && liste.length >= DERS_LIMIT;
-        const yedekVar = kotaDolu && liste.some((d) => !acikBolumDersleri.has(d));
-        const devreDisi = cakisma || (kotaDolu && !yedekVar);
-        const neden = cakisma ? ' — aynı seansta başka derste'
-          : (kotaDolu && !yedekVar) ? ' — kotası dolu' : (kotaDolu && yedekVar) ? ' — yedek bırakır' : '';
-        const etiket = dersiVar ? '' : (kotaDolu && yedekVar) ? ' (♻)' : ' (+ders)';
-        return `<option value="${h.id}" ${slot.academicId === h.id ? 'selected' : ''} ${devreDisi ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${etiket}${neden}</option>`;
+        const devreDisi = cakisma || kotaDolu;
+        const neden = cakisma ? ' — aynı gün+blokta başka derslikte'
+          : kotaDolu ? ' — zaten 4 farklı ders veriyor' : '';
+        return `<option value="${h.id}" ${slot.academicId === h.id ? 'selected' : ''} ${devreDisi ? 'disabled' : ''}>${ALAN_META[h.alan].emoji} ${esc(h.ad)} · %${uyumYuzde(slot.courseId, h.alan)}${dersiVar ? '' : ' (+ders)'}${neden}</option>`;
       }).join('');
       const seciciStil = slot.academicId === -1 ? 'border-color:#c25450;background:#3a2426' : '';
       const rozet = slot.kilit
-        ? `<button class="cip-cikar" data-action="slot-kilit-ac" data-id="${dept.id}" data-gun="${gun}" data-seans="${seans}" title="📌 Kilitli — tıkla: kilidi aç.">📌</button>`
-        : slot.sabit ? '<span title="🔒 Yerleşik: bu ders bölüm silinene dek sabit" style="opacity:.55">🔒</span>' : '';
+        ? '<span title="📌 Elle sürüklenerek atandı" style="opacity:.7">📌</span>' : '';
       return `<b>${ders.kod}</b> ${rozet}<br><small>${hoca}</small><br>
         <select class="kontenjan-input ders-ekle" style="width:132px;font-size:11px;${seciciStil}"
-          data-action="slot-hoca" data-id="${dept.id}" data-gun="${gun}" data-seans="${seans}" title="Bu derse hoca ata (📌 kilitlenir)">
-          <option value="-1" ${slot.academicId === -1 ? 'selected' : ''}>— hoca ata —</option>${secenekler}
+          data-action="slot-hoca" data-id="${oda.id}" data-gun="${gun}" data-blok="${blok}" title="Bu derse hoca ata ya da boşalt">
+          <option value="-1" ${slot.academicId === -1 ? 'selected' : ''}>— boş —</option>${secenekler}
         </select>`;
     };
 
-    // KÜRESEL derslik numarası: aynı fiziksel oda HER ZAMAN aynı numarayı taşır,
-    // bölüme göre sıfırlanmaz — iki farklı bölümün dersliği asla aynı "Derslik N"
-    // adını paylaşmaz (adlandırma çakışması "aynı dersliğe iki bölüm ders veriyor"
-    // yanılgısına yol açıyordu; fiziksel oda tek bölüme aittir, yalnız etiket yanlıştı).
+    // KÜRESEL derslik numarası: aynı fiziksel oda HER ZAMAN aynı numarayı taşır.
     const tumSiniflar = state.rooms
       .filter((r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid)
       .sort((a, b) => a.id - b.id);
     const kuresizNo = new Map<number, number>();
     tumSiniflar.forEach((r, i) => kuresizNo.set(r.id, i + 1));
 
-    // SÜTUNLAR = BÖLÜMLER (derslikler değil): bir bölüm gün+seans başına TEK ders
-    // işler — tek hoca, tek sınıf. Birden fazla dersliği olan bölüm bunları AYNI
-    // anda paralel ayrı ders için değil, ek KAPASİTE için kullanır (daha çok öğrenci
-    // sığar), o yüzden aynı ders/hoca her derslikte tekrar gösterilmez — tek sütun,
-    // ×N rozetiyle kaç derslik kullandığı belirtilir.
-    const sutunlar: { dept: import('../core/types').Department; etiket: string }[] = [];
+    // SÜTUNLAR = fiziksel DERSLİKLER (bölüm değil): birden fazla dersliği olan bölümün her
+    // dersliği kendi paralel şubesini işler (aynı müfredatı bağımsız döngüler).
+    const sutunlar: { oda: import('../core/types').Room; etiket: string }[] = [];
     for (const dept of state.departments) {
       const def = deptDef(dept.defId);
-      const odalar = state.rooms.filter((r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId === dept.id);
-      const birincil = dept.derslikId != null ? odalar.find((r) => r.id === dept.derslikId) : odalar[0];
-      const ad = !birincil
-        ? '<span style="color:#f4a09c">⚠ Derslik yok</span>'
-        : `${birincil.ozelAd ? `⭐ ${esc(birincil.ozelAd)}` : `🏫 Derslik ${kuresizNo.get(birincil.id)}`}${odalar.length > 1 ? ` <b>×${odalar.length}</b>` : ''}`;
-      sutunlar.push({ dept, etiket: `<b style="color:${def.renk}">${def.ad}</b><br><small>${ad}</small>` });
-    }
-
-    html += '<h3>4) Yerleşik Haftalık Program <small style="opacity:.7">(bölüm × gün-seans ızgarası)</small></h3>';
-    html += `<p class="aciklama">🔒 <b>Yerleşik ızgara:</b> hafta içi <b>5 gün × 2 seans (08–12 / 12–16) = 10 satır</b>,
-      her sütun bir <b>bölüm</b> — gün+seans başına tek ders, tek hoca işler (fazladan derslik ×N rozetiyle
-      gösterilir; paralel ayrı ders değil, ek kapasitedir). Bölüm açılınca her hücrenin dersi + hocası
-      sabitlenir; bölüm silinene dek değişmez (yalnız hoca ayrılırsa yeniden atanır). Bir hoca
-      hücresini ya da yukarıdaki roster'daki bir hocayı <b>sürükleyip başka bir hücreye bırak</b> —
-      aynı gün+seansta çakışma varsa hücre kırmızı olur ve bırakma kabul edilmez.</p>`;
-    html += `<div class="program-lejant">
-      <span>⠿ <b>Sürükle:</b> hoca çipini tut, hedef hücreye bırak</span>
-      <span style="color:#7bd88f">■ <b>Yeşil hücre:</b> bırakılabilir</span>
-      <span style="color:#f4a09c">■ <b>Kırmızı hücre:</b> çakışma, kabul edilmez</span>
-      <span>📌 <b>Kilitli:</b> elle atandı, gece yeniden kurulumda değişmez — tıkla: kilidi aç</span>
-      <span style="opacity:.75">🔒 <b>Yerleşik:</b> otomatik atandı, bölüm silinene dek sabit kalır</span>
-    </div>`;
-    html += '<div class="surukleme-ipucu">🖐️ Bırakınca sürüklediğin hoca bu derse atanır ve 📌 kilitlenir.</div>';
-    html += '<div style="overflow-x:auto"><table class="derslik-izgara"><tr><th>Gün · Seans</th>'
-      + sutunlar.map((s) => `<th>${s.etiket}</th>`).join('') + '</tr>';
-    for (let gun = 0; gun < HAFTA_GUN; gun++) {
-      for (let seans = 0; seans < GUNLUK_SEANS; seans++) {
-        const gunBasi = seans === 0 ? ' style="border-top:2px solid #2c3550"' : '';
-        html += `<tr${gunBasi}><td><b>${HAFTA_KISA[gun]}</b><br><small>${SEANS_SAAT[seans]}</small></td>`
-          + sutunlar.map((s) => `<td class="prog-hucre" data-drop-dept="${s.dept.id}" data-drop-gun="${gun}" data-drop-seans="${seans}">${programHucre(s.dept, gun, seans)}</td>`).join('') + '</tr>';
+      const odalar = state.rooms
+        .filter((r) => (r.type === 'derslik' || r.type === 'amfi') && r.valid && r.deptId === dept.id)
+        .sort((a, b) => a.id - b.id);
+      for (const oda of odalar) {
+        const ad = oda.ozelAd ? `⭐ ${esc(oda.ozelAd)}` : `🏫 Derslik ${kuresizNo.get(oda.id)}`;
+        sutunlar.push({ oda, etiket: `<b style="color:${def.renk}">${def.ad}</b><br><small>${ad}</small>` });
       }
     }
-    html += '</table></div>';
+
+    html += `<h3>3) Yerleşik Haftalık Program <small style="opacity:.7">(derslik × gün-blok ızgarası)</small>
+      <button class="eylem" data-action="oto-doldur" style="margin-left:10px"
+        title="Boş hücreleri en uygun müsait hocayla doldurur — dolu hücrelere dokunmaz">
+        🪄 Akıllı Doldur</button></h3>`;
+    if (sutunlar.length === 0) {
+      html += '<div class="aciklama">Hiç geçerli derslik yok — açık bölümlerin dersliğini harita üzerinden kontrol et.</div>';
+    } else {
+      html += `<p class="aciklama"><b>Derslik ızgarası:</b> her sütun bir FİZİKSEL derslik — hafta içi
+        <b>5 gün × 4 blok (08–10 / 10–12 / 13–15 / 15–17) = 20 satır</b>. Dersi müfredat belirler,
+        hoca GEREKMEZ. Bir hocayı (yukarıdaki Kadro'dan ya da başka bir hücreden) <b>sürükleyip
+        bırak</b> — aynı gün+blokta çakışma varsa hücre kırmızı olur ve bırakma kabul edilmez.</p>`;
+      html += `<div class="program-lejant">
+        <span>⠿ <b>Sürükle:</b> hoca çipini tut, hedef hücreye bırak</span>
+        <span style="color:#7bd88f">■ <b>Yeşil hücre:</b> bırakılabilir</span>
+        <span style="color:#f4a09c">■ <b>Kırmızı hücre:</b> çakışma, kabul edilmez</span>
+        <span>📌 <b>Elle atandı</b> (sürükle ya da seçiciyle)</span>
+      </div>`;
+      html += '<div class="surukleme-ipucu">🖐️ Bırakınca sürüklediğin hoca bu derse atanır.</div>';
+      html += '<div style="overflow-x:auto"><table class="derslik-izgara"><tr><th>Gün · Blok</th>'
+        + sutunlar.map((s) => `<th>${s.etiket}</th>`).join('') + '</tr>';
+      for (let gun = 0; gun < HAFTA_GUN; gun++) {
+        for (let blok = 0; blok < GUNLUK_BLOK; blok++) {
+          const gunBasi = blok === 0 ? ' style="border-top:2px solid #2c3550"' : '';
+          html += `<tr${gunBasi}><td><b>${HAFTA_KISA[gun]}</b><br><small>${BLOK_SAAT[blok]}</small></td>`
+            + sutunlar.map((s) => `<td class="prog-hucre" data-drop-room="${s.oda.id}" data-drop-gun="${gun}" data-drop-blok="${blok}">${programHucre(s.oda, gun, blok)}</td>`).join('') + '</tr>';
+        }
+      }
+      html += '</table></div>';
+    }
   }
 
   return html;

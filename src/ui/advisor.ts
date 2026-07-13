@@ -87,15 +87,15 @@ function onerileriHesapla(state: GameState): Oneri[] {
   } else {
     const bolumsuz = hocalar.filter((a) => a.deptId === -1).length;
     if (bolumsuz > 0) {
-      ekle('hoca-bolumsuz', `👩‍🏫 ${bolumsuz} hoca bölümsüz`, 'Hoca, açık bir bölümün müfredatından ders verince o bölüme OTOMATİK bağlanır. 📅 Program panelinden ders dağıt (Oto Doldur işini görür); öğretim üyesi eksik bölüme YÖK kontenjan vermez.', 'program');
+      ekle('hoca-bolumsuz', `👩‍🏫 ${bolumsuz} hoca bölümsüz`, 'Hoca, bir dersliğin haftalık hücresine sürüklenip ders verince o bölüme OTOMATİK bağlanır. 📅 Program panelinden bir hücreye sürükle (ya da 🪄 Akıllı Doldur kullan); öğretim üyesi eksik bölüme YÖK kontenjan vermez.', 'program');
     }
     if (state.yksBekliyor) {
       ekle('yks', '🎓 YKS dönemi açık — hazırsan başlat!', 'Üstteki altın butona basınca yerleştirme yapılır, öğrenciler ve devlet ödeneği gelir. Önce derslik/kadro hazırlığını bitir; ♟️ Strateji > Mali Politikalar\'dan kayıt ücreti ve burs kontenjanlarını ayarla.', 'strateji');
     }
-    // hocasız ders: program kendini onaramadıysa kadro fiziken yetmiyordur
+    // hocasız hücre: derslik ızgarası kurulmuş ama henüz kimse sürüklenmemiş
     const hocasizDers = (state.dersProgrami ?? []).filter((s) => s.academicId === -1).length;
     if (hocasizDers > 0) {
-      ekle('ders-hocasiz', `📅 ${hocasizDers} derste hoca yok!`, 'Program kendini onarmayı denedi ama o saatte müsait hoca kalmadı: kadro yetersiz ya da yıllık ders kotaları dolu. Yeni hoca al (👩‍🏫 Kadro) ya da 📅 Program > Bugünün Ders Programı hücresinden elle ata.', 'program');
+      ekle('ders-hocasiz', `📅 ${hocasizDers} hücrede hoca yok!`, 'Derslik ızgarası hazır ama hücreler boş — 📅 Program panelinden bir hocayı hücreye sürükle, ya da 🪄 Akıllı Doldur ile boş hücreleri tek tıkla doldur. Kadro yetersizse önce hoca al (👩‍🏫 Kadro).', 'program');
     }
 
     // koltuk planı: geçen YKS'de aday geri çevrildiyse ya da kontenjan koltuğu aşıyorsa

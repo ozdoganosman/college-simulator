@@ -166,9 +166,9 @@ function buildToolbar(getState: () => GameState, ui: UIState): void {
   btn('🎓 Bölümler', 'panel-bolumler', () => openPanel('bolumler'),
     'Açık bölümler, kontenjanlar, YL/doktora programları');
   btn('👩‍🏫 Kadro', 'panel-kadro', () => openPanel('kadro'),
-    'Akademisyen al (KPSS/transfer), moral ve zam yönet — bölüm ataması derslerden otomatik');
+    'Akademisyen al (KPSS/transfer), moral ve zam yönet — bölüm ataması programdaki atamalardan otomatik');
   btn('📅 Program', 'panel-program', () => openPanel('program'),
-    'Hocalara yıllık ders seç → açık derslerle bölüm aç · asistan ata');
+    'Derslikten kurulan haftalık ızgaraya hoca sürükle · asistan ata');
   btn('🔬 Araştırma', 'panel-arastirma', () => openPanel('arastirma'),
     'Araştırma projeleri: hibe, makale, buluş ve prestij kazandırır');
   btn('📚 Kütüphane', 'panel-kutuphane', () => openPanel('kutuphane'),
