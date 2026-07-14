@@ -107,6 +107,22 @@ export function hocaBolumleriniGuncelle(state: GameState): void {
   }
 }
 
+/**
+ * Bölümde şu an EN AZ bir hücrede ders veren farklı hocalar — deptId aidiyetinden
+ * (çoğunluk oyu, tek "ana bölüm" seçer) BAĞIMSIZ, doğrudan programdaki fiili
+ * atamalardan. "Bu bölümün gerçekten kadrosu var mı?" (minAkademisyen şartı, kalite
+ * puanı, YL/doktora yeterliliği) sorusunun doğru yanıtı budur — bir hoca burada ders
+ * veriyor olsa bile ÇOĞUNLUK dersini başka bölümde veriyorsa deptId oraya işaret eder
+ * ve bu bölüm hocasız görünür; halbuki program hücreleri dolu olabilir.
+ */
+export function bolumdeDersVerenHocalar(state: GameState, deptId: number): Academic[] {
+  const ids = new Set<number>();
+  for (const s of state.dersProgrami ?? []) {
+    if (s.deptId === deptId && s.academicId !== -1) ids.add(s.academicId);
+  }
+  return state.agents.filter((a): a is Academic => a.kind === 'akademisyen' && ids.has(a.id));
+}
+
 /** Hoca aynı gün+blokta BAŞKA bir derslikte ders veriyor mu (çakışma)? Sürükle-bırak önizlemesi de kullanır. */
 export function hocaCakisirMi(
   state: GameState, roomId: number, gun: number, blok: number, academicId: number,

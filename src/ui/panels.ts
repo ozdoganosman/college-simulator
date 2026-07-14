@@ -17,8 +17,8 @@ import {
 } from '../core/types';
 import { courseDef, dersEtki } from '../data/courses';
 import {
-  ASISTAN_LIMIT, DERS_LIMIT, GUNLUK_BLOK_LIMIT, asistanlari, dersHucresi, dersYukuVerimi,
-  hocaCakisirMi, otomatikDoldur, slotaHocaAta, slotuBosalt, yukVerimi,
+  ASISTAN_LIMIT, DERS_LIMIT, GUNLUK_BLOK_LIMIT, asistanlari, bolumdeDersVerenHocalar, dersHucresi,
+  dersYukuVerimi, hocaCakisirMi, otomatikDoldur, slotaHocaAta, slotuBosalt, yukVerimi,
 } from '../game/schedule';
 import { COURSES } from '../data/courses';
 import { formatClock, formatMoney } from '../core/util';
@@ -628,9 +628,10 @@ function kaliteHucre(k: BolumKalite): string {
 }
 
 function bolumlerGovde(state: GameState): string {
-  // Paylaşılan sayımlar — tek geçiş
+  // Paylaşılan sayımlar — tek geçiş (öğrenciler için; hoca sayısı aşağıda dept
+  // başına bolumdeDersVerenHocalar ile hesaplanır — deptId aidiyeti (çoğunluk oyu)
+  // değil, programdaki fiili atamalar sayılır, bkz. schedule.ts).
   const ogr = new Map<number, { lisans: number; yl: number; dok: number }>();
-  const akd = new Map<number, { n: number; docentProf: boolean; prof: boolean }>();
   for (const a of state.agents) {
     if (a.kind === 'ogrenci') {
       let o = ogr.get(a.deptId);
@@ -638,12 +639,6 @@ function bolumlerGovde(state: GameState): string {
       if (a.level === 'lisans') o.lisans++;
       else if (a.level === 'yl') o.yl++;
       else o.dok++;
-    } else if (a.kind === 'akademisyen') {
-      let k = akd.get(a.deptId);
-      if (!k) { k = { n: 0, docentProf: false, prof: false }; akd.set(a.deptId, k); }
-      k.n++;
-      if (a.rank === 'docent' || a.rank === 'prof') k.docentProf = true;
-      if (a.rank === 'prof') k.prof = true;
     }
   }
   const derslikSayisi = new Map<number, number>();
@@ -679,7 +674,12 @@ function bolumlerGovde(state: GameState): string {
     const satirlar = state.departments.filter((d) => bolumEslesir(deptDef(d.defId).ad)).map((d) => {
       const def = deptDef(d.defId);
       const o = ogr.get(d.id) ?? { lisans: 0, yl: 0, dok: 0 };
-      const k = akd.get(d.id) ?? { n: 0, docentProf: false, prof: false };
+      const dersVerenler = bolumdeDersVerenHocalar(state, d.id);
+      const k = {
+        n: dersVerenler.length,
+        docentProf: dersVerenler.some((a) => a.rank === 'docent' || a.rank === 'prof'),
+        prof: dersVerenler.some((a) => a.rank === 'prof'),
+      };
       const uyeRozet = k.n < def.minAkademisyen
         ? '<span class="rozet" style="background:#8f3535">öğr. üyesi yetersiz</span>' : '';
 

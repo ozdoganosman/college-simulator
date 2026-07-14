@@ -66,7 +66,7 @@ import {
   Academic, AcademicRank, Department, GUNLUK_BLOK, GameState, MezuniyetSonuc, RANK_LABEL, Room,
   Student, YerlestirmeSatir, donemIndex, yil,
 } from '../core/types';
-import { GUNLUK_BLOK_LIMIT, rebuildDersProgrami } from './schedule';
+import { GUNLUK_BLOK_LIMIT, bolumdeDersVerenHocalar, rebuildDersProgrami } from './schedule';
 import { chance, clamp, formatMoney, newId, randRange } from '../core/util';
 import { BALANCE } from '../data/balance';
 import { bolumBaskinAlan, deptDef } from '../data/departments';
@@ -228,8 +228,8 @@ export function toggleGradProgram(state: GameState, deptId: number, level: 'yl' 
       dept.doktoraAcik = false; // doktora YL'ye bağlı
       return true;
     }
-    const uyeVar = state.agents.some((a) =>
-      a.kind === 'akademisyen' && a.deptId === dept.id && (a.rank === 'docent' || a.rank === 'prof'));
+    const uyeVar = bolumdeDersVerenHocalar(state, dept.id).some(
+      (a) => a.rank === 'docent' || a.rank === 'prof');
     if (!uyeVar) {
       notify(state, `${def.ad}: yüksek lisans için en az 1 Doçent/Profesör gerekli`, 'kotu');
       return false;
@@ -247,8 +247,7 @@ export function toggleGradProgram(state: GameState, deptId: number, level: 'yl' 
     notify(state, `${def.ad}: doktora için önce yüksek lisans programı açılmalı`, 'kotu');
     return false;
   }
-  const profVar = state.agents.some((a) =>
-    a.kind === 'akademisyen' && a.deptId === dept.id && a.rank === 'prof');
+  const profVar = bolumdeDersVerenHocalar(state, dept.id).some((a) => a.rank === 'prof');
   if (!profVar) {
     notify(state, `${def.ad}: doktora için en az 1 Profesör gerekli`, 'kotu');
     return false;
@@ -317,9 +316,7 @@ export interface BolumKalite {
  * hesaplanır. YKS talebine 0.85-1.25 arası çarpan olarak uygulanır.
  */
 export function bolumKalitesi(state: GameState, deptId: number): BolumKalite {
-  const hocalar = state.agents.filter(
-    (a): a is Academic => a.kind === 'akademisyen' && a.deptId === deptId,
-  );
+  const hocalar = bolumdeDersVerenHocalar(state, deptId);
   const hocaIds = new Set(hocalar.map((h) => h.id));
   const hocaGucuHam = hocalar.length === 0 ? 0 : hocalar.reduce(
     (t, h) => t + (h.egitim * 0.6 + h.arastirma * 0.4) * RANK_AGIRLIK[h.rank], 0,
@@ -372,13 +369,12 @@ export function runYerlestirme(state: GameState): boolean {
   }
   state.yksBekliyor = false;
 
-  // bölüm -> akademisyen ve lisans öğrenci sayıları (tek geçiş)
-  const akademisyen = new Map<number, number>();
+  // bölüm -> lisans öğrenci sayısı (tek geçiş). Hoca sayısı aşağıda dept başına
+  // bolumdeDersVerenHocalar ile hesaplanır — deptId aidiyeti (çoğunluk oyu) değil,
+  // programdaki fiili atamalar sayılır (bkz. schedule.ts).
   const lisans = new Map<number, number>();
   for (const a of state.agents) {
-    if (a.kind === 'akademisyen') {
-      akademisyen.set(a.deptId, (akademisyen.get(a.deptId) ?? 0) + 1);
-    } else if (a.kind === 'ogrenci' && a.level === 'lisans') {
+    if (a.kind === 'ogrenci' && a.level === 'lisans') {
       lisans.set(a.deptId, (lisans.get(a.deptId) ?? 0) + 1);
     }
   }
@@ -398,7 +394,7 @@ export function runYerlestirme(state: GameState): boolean {
       continue;
     }
 
-    if ((akademisyen.get(dept.id) ?? 0) < def.minAkademisyen) {
+    if (bolumdeDersVerenHocalar(state, dept.id).length < def.minAkademisyen) {
       dept.sonTalep = 0;
       dept.sonKayit = 0;
       dept.sonTavanSira = 0;
