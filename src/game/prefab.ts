@@ -190,9 +190,14 @@ function icTiles(x0: number, y0: number, w: number, h: number): number[] {
   return tiles;
 }
 
-/** İmleç merkezli sol üst köşe. */
+/**
+ * İmleç sol üst köşe kabul edilir — prefabRect'in sürükleme başlamadan (a === b)
+ * ürettiği köşeyle birebir aynı çapa. Önceden imleci merkezleyordu; bu da fare
+ * basılır basılmaz (ui.dragStart set edilir edilmez) önizlemenin merkezden
+ * köşeye zıplamasına yol açıyordu — artık ikisi de hep sol üstten tutuyor.
+ */
 export function prefabOrigin(def: PrefabDef, hover: Point): Point {
-  return { x: hover.x - Math.floor(def.w / 2), y: hover.y - Math.floor(def.h / 2) };
+  return { x: hover.x, y: hover.y };
 }
 
 /**
