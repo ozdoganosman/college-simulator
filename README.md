@@ -15,15 +15,16 @@ npm run dev        # http://localhost:5173
 
 1. **Hazır başlangıç**: Yeni oyun temel kampüsle açılır — 4 derslik, ofis, yemekhane, kantin, 2 tuvalet, 4 alanı kapsayan 5 akademisyen ve mutfak/temizlik personeli. İnşaata sıfırdan başlamak istersen odaları silebilirsin.
 2. **İnşaat**: Zemin döşe, çevresine duvar ör, kapı koy (ya da 🏗️ Hazır Bina ile tek tıkla kur). Odalar duvarla kapalı olmalı.
-2. **Oda ata**: Derslik, ofis, tuvalet, yemekhane, kütüphane, laboratuvar, kantin, rektörlük… Her odanın minimum boyutu ve eşya gereksinimi var (Seç aracıyla odaya tıklayınca eksikleri görürsün).
-3. **Kadro kur**: KPSS/ilan ile ucuz araştırma görevlisi al ya da rakip üniversitelerden yıldız profesör **transfer et** (imza bonusu ister). Akademisyen sayın ofis masası sayısını aşamaz.
-4. **Bölüm aç**: Yeterli boş geçerli derslik (+ gerekiyorsa laboratuvar) ve bütçeyle bölüm açılır. Öğretim üyesi yetersizse YÖK kontenjan vermez!
-5. **Kontenjan ve tercih**: Dönem başında talep; prestijine, tanıtım stratejilerine ve kontenjanına göre öğrenci yerleşir. Öğrenci başına devlet ödeneği gelir.
-6. **Araştırma**: Bölüm başına proje başlat; hocalar ve lisansüstü öğrenciler puan üretir. Sonuç: makale (ulusal/🌍 uluslararası), hibe, bazen 💥 **çığır açan buluş** ve 🏆 **bilimsel ödüller**.
-7. **Lisansüstü**: Doçentin varsa yüksek lisans, profesörün varsa doktora programı aç — araştırma hızını katlar.
-8. **Akademik gelişim**: Hocalar ders ve araştırmayla XP toplar; makale şartlarını sağlayınca Arş. Gör. → Dr. Öğr. Üyesi → Doç. → Prof. terfi eder.
-9. **Strateji**: Rektörlük kur; Tanıtım Kampanyası, TÜBİTAK İş Birliği, Erasmus+, Teknokent, Araştırma Üniversitesi Statüsü gibi gelişmeler satın al.
-10. **Kütüphane geliştir**: Kitaplık sayısı kütüphane seviyesini (0-3) belirler; araştırma ve öğrenme hızını artırır.
+3. **Oda ata**: Derslik, ofis, tuvalet, yemekhane, kütüphane, laboratuvar, kantin, rektörlük… Her odanın minimum boyutu ve eşya gereksinimi var (Seç aracıyla odaya tıklayınca eksikleri görürsün).
+4. **Kadro kur**: KPSS/ilan ile ucuz araştırma görevlisi al ya da rakip üniversitelerden yıldız profesör **transfer et** (imza bonusu ister). Akademisyen sayın ofis masası sayısını aşamaz.
+5. **Bölüm aç**: Yeterli boş geçerli derslik (+ gerekiyorsa laboratuvar) ve bütçeyle bölüm açılır — ders şartı yok. Öğretim kapasitesi yetersizse YÖK kontenjan vermez!
+6. **Ders programını doldur**: Bölüm açılınca her dersliğin haftalık ızgarası (5 gün × 2 blok: sabah/öğleden sonra) müfredattan otomatik kurulur, hücreler boş başlar. 📅 Program panelinden bir hocayı ızgaradaki bir hücreye **sürükle** (ya da 🪄 Akıllı Doldur ile tek tıkla doldur) — hoca o dersin hocası olur ve bölüme otomatik bağlanır.
+7. **Kontenjan ve tercih**: Dönem başında talep; prestijine, tanıtım stratejilerine ve kontenjanına göre öğrenci yerleşir. Öğrenci başına devlet ödeneği gelir.
+8. **Araştırma**: Bölüm başına proje başlat; hocalar ve lisansüstü öğrenciler puan üretir. Sonuç: makale (ulusal/🌍 uluslararası), hibe, bazen 💥 **çığır açan buluş** ve 🏆 **bilimsel ödüller**.
+9. **Lisansüstü**: Doçentin varsa yüksek lisans, profesörün varsa doktora programı aç — araştırma hızını katlar.
+10. **Akademik gelişim**: Hocalar ders ve araştırmayla XP toplar; makale şartlarını sağlayınca Arş. Gör. → Dr. Öğr. Üyesi → Doç. → Prof. terfi eder.
+11. **Strateji**: Rektörlük kur; Tanıtım Kampanyası, TÜBİTAK İş Birliği, Erasmus+, Teknokent, Araştırma Üniversitesi Statüsü gibi gelişmeler satın al.
+12. **Kütüphane geliştir**: Kitaplık sayısı kütüphane seviyesini (0-3) belirler; araştırma ve öğrenme hızını artırır.
 
 Öğrencilerin açlık/tuvalet/enerji/eğlence ihtiyaçları var; karşılanmazsa mutsuzlaşır ve **okulu bırakırlar** (prestij düşer). Yemekhane servis için aşçı, temizlik için temizlikçi gerekir.
 
@@ -39,7 +40,7 @@ npm run dev        # http://localhost:5173
 | 1 / 2 / 3 | Hız 1x / 2x / 4x |
 | Esc | Aracı bırak / seçim iptal |
 
-**Menü (Esc / ☰)**: Oyun Kaydet ve Oyun Yükle (5 slot + otomatik kayıt), Yeni Oyun, Seçenekler (otomatik kayıt, gündüz/gece ışığı, ızgara, dekor) ve Ana Menü. Oyun her gün sonunda otomatik kaydedilir (localStorage). Oyuna ilk girişte 12 adımlı öğretici yol gösterir; ❓ "Nasıl Oynanır" paneli her zaman açıktır.
+**Menü (Esc / ☰)**: Oyun Kaydet ve Oyun Yükle (5 slot + otomatik kayıt), Yeni Oyun, Seçenekler (otomatik kayıt, gündüz/gece ışığı, ızgara, dekor) ve Ana Menü. Oyun her gün sonunda otomatik kaydedilir (localStorage). Oyuna ilk girişte 16 adımlı öğretici yol gösterir; ❓ "Nasıl Oynanır" paneli her zaman açıktır.
 
 ## Teknik
 
