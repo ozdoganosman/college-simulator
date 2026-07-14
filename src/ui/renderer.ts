@@ -3,7 +3,7 @@ import {
 } from '../core/types';
 import { roomCenter } from '../core/grid';
 import { AYARLAR } from '../core/settings';
-import { formatMoney } from '../core/util';
+import { clamp, formatMoney } from '../core/util';
 import { FLOOR_DEFS, ROOM_DEFS, WALL_COST } from '../data/rooms';
 import { OBJECT_DEFS } from '../data/objects';
 import { DEPT_DEFS, deptDef } from '../data/departments';
@@ -474,9 +474,24 @@ export function render(
     }
   }
 
+  // --- şantiye kapsamı: inşaat halindeki odalarda ilerleme yüzdesine göre henüz
+  // "yapılmamış" karolar — sabit (satır-sütun) sırayla süpürerek bina kademeli
+  // büyüsün; eşyalar bu karolarda çizilmez, altlarında da çıplak şantiye zemini görünür.
+  const santiyeOrtulu = new Set<number>();
+  for (const room of state.rooms) {
+    const insaat = room.insaat ?? 0;
+    if (insaat <= 0) continue;
+    const toplam = room.insaatToplam || 1;
+    const ilerleme = clamp(1 - insaat / toplam, 0, 0.97);
+    const tiles = [...room.tiles].sort((a, b) => a - b);
+    const bitenSayisi = Math.floor(tiles.length * ilerleme);
+    for (let i = bitenSayisi; i < tiles.length; i++) santiyeOrtulu.add(tiles[i]);
+  }
+
   // --- eşyalar (sprite atlası) ---
   for (const o of state.objects) {
     if (o.x < x0 - 1 || o.x > x1 + 1 || o.y < y0 - 1 || o.y > y1 + 1) continue;
+    if (santiyeOrtulu.has(tileIndex(o.x, o.y))) continue; // henüz inşa edilmemiş karo
     ctx.drawImage(objectSprite(o.type), o.x * TILE, o.y * TILE, TILE, TILE);
     // BOZUK eşya: kırmızı ton + tamir işareti (tamirci onarana dek işlev görmez)
     if ((o.yipranma ?? 0) >= 100) {
@@ -487,6 +502,32 @@ export function render(
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('🔧', o.x * TILE + TILE * 0.68, o.y * TILE + TILE * 0.3);
+      }
+    }
+  }
+
+  // --- şantiye zemini: henüz yapılmamış karolar çıplak zemin + tehlike şeridiyle örtülür ---
+  if (santiyeOrtulu.size > 0) {
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const t = tileIndex(x, y);
+        if (!santiyeOrtulu.has(t)) continue;
+        const px = x * TILE, py = y * TILE;
+        ctx.fillStyle = '#5c5346';
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(px, py, TILE, TILE);
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(224,178,60,0.55)';
+        ctx.lineWidth = 3;
+        for (let d = -TILE; d < TILE * 2; d += 7) {
+          ctx.beginPath();
+          ctx.moveTo(px + d, py);
+          ctx.lineTo(px + d + TILE, py + TILE);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
     }
   }
