@@ -2,6 +2,8 @@
 
 Prison Architect / Academia: School Simulator tarzı, tarayıcıda çalışan **üniversite kurma ve yönetme** oyunu. Kuş bakışı grid üzerinde kampüsünü inşa et, bölümler aç, akademik kadro kur, araştırma yap, prestijini yükselt.
 
+🎮 **[Canlı oyna](https://ozdoganosman.github.io/college-simulator/)** — kuruluma gerek yok, tarayıcıda direkt açılır.
+
 ## Çalıştırma
 
 ```bash
