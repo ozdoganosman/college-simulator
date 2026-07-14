@@ -94,7 +94,10 @@ function onClick(e: Event): void {
       break;
     case 'yeni-oyun': {
       const st = ctx.getState();
-      const ilerlemeVar = st.gun > 1 || st.rooms.length > 0;
+      // st.rooms hazır başlangıç kampüsüyle (kurHazirKampus) HER ZAMAN >0 dolu gelir —
+      // bu yüzden ilerleme sinyali olarak kullanılamaz (uyarı sürekli çıkardı). Bunun yerine
+      // oyuncunun bilfiil bir şey yaptığının kanıtı: gün ilerlemiş ya da bölüm açılmış.
+      const ilerlemeVar = st.gun > 1 || st.departments.length > 0;
       if (geriMode === 'oyunici' || ilerlemeVar) {
         if (!confirm('Yeni oyun başlatılsın mı? Kaydedilmemiş ilerleme kaybolur (slot kayıtları durur).')) break;
       }
